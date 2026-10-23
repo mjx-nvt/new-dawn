@@ -1,0 +1,59 @@
+/* ─────────────────────────────────────────────────────────────
+   New Dawn — base styles
+   The window is transparent; native Liquid Glass sits behind the
+   shell (sidebar, toolbar). Content paints a near-solid surface.
+   ───────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: transparent;           /* native glass shows through */
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;                 /* app-like; opt back in on text areas */
+  overflow: hidden;
+}
+
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+a { color: var(--brand); text-decoration: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+input, textarea { font: inherit; color: inherit; user-select: text; }
+
+/* Content area paints over the glass so reading surfaces stay calm. */
+.content-root {
+  height: 100%;
+  background: color-mix(in srgb, var(--canvas) 92%, transparent);
+  overflow: auto;
+  user-select: text;
+}
+
+/* In-page glass — only for drawer, popovers, quick capture, menus. */
+.glass {
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: var(--glass-tint);
+  border: 0.5px solid var(--hair);
+  box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.35), 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Accessibility: system settings win. */
+@media (prefers-reduced-transparency: reduce) {
+  .content-root { background: var(--canvas); }
+  .glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Ghost pattern utilities (see newdawn-ui-patterns skill) */
+.ghostCard { border: 0.5px dashed var(--hair); background: transparent; opacity: 0.55; }
+.ghostText, .fieldMuted { font-style: italic; color: var(--ink-3); font-weight: 400; }
+.ghostPill { background: transparent; border: 0.5px dashed var(--hair); color: var(--ink-3); font-style: italic; }
+.ghostAvatar { border: 0.5px dashed var(--hair); background: transparent; }

@@ -1,0 +1,1 @@
+Feature folders (P2.1+): cockpit · tasks · projects · notes · meetings · entities · research · ai-companion · models · workspace-settings. CSS modules; TanStack Router pages; TanStack Query over the bridge.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Tauri merges this file into the app bundle's Info.plist. Usage descriptions are shown in the macOS permission prompts. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>New Dawn records your microphone when you start a meeting recording. Audio never leaves your Mac.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>New Dawn captures the audio of your calls (the other participants) when you record a meeting. Audio never leaves your Mac.</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.2</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Tien Nguyen</string>
+</dict>
+</plist>

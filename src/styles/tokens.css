@@ -1,0 +1,82 @@
+/* ─────────────────────────────────────────────────────────────
+   New Dawn — design tokens
+   Base tokens (never brand) + brand slots (set per workspace by
+   applyBrand() on .content-root). Specs: .claude/skills/newdawn-ui-patterns
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Typeface — fixed for all tenants */
+  --font: 'Be Vietnam Pro', -apple-system, system-ui, sans-serif;
+
+  /* Text sizes */
+  --t-xs: 11px;
+  --t-sm: 12.5px;
+  --t-md: 13.5px;
+  --t-lg: 15.5px;
+  --t-xl: 20px;
+  --t-2xl: 28px;
+
+  /* Spacing rhythm */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Light appearance */
+  --ink: #0B1220;
+  --ink-2: #3F4756;
+  --ink-3: #8A93A3;
+  --hair: rgba(11, 18, 32, 0.14);
+  --surface: #FFFFFF;
+  --surface-2: #F3F4F6;
+  --glass-tint: rgba(255, 255, 255, 0.55);
+
+  /* System accent (selection, focus). Falls back to a neutral blue where unsupported. */
+  --accent: AccentColor;
+
+  /* Window / panel geometry (Golden Gate: one radius) */
+  --radius-window: 12px;
+
+  /* ── Brand slots — populated per workspace; these are neutral defaults ── */
+  --brand: #3B5BDB;
+  --brand-50: #F2F5FD;
+  --brand-100: #E1E8FA;
+  --brand-200: #BCCAF3;
+  --brand-300: #8EA4EA;
+  --brand-400: #5F7DE2;
+  --brand-500: #3B5BDB;
+  --brand-600: #2F49B3;
+  --brand-700: #25398C;
+  --brand-800: #1B2A66;
+  --brand-900: #121C45;
+  --brand-950: #0A1028;
+  --secondary: var(--brand-700);
+  --canvas: #FFFFFF;
+  --status-positive: #1F7A4D;
+  --status-warning: #9A6A00;
+  --status-negative: #B3261E;
+  --radius-card: 10px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-modal: 14px;
+  --button-shape: var(--radius-control);   /* 6px | var(--radius-control) | 999px */
+  --button-primary: filled;                /* filled | soft | outline */
+  --button-secondary: soft;                /* soft | outline | ghost */
+  --logo-url: none;
+  --logo-dark-url: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #F2F4F8;
+    --ink-2: #B9C0CC;
+    --ink-3: #7E8798;
+    --hair: rgba(255, 255, 255, 0.14);
+    --surface: #1C1F26;
+    --surface-2: #262A33;
+    --glass-tint: rgba(28, 31, 38, 0.55);
+    --canvas: #15171C;
+  }
+}

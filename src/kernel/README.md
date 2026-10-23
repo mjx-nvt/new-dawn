@@ -1,0 +1,1 @@
+Cockpit kernel (P1.1+): shell/ (sidebar, toolbar, switcher) · theme/ (applyBrand) · glass/ · dossier/ (DossierRenderer, ghosts) · bridge/ (typed wrappers over generated bindings.ts — the ONLY place that calls invoke()).
