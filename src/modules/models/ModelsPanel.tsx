@@ -19,17 +19,21 @@ function formatSize(bytes: number): string {
   return bytes >= 1024 * MB ? `${(bytes / (1024 * MB)).toFixed(2)} GB` : `${Math.round(bytes / MB)} MB`;
 }
 
-/** Settings → Models: download, resume, cancel and delete the local Whisper and VAD models. */
-export default function ModelsPanel() {
+/** The Whisper models with download / resume / delete (also shown in the welcome steps). */
+export function SpeechModels() {
   const models = useModels();
   const { progress, errors } = useModelDownloads();
+  return <ModelList models={models.data ?? []} progress={progress} errors={errors} loading={models.isPending} />;
+}
 
+/** Settings → Models: download, resume, cancel and delete the local Whisper and VAD models. */
+export default function ModelsPanel() {
   return (
     <>
       <section className="section">
         <h2 className="sectionTitle">Speech model</h2>
         <p className="sectionSubtitle">Whisper transcribes recordings on this Mac; turbo is the default</p>
-        <ModelList models={models.data ?? []} progress={progress} errors={errors} loading={models.isPending} />
+        <SpeechModels />
       </section>
 
       <section className="section">

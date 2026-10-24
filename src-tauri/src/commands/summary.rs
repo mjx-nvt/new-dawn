@@ -99,3 +99,10 @@ pub fn open_ollama_app() -> Result<(), AppError> {
         .map_err(anyhow::Error::from)?;
     Ok(())
 }
+
+/// Starts downloading Qwen through Ollama; progress arrives as events.
+#[tauri::command]
+#[specta::specta]
+pub fn pull_ollama_model(app: AppHandle) -> Result<(), AppError> {
+    Ok(ollama::start_pull(&app)?)
+}

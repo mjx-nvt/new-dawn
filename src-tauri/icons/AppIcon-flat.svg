@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Flat fallback of AppIcon.icon (macOS 14–15 and the .icns): same layers on the macOS icon grid. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#332E7A"/>
+      <stop offset="1" stop-color="#F27A6B"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFE08A"/>
+      <stop offset="1" stop-color="#FF8A3D"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#sky)"/>
+    <g transform="translate(100 100) scale(0.8047)">
+      <circle cx="512" cy="600" r="250" fill="url(#sun)"/>
+      <path d="M0 640 C 220 590 360 600 512 640 C 664 680 804 690 1024 640 L 1024 1024 L 0 1024 Z" fill="#14205A" fill-opacity="0.92"/>
+    </g>
+  </g>
+</svg>

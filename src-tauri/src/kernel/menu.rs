@@ -31,6 +31,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+,"),
             true,
         )?)
+        .item(&item(app, "run-setup", "Run Setup…", None, true)?)
         .separator()
         .services()
         .separator()
@@ -120,6 +121,7 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
         "switch-workspace" => forward(app, MenuAction::SwitchWorkspace),
         "toggle-sidebar" => forward(app, MenuAction::ToggleSidebar),
         "import-audio" => forward(app, MenuAction::ImportAudio),
+        "run-setup" => forward(app, MenuAction::RunSetup),
         "new-recording" | "record" => forward(app, MenuAction::ToggleRecording),
         "reveal-data" => reveal_data_folder(app),
         "open-app" => {

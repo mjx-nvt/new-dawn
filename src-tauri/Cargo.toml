@@ -33,6 +33,7 @@ anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 # tauri-specta is in beta: keep all three pinned together (see tauri-specta docs).
 tauri-specta = { version = "=2.0.0-rc.26", features = ["typescript", "derive"] }
 specta = "=2.0.0-rc.26"

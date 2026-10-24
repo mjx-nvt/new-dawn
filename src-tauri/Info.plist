@@ -9,6 +9,9 @@
     <string>New Dawn captures the audio of your calls (the other participants) when you record a meeting. Audio never leaves your Mac.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>New Dawn asks Microsoft Word or Pages to save your meeting minutes as a PDF. The document never leaves your Mac.</string>
+    <!-- Liquid Glass icon from Assets.car (macOS 26+); older macOS uses icon.icns (scripts/build-icon.sh). -->
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
     <key>NSHumanReadableCopyright</key>

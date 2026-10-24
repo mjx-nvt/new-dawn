@@ -10,7 +10,6 @@ use std::time::UNIX_EPOCH;
 use anyhow::{Context, Result, bail};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tauri_specta::Event;
 use tokio::io::AsyncWriteExt;
 
@@ -164,15 +163,7 @@ fn notify_finished(app: &AppHandle, meeting_title: &str, result: &Result<()>) {
         Err(err) if whisper::is_cancelled(err) => return,
         Err(_) => "Transcription failed",
     };
-    if let Err(err) = app
-        .notification()
-        .builder()
-        .title(heading)
-        .body(meeting_title)
-        .show()
-    {
-        tracing::warn!("could not show a notification: {err}");
-    }
+    crate::kernel::notify::show(app, heading, meeting_title);
 }
 
 /// Marks `transcribing`, runs the gateway, saves; on any failure after that point the status is

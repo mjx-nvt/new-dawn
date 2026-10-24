@@ -11,6 +11,7 @@ use crate::error::AppError;
 use crate::kernel::registry::{Registry, Workspace, WorkspacePatch};
 
 const CURRENT_WORKSPACE_KEY: &str = "current_workspace";
+const ONBOARDING_DONE: &str = "onboarding_done";
 
 static WORKSPACE_MIGRATOR: Migrator = sqlx::migrate!("./migrations/workspace");
 
@@ -34,6 +35,16 @@ pub(crate) async fn open_pool(path: &Path, migrator: &Migrator) -> Result<Sqlite
     Ok(pool)
 }
 
+/// A consistent copy of an open database (works with WAL and concurrent readers).
+pub(crate) async fn vacuum_into(pool: &SqlitePool, path: &Path) -> Result<()> {
+    sqlx::query("VACUUM INTO ?")
+        .bind(path.display().to_string())
+        .execute(pool)
+        .await
+        .with_context(|| format!("copying a database to {}", path.display()))?;
+    Ok(())
+}
+
 pub(crate) async fn checkpoint_and_close(pool: SqlitePool) {
     if let Err(err) = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
         .execute(&pool)
@@ -42,6 +53,25 @@ pub(crate) async fn checkpoint_and_close(pool: SqlitePool) {
         tracing::warn!("WAL checkpoint failed: {err}");
     }
     pool.close().await;
+}
+
+/// Copies a folder tree (files and sub-folders; nothing when `from` doesn't exist).
+fn copy_dir(from: &Path, to: &Path) -> Result<()> {
+    if !from.is_dir() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(to).with_context(|| format!("creating {}", to.display()))?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else if entry.file_type()?.is_file() {
+            std::fs::copy(entry.path(), &target)
+                .with_context(|| format!("copying {}", entry.path().display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Owns the registry and one pool per open workspace. All data access goes through here.
@@ -82,6 +112,17 @@ impl WorkspaceHub {
 
     pub async fn set_app_setting(&self, key: &str, value: &str) -> Result<()> {
         self.registry.set_setting(key, value).await
+    }
+
+    /// The first-run setup was finished or skipped.
+    pub async fn onboarding_done(&self) -> Result<bool> {
+        Ok(self.registry.setting(ONBOARDING_DONE).await?.as_deref() == Some("1"))
+    }
+
+    pub async fn set_onboarding_done(&self, done: bool) -> Result<()> {
+        self.registry
+            .set_setting(ONBOARDING_DONE, if done { "1" } else { "0" })
+            .await
     }
 
     pub async fn workspace(&self, slug: &str) -> Result<Workspace> {
@@ -145,6 +186,38 @@ impl WorkspaceHub {
                 .with_context(|| format!("moving {} to the Trash", workspace.folder_path))?;
         }
         self.registry.remove(slug).await
+    }
+
+    /// Copies `registry.db`, every `workspace.db` and each workspace's `brand/` folder (template,
+    /// tokens, logos) into `dir` (`workspaces/<slug>/`). Open databases are copied with VACUUM
+    /// INTO; archived workspaces are closed, so their file (and any WAL a failed checkpoint left)
+    /// is copied as is.
+    pub async fn snapshot_into(&self, dir: &Path) -> Result<()> {
+        self.registry.vacuum_into(&dir.join("registry.db")).await?;
+        for workspace in self.registry.list().await? {
+            let target = dir.join("workspaces").join(&workspace.slug);
+            std::fs::create_dir_all(&target)
+                .with_context(|| format!("creating {}", target.display()))?;
+            let out = target.join("workspace.db");
+            let open = self.pools.read().expect("hub lock poisoned").get(&workspace.slug).cloned();
+            match open {
+                Some(pool) => vacuum_into(&pool, &out).await?,
+                None => {
+                    for file in ["workspace.db", "workspace.db-wal"] {
+                        let source = Path::new(&workspace.folder_path).join(file);
+                        if source.is_file() {
+                            std::fs::copy(&source, target.join(file))
+                                .with_context(|| format!("copying {}", source.display()))?;
+                        }
+                    }
+                }
+            }
+            copy_dir(
+                &Path::new(&workspace.folder_path).join("brand"),
+                &target.join("brand"),
+            )?;
+        }
+        Ok(())
     }
 
     /// Checkpoints and closes every pool, registry last. Called on app exit.

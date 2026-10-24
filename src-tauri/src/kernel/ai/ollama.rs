@@ -11,9 +11,11 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
+use tauri_specta::Event;
 use tokio::sync::MutexGuard;
 
 use crate::error::AppError;
+use crate::events::{OllamaPullFinished, OllamaPullProgress};
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
 use crate::kernel::ai::queue::AiQueue;
 use crate::kernel::ai::whisper::WhisperEngine;
@@ -80,6 +82,97 @@ pub async fn status() -> OllamaStatus {
         }
         Err(_) => down(),
     }
+}
+
+/// One pull at a time (the onboarding button can't start two).
+static PULLING: AtomicBool = AtomicBool::new(false);
+
+/// Asks Ollama to download Qwen in the background (Ollama fetches it; New Dawn only talks to
+/// localhost). Progress: `OllamaPullProgress` in MB; the end: `OllamaPullFinished`.
+pub fn start_pull(app: &AppHandle) -> Result<()> {
+    if PULLING.swap(true, Ordering::AcqRel) {
+        return Ok(()); // already running: the caller just listens to its progress
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        /// Clears the flag however the task ends (a panic included).
+        struct Done;
+        impl Drop for Done {
+            fn drop(&mut self) {
+                PULLING.store(false, Ordering::Release);
+            }
+        }
+        let done = Done;
+        let result = pull(&app).await;
+        drop(done);
+        if let Err(err) = &result {
+            tracing::warn!("model pull ended: {err:#}");
+        }
+        let _ = OllamaPullFinished {
+            error: result.err().map(AppError::from),
+        }
+        .emit(&app);
+    });
+    Ok(())
+}
+
+async fn pull(app: &AppHandle) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Line {
+        #[serde(default)]
+        status: String,
+        total: Option<u64>,
+        completed: Option<u64>,
+        error: Option<String>,
+    }
+    // A long read timeout: Ollama can go quiet while it verifies a multi-GB layer.
+    let response = client(Duration::from_secs(300))?
+        .post(format!("{BASE}/api/pull"))
+        .json(&serde_json::json!({ "model": MODEL, "stream": true }))
+        .send()
+        .await
+        .map_err(|_| AppError::new("ollama_unavailable", "Ollama isn't running"))?;
+    if !response.status().is_success() {
+        bail!(AppError::new(
+            "ollama_error",
+            format!("Ollama returned {}", response.status())
+        ));
+    }
+    let mut stream = response.bytes_stream();
+    let mut buffer = Vec::new();
+    let mut last = Instant::now() - Duration::from_secs(1);
+    let mut last_status = String::new();
+    while let Some(bytes) = stream.next().await {
+        buffer.extend_from_slice(&bytes.context("reading from Ollama")?);
+        while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
+            let raw: Vec<u8> = buffer.drain(..=newline).collect();
+            if raw.iter().all(u8::is_ascii_whitespace) {
+                continue;
+            }
+            let line: Line = serde_json::from_slice(&raw).context("reading Ollama's reply")?;
+            if let Some(error) = line.error {
+                bail!(AppError::new("ollama_error", error));
+            }
+            if line.status == "success" {
+                return Ok(());
+            }
+            if last.elapsed() >= Duration::from_millis(250) || line.status != last_status {
+                last = Instant::now();
+                last_status.clone_from(&line.status);
+                let mb = |b: Option<u64>| (b.unwrap_or(0) / 1_000_000) as u32;
+                let _ = OllamaPullProgress {
+                    status: line.status,
+                    completed_mb: mb(line.completed),
+                    total_mb: mb(line.total),
+                }
+                .emit(app);
+            }
+        }
+    }
+    bail!(AppError::new(
+        "ollama_error",
+        "Ollama stopped before the download finished"
+    ))
 }
 
 /// Asks Ollama to drop Qwen from memory now (before Whisper loads). Best effort.

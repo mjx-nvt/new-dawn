@@ -1,7 +1,11 @@
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 use tauri_specta::{Builder, collect_commands, collect_events};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use error::AppError;
 use kernel::hub::WorkspaceHub;
@@ -22,9 +26,11 @@ mod kernel {
         pub mod model;
         pub mod pdf;
     }
+    pub mod backup;
     pub mod glass;
     pub mod hub;
     pub mod menu;
+    pub mod notify;
     pub mod permissions;
     pub mod registry;
     pub mod tray;
@@ -44,10 +50,12 @@ mod recorder {
 }
 
 mod commands {
+    pub mod backup;
     pub mod glass;
     pub mod meetings;
     pub mod minutes;
     pub mod models;
+    pub mod onboarding;
     pub mod recorder;
     pub mod summary;
     pub mod window;
@@ -85,6 +93,13 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::open_summary_in_mail,
             commands::summary::ollama_status,
             commands::summary::open_ollama_app,
+            commands::summary::pull_ollama_model,
+            commands::backup::get_backup_status,
+            commands::backup::set_backup_folder,
+            commands::backup::backup_now,
+            commands::onboarding::get_onboarding_done,
+            commands::onboarding::set_onboarding_done,
+            commands::onboarding::test_notification,
             commands::minutes::export_minutes_docx,
             commands::minutes::export_minutes_pdf,
             commands::minutes::list_minutes_exports,
@@ -126,6 +141,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             events::RecorderStatusChanged,
             events::RecorderLevel,
             events::SummaryProgress,
+            events::OllamaPullProgress,
+            events::OllamaPullFinished,
             events::SummaryFinished,
         ])
 }
@@ -139,13 +156,36 @@ fn export_bindings(builder: &Builder<tauri::Wry>) {
         .expect("failed to export src/bindings.ts");
 }
 
+/// Logs to the terminal and to daily files in `~/Library/Logs/co.majorisdigital.newdawn/`
+/// (7 kept) — a released app has no terminal, so the file is how problems get diagnosed.
+/// The guard flushes the file writer; keep it alive for the whole run.
+fn init_logging() -> Option<WorkerGuard> {
+    let filter = || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let file = std::env::var_os("HOME").and_then(|home| {
+        RollingFileAppender::builder()
+            .rotation(Rotation::DAILY)
+            .filename_prefix("new-dawn")
+            .filename_suffix("log")
+            .max_log_files(7)
+            .build(std::path::Path::new(&home).join("Library/Logs/co.majorisdigital.newdawn"))
+            .ok()
+    });
+    let Some(file) = file else {
+        tracing_subscriber::fmt().with_env_filter(filter()).init();
+        return None;
+    };
+    let (writer, guard) = tracing_appender::non_blocking(file);
+    tracing_subscriber::registry()
+        .with(filter())
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_ansi(false).with_writer(writer))
+        .init();
+    Some(guard)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    let log_guard = init_logging();
 
     let builder = specta_builder();
     #[cfg(debug_assertions)]
@@ -175,6 +215,8 @@ pub fn run() {
             }
         })
         .setup(move |app| {
+            // Dropped at Exit (the run loop ends the process without unwinding): flushes the log.
+            app.manage(std::sync::Mutex::new(log_guard));
             builder.mount_events(app);
             kernel::tray::build(app.handle())?;
 
@@ -221,6 +263,7 @@ pub fn run() {
             app.manage(modules::meetings::transcribe::TranscriptionJobs::default());
             app.manage(recorder::session::Recorder::default());
             app.manage(modules::meetings::summarise::SummaryJobs::default());
+            kernel::backup::spawn_scheduler(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
@@ -242,6 +285,9 @@ pub fn run() {
                     }
                     if let Some(hub) = app.try_state::<WorkspaceHub>() {
                         tauri::async_runtime::block_on(hub.close_all());
+                    }
+                    if let Some(guard) = app.try_state::<std::sync::Mutex<Option<WorkerGuard>>>() {
+                        guard.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
                     }
                 }
                 // Dock icon clicked while the main window is hidden.

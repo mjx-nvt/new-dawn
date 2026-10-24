@@ -46,6 +46,10 @@ export default function AppLayout() {
       case "open_tenant_setup":
         void navigate({ to: "/setup", search: { step: "identity" } });
         break;
+      case "run_setup":
+        // The welcome page has no recorder controls: never leave a running recording behind.
+        if (!recorder || recorder.phase === "idle") void navigate({ to: "/welcome", search: { step: "welcome" } });
+        break;
     }
   });
 

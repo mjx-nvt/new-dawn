@@ -11,7 +11,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
-use tauri_plugin_notification::NotificationExt;
 use tauri_specta::Event;
 
 use super::email::{self, EmailContext};
@@ -246,8 +245,15 @@ fn system_prompt(structure: &[SectionSpec], language: Language) -> String {
 fn parse_doc(answer: &str) -> Result<RawDoc> {
     let start = answer.find('{').context("no JSON object in the answer")?;
     let end = answer.rfind('}').context("no JSON object in the answer")?;
-    serde_json::from_str(answer.get(start..=end).unwrap_or_default())
-        .context("the model's answer was not the expected JSON")
+    // The serde message can quote the meeting text; logs (D-026) must not, so keep only where.
+    serde_json::from_str(answer.get(start..=end).unwrap_or_default()).map_err(|e| {
+        anyhow::anyhow!(
+            "the model's answer was not the expected JSON ({:?} at line {}, column {})",
+            e.classify(),
+            e.line(),
+            e.column()
+        )
+    })
 }
 
 /// No tokenize endpoint in Ollama 0.40: estimate conservatively (measured 4–5 chars/token for
@@ -642,15 +648,7 @@ pub async fn start(
             } else {
                 "Summary failed"
             };
-            if let Err(err) = app
-                .notification()
-                .builder()
-                .title(heading)
-                .body(&title)
-                .show()
-            {
-                tracing::warn!("could not show a notification: {err}");
-            }
+            crate::kernel::notify::show(&app, heading, &title);
         }
         let error = result.err().map(AppError::from);
         let _ = SummaryFinished {

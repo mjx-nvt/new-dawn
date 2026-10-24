@@ -33,6 +33,16 @@ export const commands = {
 	openSummaryInMail: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_summary_in_mail", { slug, meetingId })),
 	ollamaStatus: () => typedError<OllamaStatus, AppError>(__TAURI_INVOKE("ollama_status")),
 	openOllamaApp: () => typedError<null, AppError>(__TAURI_INVOKE("open_ollama_app")),
+	/**  Starts downloading Qwen through Ollama; progress arrives as events. */
+	pullOllamaModel: () => typedError<null, AppError>(__TAURI_INVOKE("pull_ollama_model")),
+	getBackupStatus: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("get_backup_status")),
+	/**  `None` turns daily backups off. */
+	setBackupFolder: (folder: string | null) => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("set_backup_folder", { folder })),
+	backupNow: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("backup_now")),
+	getOnboardingDone: () => typedError<boolean, AppError>(__TAURI_INVOKE("get_onboarding_done")),
+	setOnboardingDone: (done: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_onboarding_done", { done })),
+	/**  Shows a sample notification; the first one makes macOS ask whether New Dawn may notify. */
+	testNotification: () => typedError<null, AppError>(__TAURI_INVOKE("test_notification")),
 	exportMinutesDocx: (slug: string, meetingId: string, options: ExportOptions_Deserialize) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_docx", { slug, meetingId, options })),
 	/**  PDF of an existing export's DOCX (picks up edits made in Word since; replaces an older PDF). */
 	exportMinutesPdf: (slug: string, exportId: string) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_pdf", { slug, exportId })),
@@ -77,6 +87,8 @@ export const events = {
 	menuAction: makeEvent<MenuAction, MenuAction>("menu-action"),
 	modelDownloadFinished: makeEvent<ModelDownloadFinished_Serialize, ModelDownloadFinished_Deserialize>("model-download-finished"),
 	modelDownloadProgress: makeEvent<ModelDownloadProgress, ModelDownloadProgress>("model-download-progress"),
+	ollamaPullFinished: makeEvent<OllamaPullFinished_Serialize, OllamaPullFinished_Deserialize>("ollama-pull-finished"),
+	ollamaPullProgress: makeEvent<OllamaPullProgress, OllamaPullProgress>("ollama-pull-progress"),
 	openSettingsTab: makeEvent<OpenSettingsTab, OpenSettingsTab>("open-settings-tab"),
 	recorderLevel: makeEvent<RecorderLevel, RecorderLevel>("recorder-level"),
 	recorderStatusChanged: makeEvent<RecorderStatusChanged_Serialize, RecorderStatusChanged_Deserialize>("recorder-status-changed"),
@@ -120,6 +132,22 @@ export type Attendee_Serialize = {
 	/**  Job title, as said. */
 	title: string,
 	attendance: string,
+};
+
+export type BackupStatus = BackupStatus_Serialize | BackupStatus_Deserialize;
+
+export type BackupStatus_Deserialize = {
+	/**  `None`: backups are off. */
+	folder?: string | null,
+	last_at?: string | null,
+	last_error?: string | null,
+};
+
+export type BackupStatus_Serialize = {
+	/**  `None`: backups are off. */
+	folder: string | null,
+	last_at: string | null,
+	last_error: string | null,
 };
 
 export type Converter = "word" | "libreoffice" | "pages";
@@ -232,7 +260,9 @@ export type Meeting_Serialize = {
 /**  A native menu item that the UI has to act on. */
 export type MenuAction = "switch_workspace" | "toggle_sidebar" | "open_tenant_setup" | "import_audio" | 
 /**  File → New Recording (⌘R) or the tray item: start when idle, stop when recording. */
-"toggle_recording";
+"toggle_recording" | 
+/**  New Dawn → Run Setup…: the first-run welcome steps again. */
+"run_setup";
 
 export type MinutesExport = MinutesExport_Serialize | MinutesExport_Deserialize;
 
@@ -292,6 +322,26 @@ export type ModelInfo = {
 export type ModelState = { state: "missing" } | 
 /**  A `.part` file from an interrupted or cancelled download; Download resumes it. */
 { state: "partial"; bytes: number } | { state: "downloading" } | { state: "ready" };
+
+/**  The Qwen download ended: `error` is None on success. */
+export type OllamaPullFinished = OllamaPullFinished_Serialize | OllamaPullFinished_Deserialize;
+
+/**  The Qwen download ended: `error` is None on success. */
+export type OllamaPullFinished_Deserialize = {
+	error?: AppError | null,
+};
+
+/**  The Qwen download ended: `error` is None on success. */
+export type OllamaPullFinished_Serialize = {
+	error: AppError | null,
+};
+
+/**  Ollama is downloading Qwen (onboarding): the current layer's progress, in MB. */
+export type OllamaPullProgress = {
+	status: string,
+	completed_mb: number,
+	total_mb: number,
+};
 
 export type OllamaStatus = {
 	running: boolean,

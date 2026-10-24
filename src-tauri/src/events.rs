@@ -19,6 +19,8 @@ pub enum MenuAction {
     ImportAudio,
     /// File → New Recording (⌘R) or the tray item: start when idle, stop when recording.
     ToggleRecording,
+    /// New Dawn → Run Setup…: the first-run welcome steps again.
+    RunSetup,
 }
 
 /// Ask an already-open Settings window to show a tab.
@@ -96,4 +98,18 @@ pub fn notify_workspaces_changed(app: &AppHandle) {
     if let Err(err) = event.emit(app) {
         tracing::warn!("could not emit WorkspacesChanged: {err}");
     }
+}
+
+/// Ollama is downloading Qwen (onboarding): the current layer's progress, in MB.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct OllamaPullProgress {
+    pub status: String,
+    pub completed_mb: u32,
+    pub total_mb: u32,
+}
+
+/// The Qwen download ended: `error` is None on success.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct OllamaPullFinished {
+    pub error: Option<AppError>,
 }

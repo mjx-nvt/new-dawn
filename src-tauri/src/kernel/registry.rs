@@ -8,7 +8,7 @@ use sqlx::migrate::Migrator;
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::kernel::hub::{checkpoint_and_close, open_pool};
+use crate::kernel::hub::{checkpoint_and_close, open_pool, vacuum_into};
 
 static REGISTRY_MIGRATOR: Migrator = sqlx::migrate!("./migrations/registry");
 
@@ -46,6 +46,10 @@ impl Registry {
             pool,
             root: root.to_owned(),
         })
+    }
+
+    pub async fn vacuum_into(&self, path: &Path) -> Result<()> {
+        vacuum_into(&self.pool, path).await
     }
 
     pub async fn list(&self) -> Result<Vec<Workspace>> {

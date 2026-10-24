@@ -2,6 +2,20 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-026 — Ship: icon, onboarding, notifications, backup, logs, build
+_2026-10-24_
+
+**Decision** (P4.1, user-approved plan):
+- **Icon**: a first-version sunrise (sky gradient, sun, horizon) as an Icon Composer file `src-tauri/icons/AppIcon.icon` → `actool` → `Assets.car` (Liquid Glass on macOS 26+, `CFBundleIconName` = AppIcon) plus a flat twin `AppIcon-flat.svg` → `icon.icns`/PNGs for macOS 14–15 (actool's own .icns stops at 256 px). `scripts/build-icon.sh` rebuilds both; the generated files are committed so a build needs no Xcode icon step.
+- **Onboarding** `/welcome` in the main window until `onboarding_done` is set (index route redirects): Permissions (mic request, call-audio explained, test notification to trigger the macOS prompt) → Ollama (status, Open Ollama, **Download qwen3.5:9b** via the gateway's localhost `/api/pull`, progress in MB because the model is > 4 GB) → Whisper (Settings' model list) → PDF converters → Workspace (Settings' workspace panel) → Done. Every step skippable; New Dawn → Run Setup… shows it again. Existing installs see it once.
+- **Notifications**: one helper `kernel/notify.rs`; Recording started / stopped (with length) added to Transcript ready / Summary ready.
+- **Backup** `kernel/backup.rs`: off until a folder is chosen; `VACUUM INTO` copies of registry.db and every open workspace.db (archived = file copy) plus each workspace's `brand/` folder (and an archived workspace's WAL) into `<folder>/New Dawn <yyyy-mm-dd>/`, one at a time, built in a hidden partial folder then swapped in (leftovers pruned); same-day re-runs replace; prunes to 7, touching only folders named `New Dawn YYYY-MM-DD` that hold a registry.db. "Nightly" = due when the last backup is ≥ 24 h old, checked a minute after launch and hourly (no launchd agent). Recordings and exports are not included.
+- **Privacy notes**: logs never carry meeting text (a malformed-JSON error keeps only its position); notification bodies carry the meeting title, which can show on the lock screen (macOS setting).
+- **Logs**: `tracing-appender` daily files in `~/Library/Logs/co.majorisdigital.newdawn/`, 7 kept (Meetily shipped without logs — teardown §4).
+- **Build**: `pnpm tauri build` → `New Dawn.app` + `.dmg`, ad-hoc signed (`signingIdentity: "-"`), hardened runtime, entitlements mic + Apple Events. No notarisation (needs a paid Developer ID): on another Mac the first launch is right-click → Open. The npm `@tauri-apps/{api,plugin-opener,plugin-dialog}` are pinned to the Rust crates' minor versions (the CLI refuses to build on a mismatch).
+
+---
+
 ## D-025 — Review: edits reach the minutes, re-runs keep edits, clean-up actions
 _2026-10-24_
 

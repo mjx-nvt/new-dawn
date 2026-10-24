@@ -55,6 +55,7 @@
     ],
     "resources": {
       "../brands/": "brands/",
+      "icons/Assets.car": "Assets.car",
       "resources/models/ggml-silero-v5.1.2.bin": "models/ggml-silero-v5.1.2.bin"
     },
     "macOS": {

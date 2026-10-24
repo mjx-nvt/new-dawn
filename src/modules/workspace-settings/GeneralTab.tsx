@@ -1,4 +1,5 @@
 import { useGlassStatus } from "../../kernel/bridge/glass";
+import { useBackupNow, useBackupStatus, useChooseBackupFolder } from "../../kernel/bridge/onboarding";
 import { openPrivacySettings, useMicrophonePermission, useRequestMicrophone, type PermissionState } from "../../kernel/bridge/recorder";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import styles from "./Settings.module.css";
@@ -75,6 +76,8 @@ export default function GeneralTab() {
         </div>
       </section>
 
+      <BackupSection />
+
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Window</h2>
         <p className={styles.sectionSubtitle}>Appearance follows macOS: light or dark, accent colour, Reduce Transparency</p>
@@ -83,5 +86,47 @@ export default function GeneralTab() {
         </div>
       </section>
     </>
+  );
+}
+
+/** Daily copy of every database into a folder you choose (newest 7 kept). */
+function BackupSection() {
+  const status = useBackupStatus();
+  const choose = useChooseBackupFolder();
+  const now = useBackupNow();
+  const b = status.data;
+  const error = choose.error ?? now.error ?? (b?.last_error ? { message: b.last_error } : null);
+  return (
+    <section className={styles.section}>
+      <h2 className={styles.sectionTitle}>Backup</h2>
+      <p className={styles.sectionSubtitle}>
+        Once a day while New Dawn runs: the workspace databases (meetings, transcripts, summaries), newest 7 kept. Recordings
+        and exported files are not included.
+      </p>
+      <div className={styles.fields}>
+        <Field label="Folder" value={b?.folder ?? undefined} />
+        <Field label="Last backup" value={b?.last_at ? new Date(b.last_at).toLocaleString("en-GB") : undefined} />
+      </div>
+      <div className={styles.permission}>
+        <button type="button" className="btn btnSecondary btnCompact" disabled={choose.isPending} onClick={() => choose.mutate(false)}>
+          {b?.folder ? "Change folder…" : "Choose folder…"}
+        </button>
+        {b?.folder && (
+          <>
+            <button type="button" className="btn btnSecondary btnCompact" disabled={now.isPending} onClick={() => now.mutate()}>
+              {now.isPending ? "Backing up…" : "Back up now"}
+            </button>
+            <button type="button" className="btn btnGhost btnCompact" disabled={choose.isPending} onClick={() => choose.mutate(true)}>
+              Turn off
+            </button>
+          </>
+        )}
+      </div>
+      {error && (
+        <p className="formError" role="alert">
+          {error.message}
+        </p>
+      )}
+    </section>
   );
 }

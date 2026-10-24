@@ -23,6 +23,7 @@ use crate::error::AppError;
 use crate::events::{RecorderLevel, RecorderStatusChanged};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::kernel::notify;
 use crate::kernel::permissions::{self, PermissionState};
 use crate::modules::meetings::{self, Meeting, MeetingStatus, NewMeeting, transcribe};
 use sqlx::SqlitePool;
@@ -245,6 +246,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     *app.state::<Recorder>().lock() = Some(active);
     let _ = RecorderStatusChanged(status).emit(app);
     spawn_meter(app.clone());
+    notify::show(app, "Recording started", &meeting.title);
     Ok(meeting)
 }
 
@@ -325,11 +327,20 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
             }
         }
     };
-    meetings::finish_recording(&pool, &meeting_id, saver::duration_ms(samples)).await?;
-    if let Err(err) = transcribe::start(app, &slug, &meeting_id).await {
+    let duration_ms = saver::duration_ms(samples);
+    meetings::finish_recording(&pool, &meeting_id, duration_ms).await?;
+    let queued = transcribe::start(app, &slug, &meeting_id).await;
+    if let Err(err) = &queued {
         tracing::warn!("could not queue transcription: {err:#}");
     }
-    meetings::get(&pool, &meeting_id).await
+    let meeting = meetings::get(&pool, &meeting_id).await?;
+    let next = if queued.is_ok() { " — transcribing" } else { "" };
+    notify::show(
+        app,
+        "Recording stopped",
+        &format!("{} · {}{next}", meeting.title, notify::clock(duration_ms)),
+    );
+    Ok(meeting)
 }
 
 /// Recordings cut short by a quit or crash: repair the WAV from its length and mark them

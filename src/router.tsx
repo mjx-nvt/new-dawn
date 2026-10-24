@@ -1,8 +1,10 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
+import { getOnboardingDone } from "./kernel/bridge/onboarding";
 import type { SettingsTab } from "./kernel/bridge/settings";
 import AppLayout from "./kernel/shell/AppLayout";
 import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/MeetingPage";
 import MeetingsPage from "./modules/meetings/MeetingsPage";
+import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboarding/WelcomePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupStep } from "./modules/tenant-setup/TenantSetupPage";
 import SettingsPage, { SETTINGS_TABS } from "./modules/workspace-settings/SettingsPage";
@@ -16,8 +18,10 @@ const shellRoute = createRoute({ getParentRoute: () => rootRoute, id: "shell", c
 const indexRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/",
-  beforeLoad: () => {
-    throw redirect({ to: "/meetings" });
+  // First launch (or after New Dawn → Run Setup…): the welcome steps; otherwise the meetings.
+  beforeLoad: async () => {
+    const done = await getOnboardingDone().catch(() => true);
+    throw done ? redirect({ to: "/meetings" }) : redirect({ to: "/welcome", search: { step: "welcome" } });
   },
 });
 
@@ -60,6 +64,16 @@ const devShellRoute = createRoute({
   staticData: { title: "Shell mockup", breadcrumb: "Developer" },
 });
 
+// First-run setup in the main window: its own layout (no sidebar), step in the URL.
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/welcome",
+  validateSearch: (search: Record<string, unknown>): { step: WelcomeStep } => ({
+    step: WELCOME_STEPS.find((s) => s.id === search.step)?.id ?? "welcome",
+  }),
+  component: WelcomePage,
+});
+
 // Settings window: its own layout, tab kept in the URL (?tab=).
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -73,6 +87,7 @@ const settingsRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    welcomeRoute,
     settingsRoute,
   ]),
 });
