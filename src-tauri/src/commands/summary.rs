@@ -16,7 +16,8 @@ pub async fn get_summary(
     Ok(summarise::view(&hub.pool(&slug)?, &meeting_id).await?)
 }
 
-/// (Re)writes the executive summary; `deep` turns Qwen's thinking on (slower, D-021).
+/// (Re)writes the executive summary; `deep` turns Qwen's thinking on (slower, D-021);
+/// `keep_edits` keeps hand-edited sections (D-025).
 #[tauri::command]
 #[specta::specta]
 pub async fn summarise_meeting(
@@ -24,8 +25,9 @@ pub async fn summarise_meeting(
     slug: String,
     meeting_id: String,
     deep: bool,
+    keep_edits: bool,
 ) -> Result<(), AppError> {
-    Ok(summarise::start(&app, &slug, &meeting_id, deep).await?)
+    Ok(summarise::start(&app, &slug, &meeting_id, deep, keep_edits).await?)
 }
 
 #[tauri::command]

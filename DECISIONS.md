@@ -2,6 +2,20 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-025 — Review: edits reach the minutes, re-runs keep edits, clean-up actions
+_2026-10-24_
+
+**Decision** (P3.3, user-approved plan):
+- **Edits flow back into the lists.** Each summary section carries `edited`. Saving Key points / Decisions / Action items / Open questions rebuilds the list behind it from the bullets (`modules/meetings/review.rs`): Key points = "- **Topic**" + nested points; Action items = "Owner — task — due" (missing parts → "Unassigned" / "Not set"); Decisions and Open questions keep `decided_by`/`condition` and `who`/`by` when the text still matches (case-insensitive). Anything off-format is kept as text, never dropped. The minutes therefore always match the Summary tab (closes D-024's known limit). Chosen over a structured row editor: smaller, stays plain text; revisit if bullets prove fiddly.
+- **Re-run keeps edits by default.** With edited sections the UI asks Keep my edits / Discard edits; kept sections (and their lists) replace the fresh ones. The automatic summary after a re-transcription keeps edits too. `edited_at` now means "some section is edited".
+- **Transcript corrections** update the segment in place (FTS follows via the update trigger). `SummaryDoc.generated_at` + segment `updated_at` → `transcript_changed` on the Summary tab. Re-transcribing still replaces the whole transcript (corrections included).
+- **Notes** (`meeting.notes_md`, autosaved) are appended to the meeting text under "[Notes from the meeting owner]"; the prompt treats them as reliable data (still data, not instructions).
+- **Rename** re-renders the email subject. **Delete meeting** moves `recordings/<id>/` to the Trash (or an audio file only if it lives under `recordings/`), then deletes the row (transcript, summary and export rows cascade); exported DOCX/PDF files stay in `exports/`. Blocked while recording/transcribing/summarising. **Delete export** moves its files to the Trash.
+- Summaries edited before P3.3 (only `edited_at`, no section flags) can't be kept section by section: Re-run asks before replacing them.
+- No migration (columns existed; flags live in the summary JSON).
+
+---
+
 ## D-024 — Minutes export: structured summary, PDF only on request, converter chain
 _2026-10-24_
 

@@ -40,6 +40,15 @@ export function useMakePdf(slug: string, meetingId: string) {
   });
 }
 
+/** Moves the export's files to the Trash and drops it from the list. */
+export function useDeleteExport(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (exportId: string) => unwrap(commands.deleteMinutesExport(slug, exportId)),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.exports(slug, meetingId) }),
+  });
+}
+
 export function openMinutesFile(slug: string, exportId: string, file: MinutesFile, reveal: boolean): Promise<null> {
   return unwrap(commands.openMinutesFile(slug, exportId, file, reveal));
 }

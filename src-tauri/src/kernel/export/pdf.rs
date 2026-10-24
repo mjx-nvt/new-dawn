@@ -66,7 +66,9 @@ pub struct ConverterInfo {
 }
 
 fn home() -> PathBuf {
-    std::env::var_os("HOME").map(PathBuf::from).unwrap_or_default()
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_default()
 }
 
 fn find_app(bundle: &str) -> Option<PathBuf> {
@@ -117,7 +119,12 @@ pub async fn convert(docx: &Path, pdf: &Path) -> Result<Converter> {
 async fn convert_with(converter: Converter, app: &Path, docx: &Path, pdf: &Path) -> Result<()> {
     let base = converter
         .container()
-        .map(|id| home().join("Library/Containers").join(id).join("Data/Documents"))
+        .map(|id| {
+            home()
+                .join("Library/Containers")
+                .join(id)
+                .join("Data/Documents")
+        })
         .filter(|dir| dir.is_dir()) // the app has run at least once
         .unwrap_or_else(std::env::temp_dir);
     let work = base.join(format!("NewDawn-{}", uuid::Uuid::now_v7()));

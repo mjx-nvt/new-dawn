@@ -3,6 +3,7 @@
 pub mod audio;
 pub mod email;
 pub mod minutes;
+pub mod review;
 pub mod summarise;
 pub mod transcribe;
 
@@ -38,6 +39,8 @@ pub struct Meeting {
     pub audio_path: Option<String>,
     pub duration_ms: Option<u32>,
     pub status: MeetingStatus,
+    /// The owner's notes; passed to the next summary run (P3.3).
+    pub notes_md: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

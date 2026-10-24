@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import type { Meeting } from "../../kernel/bridge/meetings";
+import { useEffect, useRef, useState } from "react";
+import type { SectionKind } from "../../bindings";
+import { useSaveNotes, type Meeting } from "../../kernel/bridge/meetings";
 import {
   cancelSummary,
   openOllamaApp,
@@ -32,10 +33,11 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
   const ollamaReady = !!ollama.data?.running && !!ollama.data.model_installed;
   // The newest problem wins: a fresh start attempt clears an older job error and vice versa.
   const error = summarise.error ?? lastError ?? summary.error;
-  const run = (deep: boolean) => summarise.mutate({ slug, meetingId: meeting.id, deep });
+  const run = (deep: boolean, keepEdits: boolean) => summarise.mutate({ slug, meetingId: meeting.id, deep, keepEdits });
 
   return (
     <section className="section">
+      <NotesCard key={meeting.id} slug={slug} meeting={meeting} />
       {ollama.data && !ollamaReady && !writing && <OllamaCard running={ollama.data.running} model={ollama.data.model} />}
       {writing && <ProgressCard meetingId={meeting.id} progress={progress} />}
       {error && (
@@ -54,7 +56,7 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
                 {transcribed ? "Not yet captured — no summary has been written." : "Not yet captured — the summary is written after the transcript."}
               </p>
               {transcribed && (
-                <button type="button" className="btn btnPrimary btnCompact" disabled={!ollamaReady || summarise.isPending} onClick={() => run(false)}>
+                <button type="button" className="btn btnPrimary btnCompact" disabled={!ollamaReady || summarise.isPending} onClick={() => run(false, true)}>
                   Write summary
                 </button>
               )}
@@ -121,15 +123,16 @@ interface BodyProps {
   view: SummaryView;
   busy: boolean;
   canRun: boolean;
-  onRun: (deep: boolean) => void;
+  onRun: (deep: boolean, keepEdits: boolean) => void;
 }
 
 function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
   const copy = useCopyEmail();
   const mail = useOpenInMail();
   const [copied, setCopied] = useState(false);
-  const [confirmReplace, setConfirmReplace] = useState<null | boolean>(null); // which re-run is armed
+  const [pendingRun, setPendingRun] = useState<null | boolean>(null); // deep? while choosing keep/discard
   const edited = !!view.edited_at;
+  const editedCount = view.doc.sections.filter((s) => s.edited).length;
 
   useEffect(() => {
     if (!copied) return;
@@ -138,19 +141,20 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
   }, [copied]);
 
   function rerun(deep: boolean) {
-    if (edited && confirmReplace !== deep) {
-      setConfirmReplace(deep); // first click on an edited summary arms; the second replaces
+    if (edited) {
+      setPendingRun(deep); // ask: keep or discard the hand edits
       return;
     }
-    setConfirmReplace(null);
-    onRun(deep);
+    onRun(deep, true);
   }
 
-  const announce = copied
-    ? "Email copied to the clipboard"
-    : confirmReplace !== null
-      ? "Your edits will be replaced. Press the button again to confirm."
-      : "";
+  function choose(keepEdits: boolean) {
+    if (pendingRun === null) return;
+    onRun(pendingRun, keepEdits);
+    setPendingRun(null);
+  }
+
+  const announce = copied ? "Email copied to the clipboard" : "";
   const actionError = copy.error ?? mail.error;
   return (
     <>
@@ -175,10 +179,10 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
             Open in Mail
           </button>
           <button type="button" className="btn btnGhost btnCompact" disabled={busy || !canRun} onClick={() => rerun(false)}>
-            {confirmReplace === false ? "Replace your edits?" : "Re-run"}
+            Re-run
           </button>
           <button type="button" className="btn btnGhost btnCompact" aria-describedby="deep-hint" disabled={busy || !canRun} onClick={() => rerun(true)}>
-            {confirmReplace === true ? "Replace your edits?" : "Deep re-run"}
+            Deep re-run
           </button>
           <p id="deep-hint" className={`fieldHint ${styles.deepHint}`}>
             Deep re-run lets Qwen think first: more careful, takes several minutes.
@@ -188,6 +192,38 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
       <span className="srOnly" aria-live="polite">
         {announce}
       </span>
+      {pendingRun !== null && (
+        <div className={`card ${styles.notice}`} role="alertdialog" aria-labelledby="rerun-title">
+          <div>
+            <p id="rerun-title" className={styles.noticeTitle}>
+              {editedCount > 0 ? `You edited ${editedCount === 1 ? "1 section" : `${editedCount} sections`}` : "This summary has older edits"}
+            </p>
+            <p className="fieldHint">
+              {editedCount > 0
+                ? "Keep them and let Qwen rewrite the rest, or start over from the transcript."
+                : "They were made before edits were tracked per section, so a re-run replaces them."}
+            </p>
+          </div>
+          <div className={styles.choice}>
+            <button type="button" className="btn btnGhost btnCompact" autoFocus={editedCount === 0} onClick={() => setPendingRun(null)}>
+              Cancel
+            </button>
+            <button type="button" className={`btn btnCompact ${editedCount > 0 ? "btnSecondary" : "btnPrimary"}`} onClick={() => choose(false)}>
+              {editedCount > 0 ? "Discard edits" : "Re-run and replace"}
+            </button>
+            {editedCount > 0 && (
+              <button type="button" className="btn btnPrimary btnCompact" autoFocus onClick={() => choose(true)}>
+                Keep my edits
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {view.transcript_changed && !busy && (
+        <p className={`fieldHint ${styles.stale}`}>
+          The transcript was corrected after this summary was written — Re-run to use it (your edited sections are kept).
+        </p>
+      )}
       {actionError && (
         <p className={styles.error} role="alert">
           {actionError.message}
@@ -196,10 +232,12 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
 
       {view.doc.sections.map((section, index) => (
         <SectionBlock
-          key={`${view.updated_at}-${index}`} // a new summary resets any open editor
+          key={`${view.doc.generated_at}-${index}`} // only a new AI summary resets open editors
           slug={slug}
           meetingId={meeting.id}
           index={index}
+          kind={section.kind}
+          edited={section.edited}
           title={section.title}
           markdown={section.markdown}
           html={view.sections_html[index] ?? ""}
@@ -220,19 +258,32 @@ interface SectionProps {
   slug: string;
   meetingId: string;
   index: number;
+  kind: SectionKind;
+  edited: boolean;
   title: string;
   markdown: string;
   html: string;
   locked: boolean;
 }
 
-function SectionBlock({ slug, meetingId, index, title, markdown, html, locked }: SectionProps) {
+// The minutes are rebuilt from these sections' bullets, so the format matters there (D-025).
+const FORMAT_HINT: Partial<Record<SectionKind, string>> = {
+  key_points: "“- **Topic**”, then “  - point” lines under it",
+  decisions: "One “- ” line per decision",
+  action_items: "“- **Owner** — task — *due*”, one per line",
+  open_questions: "One “- ” line per question",
+};
+
+function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, html, locked }: SectionProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const update = useUpdateSection(slug, meetingId);
   return (
     <div className={styles.section}>
       <div className={styles.sectionHead}>
-        <h3 className="sectionTitle">{title}</h3>
+        <div className={styles.titleRow}>
+          <h3 className="sectionTitle">{title}</h3>
+          {edited && <span className="chip">Edited</span>}
+        </div>
         {draft === null && (
           <button type="button" className="btn btnGhost btnCompact" disabled={locked} onClick={() => setDraft(markdown)} aria-label={`Edit ${title}`}>
             Edit
@@ -255,7 +306,7 @@ function SectionBlock({ slug, meetingId, index, title, markdown, html, locked }:
             </p>
           )}
           <div className={styles.editorActions}>
-            <span className="fieldHint">Markdown: “- ” for bullets, **bold**</span>
+            <span className="fieldHint">{FORMAT_HINT[kind] ?? "Markdown: “- ” for bullets, **bold**"}</span>
             <button type="button" className="btn btnGhost btnCompact" onClick={() => setDraft(null)}>
               Cancel
             </button>
@@ -276,6 +327,60 @@ function SectionBlock({ slug, meetingId, index, title, markdown, html, locked }:
       ) : (
         <p className="ghostText">Not yet captured</p>
       )}
+    </div>
+  );
+}
+
+/** The owner's notes: saved as you type, read by the next summary run. */
+function NotesCard({ slug, meeting }: { slug: string; meeting: Meeting }) {
+  const save = useSaveNotes(slug, meeting.id);
+  const [draft, setDraft] = useState(meeting.notes_md ?? "");
+  const saved = useRef(meeting.notes_md ?? "");
+  const latest = useRef(draft);
+  const { mutate } = save;
+
+  // Leaving the tab within the debounce still saves.
+  useEffect(
+    () => () => {
+      if (latest.current !== saved.current) mutate(latest.current);
+    },
+    [mutate],
+  );
+
+  useEffect(() => {
+    if (draft === saved.current) return;
+    const t = setTimeout(() => {
+      saved.current = draft;
+      mutate(draft);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [draft, mutate]);
+
+  return (
+    <div className={styles.notes}>
+      <label className="field">
+        <span className="fieldLabel">Your notes</span>
+        <textarea
+          className="input"
+          rows={3}
+          value={draft}
+          placeholder="Names and spellings, who chaired, what the recording missed…"
+          onChange={(e) => {
+            latest.current = e.target.value;
+            setDraft(e.target.value);
+          }}
+          onBlur={() => {
+            // Clicking Re-run right after typing: save now, not after the debounce.
+            if (latest.current !== saved.current) {
+              saved.current = latest.current;
+              mutate(latest.current);
+            }
+          }}
+        />
+      </label>
+      <p className="fieldHint">
+        {save.error ? save.error.message : save.isPending ? "Saving…" : "Saved on this Mac · the next summary run reads these notes"}
+      </p>
     </div>
   );
 }

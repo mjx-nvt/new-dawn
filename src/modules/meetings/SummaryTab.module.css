@@ -126,3 +126,27 @@
   white-space: pre-wrap;
   user-select: text;
 }
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+
+.choice {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+}
+
+.stale {
+  margin-top: var(--space-3);
+  color: var(--status-warning);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

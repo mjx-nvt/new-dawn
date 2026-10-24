@@ -76,8 +76,8 @@ export function useSummarySync() {
 export function useSummarise() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ slug, meetingId, deep }: { slug: string; meetingId: string; deep: boolean }) =>
-      unwrap(commands.summariseMeeting(slug, meetingId, deep)),
+    mutationFn: ({ slug, meetingId, deep, keepEdits }: { slug: string; meetingId: string; deep: boolean; keepEdits: boolean }) =>
+      unwrap(commands.summariseMeeting(slug, meetingId, deep, keepEdits)),
     onSuccess: (_, { meetingId }) => queryClient.setQueryData(keys.error(meetingId), null),
   });
 }

@@ -25,6 +25,13 @@ use crate::kernel::hub::WorkspaceHub;
 pub struct TranscriptionJobs(Mutex<HashMap<String, Arc<AtomicBool>>>);
 
 impl TranscriptionJobs {
+    pub fn contains(&self, meeting_id: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(meeting_id)
+    }
+
     pub fn cancel(&self, meeting_id: &str) {
         if let Some(flag) = self
             .0
@@ -135,7 +142,7 @@ pub async fn start(app: &AppHandle, slug: &str, meeting_id: &str) -> Result<()> 
         notify_finished(&app, &title, &result);
         // The executive summary follows the transcript automatically (D-021).
         if result.is_ok() {
-            if let Err(err) = super::summarise::start(&app, &slug, &meeting_id, false).await {
+            if let Err(err) = super::summarise::start(&app, &slug, &meeting_id, false, true).await {
                 tracing::warn!("could not queue the summary: {err:#}");
             }
         }

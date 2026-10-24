@@ -157,3 +157,50 @@ export async function pickAudioFile(): Promise<string | null> {
 export function audioUrl(path: string): string {
   return convertFileSrc(path);
 }
+
+/** Corrects one transcript line; the summary's "transcript changed" flag and search follow. */
+export function useUpdateSegment(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ seq, text }: { seq: number; text: string }) => unwrap(commands.updateTranscriptSegment(slug, meetingId, seq, text)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.transcript(slug, meetingId) });
+      void queryClient.invalidateQueries({ queryKey: ["summary", slug, meetingId] });
+      void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+    },
+  });
+}
+
+export function useSaveNotes(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (notes: string) => unwrap(commands.setMeetingNotes(slug, meetingId, notes)),
+    onSuccess: (meeting) => queryClient.setQueryData(keys.meeting(slug, meetingId), meeting),
+  });
+}
+
+/** New title; the summary's email subject follows. */
+export function useRenameMeeting(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) => unwrap(commands.renameMeeting(slug, meetingId, title)),
+    onSuccess: (meeting) => {
+      queryClient.setQueryData(keys.meeting(slug, meetingId), meeting);
+      void queryClient.invalidateQueries({ queryKey: keys.meetings(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["summary", slug, meetingId] });
+      void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+    },
+  });
+}
+
+/** Recording to the Trash; transcript, summary and export rows deleted (exported files stay). */
+export function useDeleteMeeting(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(commands.deleteMeeting(slug, meetingId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.meetings(slug) });
+      void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+    },
+  });
+}

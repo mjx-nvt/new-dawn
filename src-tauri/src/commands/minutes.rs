@@ -55,3 +55,13 @@ pub async fn open_minutes_file(
 ) -> Result<(), AppError> {
     Ok(minutes::open_file(&hub, &slug, &export_id, file, reveal).await?)
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_minutes_export(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    export_id: String,
+) -> Result<(), AppError> {
+    Ok(minutes::delete_export(&hub, &slug, &export_id).await?)
+}

@@ -164,6 +164,7 @@ mod tests {
             audio_path: None,
             duration_ms: Some(90 * 60_000),
             status: MeetingStatus::Summarised,
+            notes_md: None,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -182,11 +183,13 @@ mod tests {
                     kind: SectionKind::Overview,
                     title: "Overview".into(),
                     markdown: "We met **Acme**.\n\nBoth sides agreed.".into(),
+                    edited: false,
                 },
                 Section {
                     kind: SectionKind::NextSteps,
                     title: "Next steps".into(),
                     markdown: "- Draft agenda".into(),
+                    edited: false,
                 },
             ],
             attendees: vec![
@@ -221,6 +224,7 @@ mod tests {
                 by: String::new(),
             }],
             next_focus: String::new(),
+            generated_at: String::new(),
         }
     }
 
@@ -243,7 +247,10 @@ mod tests {
         assert_eq!(data["reference"], "BB-24102026-02");
         assert_eq!(data["meeting_type"], "[Meeting type]");
         assert_eq!(data["summary"], "We met Acme.\nBoth sides agreed.");
-        assert_eq!(data["next_focus"], "• Draft agenda", "falls back to Next steps");
+        assert_eq!(
+            data["next_focus"], "• Draft agenda",
+            "falls back to Next steps"
+        );
         let groups = data["attendee_groups"].as_array().unwrap();
         assert_eq!(groups.len(), 2, "grouped by organisation, first-seen order");
         assert_eq!(groups[0]["members"][1]["name"], "Minh");
@@ -279,8 +286,7 @@ mod tests {
         let data = minutes(&input(&meeting, &doc));
         let template = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../brands/vifc/templates/meeting-minutes/template.docx");
-        let out =
-            std::env::temp_dir().join(format!("newdawn-model-{}.docx", uuid::Uuid::now_v7()));
+        let out = std::env::temp_dir().join(format!("newdawn-model-{}.docx", uuid::Uuid::now_v7()));
         super::super::docx::render(&template, &data, &out).unwrap();
         let mut xml = String::new();
         std::io::Read::read_to_string(
@@ -296,7 +302,14 @@ mod tests {
         }
         std::fs::remove_file(out).unwrap();
         assert!(!xml.contains("{{"), "every placeholder filled");
-        for text in ["3.2", "Delegation", "QĐ-01", "CV-03", "Task 3", "BB-24102026-02"] {
+        for text in [
+            "3.2",
+            "Delegation",
+            "QĐ-01",
+            "CV-03",
+            "Task 3",
+            "BB-24102026-02",
+        ] {
             assert!(xml.contains(text), "{text}");
         }
     }

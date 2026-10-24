@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Meeting } from "../../kernel/bridge/meetings";
 import {
   openMinutesFile,
   pdfUrl,
   useConverters,
+  useDeleteExport,
   useExportMinutes,
   useMakePdf,
   useMinutesExports,
@@ -34,14 +35,15 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
   const converters = useConverters();
   const exportMinutes = useExportMinutes(slug, meeting.id);
   const makePdf = useMakePdf(slug, meeting.id);
+  const deleteExport = useDeleteExport(slug, meeting.id);
   const [withPdf, setWithPdf] = useState(false);
   const [fileName, setFileName] = useState("");
   const [openError, setOpenError] = useState<string | null>(null);
 
   const hasSummary = !!summary.data;
   const hasConverter = !!converters.data?.some((c) => c.path);
-  const busy = exportMinutes.isPending || makePdf.isPending;
-  const error = exportMinutes.error ?? makePdf.error ?? exports.error;
+  const busy = exportMinutes.isPending || makePdf.isPending || deleteExport.isPending;
+  const error = exportMinutes.error ?? makePdf.error ?? deleteExport.error ?? exports.error;
   const latestPdf = exports.data?.find((e) => e.pdf_path);
 
   const open = (exportId: string, file: MinutesFile, reveal: boolean) => {
@@ -85,8 +87,8 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
           <p className="fieldHint">No PDF converter found. Install Microsoft Word, LibreOffice or Pages (Settings → Converters).</p>
         )}
         <p className="fieldHint">
-          Venue, chair, classification and signatures keep the template's [ ] hints — complete them in Word. Edits to Key points,
-          Decisions, Action items and Open questions on the Summary tab change the email, not the minutes.
+          Filled from the summary as it is now, including your edits. Venue, chair, classification and signatures keep the
+          template's [ ] hints — complete them in Word.
         </p>
       </div>
 
@@ -106,7 +108,9 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
               item={item}
               makingPdf={makePdf.isPending && makePdf.variables === item.id}
               disabled={busy || !hasConverter}
+              deleting={busy}
               onMakePdf={() => makePdf.mutate(item.id)}
+              onDelete={() => deleteExport.mutate(item.id)}
               onOpen={open}
             />
           ))
@@ -139,13 +143,17 @@ function ExportRow({
   item,
   makingPdf,
   disabled,
+  deleting,
   onMakePdf,
+  onDelete,
   onOpen,
 }: {
   item: MinutesExport;
   makingPdf: boolean;
   disabled: boolean;
+  deleting: boolean;
   onMakePdf: () => void;
+  onDelete: () => void;
   onOpen: (exportId: string, file: MinutesFile, reveal: boolean) => void;
 }) {
   return (
@@ -173,7 +181,29 @@ function ExportRow({
         <button type="button" className="btn btnGhost btnCompact" onClick={() => onOpen(item.id, "docx", true)}>
           Reveal in Finder
         </button>
+        <DeleteButton disabled={deleting} onDelete={onDelete} />
       </div>
     </div>
+  );
+}
+
+/** Two-step: the first click asks, the second moves the files to the Trash. */
+function DeleteButton({ disabled, onDelete }: { disabled: boolean; onDelete: () => void }) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      type="button"
+      className="btn btnGhost btnCompact"
+      disabled={disabled}
+      title="Moves the DOCX and PDF to the Trash"
+      onClick={() => (armed ? onDelete() : setArmed(true))}
+    >
+      {armed ? "Move to Trash?" : "Delete"}
+    </button>
   );
 }

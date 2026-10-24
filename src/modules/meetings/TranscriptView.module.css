@@ -56,3 +56,33 @@
   margin-bottom: var(--space-2);
   border-radius: var(--radius-control);
 }
+
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.line .text { flex: 1; }
+
+/* Edit appears on hover / keyboard focus, so reading stays calm. */
+.edit {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+.row:hover .edit,
+.edit:focus-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .edit { transition: none; } }
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.editorActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.editorActions .fieldHint { margin-right: auto; }

@@ -21,8 +21,11 @@ export const commands = {
 	/**  Title, transcript and summary search in one workspace (FTS5). */
 	searchMeetings: (slug: string, query: string) => typedError<MeetingHit_Serialize[], AppError>(__TAURI_INVOKE("search_meetings", { slug, query })),
 	getSummary: (slug: string, meetingId: string) => typedError<SummaryView_Serialize | null, AppError>(__TAURI_INVOKE("get_summary", { slug, meetingId })),
-	/**  (Re)writes the executive summary; `deep` turns Qwen's thinking on (slower, D-021). */
-	summariseMeeting: (slug: string, meetingId: string, deep: boolean) => typedError<null, AppError>(__TAURI_INVOKE("summarise_meeting", { slug, meetingId, deep })),
+	/**
+	 *  (Re)writes the executive summary; `deep` turns Qwen's thinking on (slower, D-021);
+	 *  `keep_edits` keeps hand-edited sections (D-025).
+	 */
+	summariseMeeting: (slug: string, meetingId: string, deep: boolean, keepEdits: boolean) => typedError<null, AppError>(__TAURI_INVOKE("summarise_meeting", { slug, meetingId, deep, keepEdits })),
 	cancelSummary: (meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_summary", { meetingId })),
 	updateSummarySection: (slug: string, meetingId: string, index: number, markdown: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_summary_section", { slug, meetingId, index, markdown })),
 	/**  Puts the email on the clipboard as HTML, with the Markdown text as the plain-text fallback. */
@@ -37,6 +40,13 @@ export const commands = {
 	listConverters: () => typedError<ConverterInfo_Serialize[], AppError>(__TAURI_INVOKE("list_converters")),
 	/**  Opens an export's DOCX or PDF in its default app, or shows it in Finder (`reveal`). */
 	openMinutesFile: (slug: string, exportId: string, file: MinutesFile, reveal: boolean) => typedError<null, AppError>(__TAURI_INVOKE("open_minutes_file", { slug, exportId, file, reveal })),
+	deleteMinutesExport: (slug: string, exportId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_minutes_export", { slug, exportId })),
+	/**  Corrects one transcript line (the next summary run reads it). */
+	updateTranscriptSegment: (slug: string, meetingId: string, seq: number, text: string) => typedError<null, AppError>(__TAURI_INVOKE("update_transcript_segment", { slug, meetingId, seq, text })),
+	setMeetingNotes: (slug: string, meetingId: string, notes: string) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("set_meeting_notes", { slug, meetingId, notes })),
+	renameMeeting: (slug: string, meetingId: string, title: string) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("rename_meeting", { slug, meetingId, title })),
+	/**  Recording to the Trash; transcript, summary and export rows deleted (exported files stay). */
+	deleteMeeting: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_meeting", { slug, meetingId })),
 	recorderStatus: () => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("recorder_status")),
 	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId })),
 	setRecordingPaused: (paused: boolean) => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("set_recording_paused", { paused })),
@@ -198,6 +208,8 @@ export type Meeting_Deserialize = {
 	audio_path?: string | null,
 	duration_ms?: number | null,
 	status: MeetingStatus,
+	/**  The owner's notes; passed to the next summary run (P3.3). */
+	notes_md?: string | null,
 	created_at: string,
 	updated_at: string,
 };
@@ -211,6 +223,8 @@ export type Meeting_Serialize = {
 	audio_path: string | null,
 	duration_ms: number | null,
 	status: MeetingStatus,
+	/**  The owner's notes; passed to the next summary run (P3.3). */
+	notes_md: string | null,
 	created_at: string,
 	updated_at: string,
 };
@@ -346,13 +360,25 @@ export type RecorderStatus_Serialize = {
 	system_audio: SystemAudio,
 };
 
-export type Section = {
+export type Section = Section_Serialize | Section_Deserialize;
+
+export type SectionKind = "overview" | "key_points" | "decisions" | "action_items" | "next_steps" | "open_questions" | "other";
+
+export type Section_Deserialize = {
 	kind: SectionKind,
 	title: string,
 	markdown: string,
+	/**  Changed by hand; a re-run keeps it unless the user discards edits (D-025). */
+	edited?: boolean,
 };
 
-export type SectionKind = "overview" | "key_points" | "decisions" | "action_items" | "next_steps" | "open_questions" | "other";
+export type Section_Serialize = {
+	kind: SectionKind,
+	title: string,
+	markdown: string,
+	/**  Changed by hand; a re-run keeps it unless the user discards edits (D-025). */
+	edited: boolean,
+};
 
 export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "about";
 
@@ -370,13 +396,15 @@ export type SummaryDoc = SummaryDoc_Serialize | SummaryDoc_Deserialize;
  *  minutes document; fields added in P3.2 default to empty for older summaries.
  */
 export type SummaryDoc_Deserialize = {
-	sections: Section[],
+	sections: Section_Deserialize[],
 	attendees?: Attendee_Deserialize[],
 	discussion?: Topic_Deserialize[],
 	decisions: Decision[],
 	action_items: ActionItem[],
 	open_issues?: OpenIssue_Deserialize[],
 	next_focus?: string,
+	/**  When the AI wrote it (ISO-8601 UTC); transcript edits after this mean it's out of date. */
+	generated_at?: string,
 };
 
 /**
@@ -384,13 +412,15 @@ export type SummaryDoc_Deserialize = {
  *  minutes document; fields added in P3.2 default to empty for older summaries.
  */
 export type SummaryDoc_Serialize = {
-	sections: Section[],
+	sections: Section_Serialize[],
 	attendees: Attendee_Serialize[],
 	discussion: Topic_Serialize[],
 	decisions: Decision[],
 	action_items: ActionItem[],
 	open_issues: OpenIssue_Serialize[],
 	next_focus: string,
+	/**  When the AI wrote it (ISO-8601 UTC); transcript edits after this mean it's out of date. */
+	generated_at: string,
 };
 
 /**  A summary job ended: `error` is None on success; code `cancelled` when stopped. */
@@ -428,6 +458,8 @@ export type SummaryView = SummaryView_Serialize | SummaryView_Deserialize;
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView_Deserialize = {
 	doc: SummaryDoc_Deserialize,
+	/**  A transcript segment was corrected after the AI wrote this summary. */
+	transcript_changed: boolean,
 	sections_html: string[],
 	email_subject: string,
 	email_md: string,
@@ -439,6 +471,8 @@ export type SummaryView_Deserialize = {
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView_Serialize = {
 	doc: SummaryDoc_Serialize,
+	/**  A transcript segment was corrected after the AI wrote this summary. */
+	transcript_changed: boolean,
 	sections_html: string[],
 	email_subject: string,
 	email_md: string,

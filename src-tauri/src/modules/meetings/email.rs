@@ -96,6 +96,7 @@ mod tests {
             kind,
             title: title.into(),
             markdown: md.into(),
+            edited: false,
         };
         SummaryDoc {
             sections: vec![

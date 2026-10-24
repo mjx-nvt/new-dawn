@@ -13,9 +13,9 @@ use tauri::{AppHandle, Manager};
 
 use super::summarise;
 use crate::error::AppError;
+use crate::kernel::export::docx;
 use crate::kernel::export::model::{self, MinutesInput};
 use crate::kernel::export::pdf::{self, Converter};
-use crate::kernel::export::docx;
 use crate::kernel::hub::WorkspaceHub;
 
 const TEMPLATE: &str = "templates/meeting-minutes/template.docx";
@@ -84,7 +84,9 @@ pub async fn export_docx(
             .fetch_optional(&pool)
             .await?;
     let transcript = if options.include_transcript {
-        Some(summarise::transcript_text(&super::transcript(&pool, meeting_id).await?))
+        Some(summarise::transcript_text(
+            &super::transcript(&pool, meeting_id).await?,
+        ))
     } else {
         None
     };
@@ -174,13 +176,29 @@ async fn file_path(
     stored
         .and_then(|p| PathBuf::from(p).canonicalize().ok())
         .filter(|p| {
-            p.is_file()
-                && p.starts_with(&exports)
-                && p.extension().is_some_and(|e| e == extension)
+            p.is_file() && p.starts_with(&exports) && p.extension().is_some_and(|e| e == extension)
         })
         .ok_or_else(|| {
             AppError::not_found("The file was moved or deleted — export it again").into()
         })
+}
+
+/// Moves an export's files to the Trash and removes it from the list.
+pub async fn delete_export(hub: &WorkspaceHub, slug: &str, export_id: &str) -> Result<()> {
+    for file in [MinutesFile::Docx, MinutesFile::Pdf] {
+        // Files already gone (or never made) are fine; only existing exports-folder files move.
+        if let Ok(path) = file_path(hub, slug, export_id, file).await {
+            super::review::to_trash(path).await?;
+        }
+    }
+    let done = sqlx::query("DELETE FROM document_export WHERE id = ?")
+        .bind(export_id)
+        .execute(&hub.pool(slug)?)
+        .await?;
+    if done.rows_affected() == 0 {
+        bail!(AppError::not_found(format!("No export '{export_id}'")));
+    }
+    Ok(())
 }
 
 /// Opens an export's file in its default app, or shows it in Finder.

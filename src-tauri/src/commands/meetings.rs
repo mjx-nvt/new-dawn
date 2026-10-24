@@ -5,6 +5,8 @@ use tauri::{AppHandle, State};
 use crate::error::AppError;
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::meetings::review;
+use crate::modules::meetings::summarise::SummaryJobs;
 use crate::modules::meetings::transcribe::{self, ImportRequest, TranscriptionJobs};
 use crate::modules::meetings::{self, Meeting, MeetingHit, MeetingTypeSummary, TranscriptSegment};
 
@@ -97,4 +99,53 @@ pub fn cancel_transcription(
 ) -> Result<(), AppError> {
     jobs.cancel(&meeting_id);
     Ok(())
+}
+
+/// Corrects one transcript line (the next summary run reads it).
+#[tauri::command]
+#[specta::specta]
+pub async fn update_transcript_segment(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    seq: u32,
+    text: String,
+) -> Result<(), AppError> {
+    Ok(review::update_segment(&hub.pool(&slug)?, &meeting_id, seq, &text).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_meeting_notes(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    notes: String,
+) -> Result<Meeting, AppError> {
+    Ok(review::set_notes(&hub.pool(&slug)?, &meeting_id, &notes).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rename_meeting(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    title: String,
+) -> Result<Meeting, AppError> {
+    Ok(review::rename(&hub, &slug, &meeting_id, &title).await?)
+}
+
+/// Recording to the Trash; transcript, summary and export rows deleted (exported files stay).
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_meeting(
+    hub: State<'_, WorkspaceHub>,
+    transcriptions: State<'_, TranscriptionJobs>,
+    summaries: State<'_, SummaryJobs>,
+    slug: String,
+    meeting_id: String,
+) -> Result<(), AppError> {
+    let running = transcriptions.contains(&meeting_id) || summaries.contains(&meeting_id);
+    Ok(review::delete_meeting(&hub, &slug, &meeting_id, running).await?)
 }
