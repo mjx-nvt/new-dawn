@@ -32,12 +32,15 @@
   --surface: #FFFFFF;
   --surface-2: #F3F4F6;
   --glass-tint: rgba(255, 255, 255, 0.55);
+  --shell-scrim: transparent;              /* neutral wash behind sidebar + toolbar; dark mode only */
+  --on-brand: #FFFFFF;                     /* text on brand fills */
 
-  /* System accent (selection, focus). Falls back to a neutral blue where unsupported. */
-  --accent: AccentColor;
+  /* System accent for selection and focus rings. Not brandable: the brand slot is --accent below. */
+  --focus: AccentColor;
 
   /* Window / panel geometry (Golden Gate: one radius) */
-  --radius-window: 12px;
+  --radius-window: 12px;                   /* keep in sync with WINDOW_RADIUS in src-tauri/src/kernel/glass.rs */
+  --radius-pill: 999px;
 
   /* ── Brand slots — populated per workspace; these are neutral defaults ── */
   --brand: #3B5BDB;
@@ -53,6 +56,7 @@
   --brand-900: #121C45;
   --brand-950: #0A1028;
   --secondary: var(--brand-700);
+  --accent: var(--brand);
   --canvas: #FFFFFF;
   --status-positive: #1F7A4D;
   --status-warning: #9A6A00;
@@ -68,15 +72,24 @@
   --logo-dark-url: none;
 }
 
+/* Brand-coloured text. Declared on .content-root too so it follows the tenant brand set there. */
+:root, .content-root { --brand-text: var(--brand); }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #F2F4F8;
     --ink-2: #B9C0CC;
     --ink-3: #7E8798;
-    --hair: rgba(255, 255, 255, 0.14);
+    --hair: rgba(255, 255, 255, 0.18);
     --surface: #1C1F26;
     --surface-2: #262A33;
     --glass-tint: rgba(28, 31, 38, 0.55);
+    --shell-scrim: rgba(0, 0, 0, 0.4);
     --canvas: #15171C;
+    /* Status text must stay ≥ 4.5:1 on the dark canvas (applyBrand may override in light mode). */
+    --status-positive: #4CC38A;
+    --status-warning: #E2B24A;
+    --status-negative: #F2726A;
   }
+  :root, .content-root { --brand-text: var(--brand-400); }
 }

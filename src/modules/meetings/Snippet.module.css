@@ -1,0 +1,15 @@
+.snippet {
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  color: var(--ink);
+  border-radius: calc(var(--radius-chip) / 3);
+  font-weight: 600;
+}

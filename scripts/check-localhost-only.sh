@@ -3,6 +3,7 @@
 # Rule 3 in CLAUDE.md: no network except localhost. Lines that are comments
 # (//, #, *, /*, <!--) are ignored so documentation links are allowed, and
 # XML/SVG namespace URLs (xmlns) are ignored because they are identifiers, not requests.
+# One exception (CLAUDE.md rule 3, D-014): huggingface.co model downloads in kernel/ai/models.rs.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -12,6 +13,7 @@ allowed='https?://(localhost|127\.0\.0\.1)([:/]|$)|https?://(ipc|asset)\.localho
 violations=$(grep -rnE 'https?://' --include='*.rs' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' --include='*.html' --include='*.css' src-tauri/src src 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|#|\*|/\*|<!--)' \
   | grep -vE "$allowed" \
+  | grep -vE '^src-tauri/src/kernel/ai/models\.rs:[0-9]+:.*https://huggingface\.co/' \
   || true)
 
 if [[ -n "$violations" ]]; then

@@ -1,0 +1,70 @@
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.actions { display: flex; gap: var(--space-2); flex: none; }
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.progressCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.progressHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.progressTitle {
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.error {
+  margin-top: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--status-negative);
+}
+
+.back { margin-top: var(--space-4); }
+
+.tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.tab {
+  padding: var(--space-2) 0;
+  margin-bottom: -0.5px;
+  border-bottom: 2px solid transparent;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.tab:hover { color: var(--ink); }
+
+.activeTab {
+  border-bottom-color: var(--brand);
+  color: var(--ink);
+}
+
+/* Ghost slot: shape only, so .ghostCard supplies the dashed border. */
+.slot {
+  min-height: 56px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-card);
+}

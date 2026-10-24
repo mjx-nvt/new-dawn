@@ -1,0 +1,58 @@
+.player {
+  position: sticky;
+  top: calc(-1 * var(--space-6));
+  z-index: 1;
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-control);
+  transition: background 150ms ease-out;
+}
+
+.playing { background: var(--brand-50); }
+@media (prefers-color-scheme: dark) {
+  .playing { background: color-mix(in srgb, var(--brand-400) 14%, transparent); }
+}
+
+.time {
+  align-self: start;
+  padding-top: 2px;
+  color: var(--brand-text);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.time:hover { text-decoration: underline; }
+
+.text {
+  font-size: var(--t-md);
+  line-height: 1.6;
+  user-select: text;
+}
+
+.empty { margin-bottom: var(--space-3); }
+
+.error {
+  margin-bottom: var(--space-3);
+  font-size: var(--t-sm);
+  color: var(--status-negative);
+}
+
+.ghostRow {
+  height: 44px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-control);
+}

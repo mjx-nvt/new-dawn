@@ -11,11 +11,18 @@ import "@fontsource/be-vietnam-pro/700.css";
 // Design tokens first, then base styles.
 import "./styles/tokens.css";
 import "./styles/base.css";
+import "./styles/components.css";
 
-import App from "./App";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { RouterProvider } from "@tanstack/react-router";
+import { router } from "./router";
+
+const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
   </React.StrictMode>,
 );

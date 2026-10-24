@@ -1,0 +1,77 @@
+.pill {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  transition: background 150ms ease-out;
+}
+button.pill:hover { background: var(--surface); }
+
+.live { padding-right: var(--space-1); }
+
+.dot,
+.dotPaused {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-negative);
+}
+.dotPaused { background: var(--ink-3); }
+
+.pulse { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse {
+  50% { opacity: .35; }
+}
+
+.clock {
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meters {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.meters > span {
+  width: 3px;
+  border-radius: var(--radius-chip);
+  background: var(--status-negative);
+  transition: height 100ms linear;
+}
+/* The toolbar is shell (outside the tenant brand), so "them" stays neutral. */
+.meters > .them { background: var(--ink-2); }
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: var(--ink-2);
+  font-size: var(--t-xs);
+}
+.icon:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.icon:disabled { opacity: .5; }
+
+.error {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--status-negative);
+  color: var(--on-brand);
+  font-size: var(--t-xs);
+  font-weight: 700;
+}
+

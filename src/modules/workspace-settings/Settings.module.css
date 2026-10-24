@@ -1,0 +1,53 @@
+/* Section rhythm shared by the Settings tabs (see newdawn-ui-patterns "Section rhythm"). */
+.section { margin-top: var(--space-5); }
+.section:first-child { margin-top: 0; }
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sectionSubtitle {
+  margin-top: 2px;
+  margin-bottom: var(--space-3);
+  font-size: var(--t-sm);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+
+.label {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.value {
+  font-size: var(--t-md);
+  font-weight: 500;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+/* Ghost slot: shape only, so .ghostCard supplies the dashed border. */
+.slot {
+  min-height: 56px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-card);
+}
+
+.permission {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+}

@@ -13,24 +13,54 @@ rust-version = "1.85"
 name = "new_dawn_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Core ML encoder for whisper.cpp (needs ggml-<model>-encoder.mlmodelc next to the .bin). Off by
+# default; see D-017 for the measurement.
+coreml = ["whisper-rs/coreml"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon", "image-png"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+window-vibrancy = "0.8"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+uuid = { version = "1", features = ["v7"] }
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# tauri-specta is in beta: keep all three pinned together (see tauri-specta docs).
+tauri-specta = { version = "=2.0.0-rc.26", features = ["typescript", "derive"] }
+specta = "=2.0.0-rc.26"
+specta-typescript = "=0.0.13"
+trash = "5"
+tauri-plugin-window-state = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-clipboard-manager = "2"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+tokio = { version = "1", features = ["fs", "io-util", "time", "sync"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "json"] }
+futures-util = "0.3"
+sha2 = "0.11"
+whisper-rs = { version = "0.16", features = ["metal", "tracing_backend"] }
+symphonia = { version = "0.6", features = ["aac", "isomp4", "mp3", "aiff", "alac", "caf"] }
+rubato = "5"
+cpal = "0.18"
+ebur128 = "0.1"
+cidre = { version = "0.29", default-features = false, features = ["core_audio", "av", "async", "dispatch", "macos_14_2"] }
 
 # ── Added per phase (see docs/playbook.md). Keep this list honest: add a crate
 #    in the prompt that first needs it, and check its current API on docs.rs. ──
-# P1.1  window-vibrancy
-# P1.2  sqlx (runtime-tokio, sqlite, uuid, chrono), uuid (v7), tokio, anyhow, thiserror,
-#       tracing, tracing-subscriber, tauri-specta, specta, trash
-# P1.3  tauri-plugin-global-shortcut
-# P3a   reqwest (json, stream), futures-util, sysinfo
-# P3b   whisper-rs (metal), silero_rs (git), symphonia, rubato, sha2
-# P3c   cpal, cidre, ebur128, ringbuf
+
+# Dependencies (whisper.cpp via CMake, symphonia, rubato) are far too slow unoptimised; our own
+# crate stays at the debug default so rebuilds remain quick.
+[profile.dev.package."*"]
+opt-level = 3
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

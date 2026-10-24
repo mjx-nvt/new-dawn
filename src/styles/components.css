@@ -1,0 +1,230 @@
+/* ─────────────────────────────────────────────────────────────
+   New Dawn — shared page typography and controls (global classes).
+   Sizes and rules: .claude/skills/newdawn-ui-patterns. Buttons read
+   the brand's --button-shape; colours come from tokens only.
+   ───────────────────────────────────────────────────────────── */
+
+/* Page + section rhythm */
+.page { max-width: 880px; }
+
+.eyebrow {
+  margin-bottom: var(--space-2);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--brand-text);
+}
+
+.pageTitle {
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.pageMeta {
+  margin-top: var(--space-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.section { margin-top: var(--space-5); }
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sectionSubtitle {
+  margin-top: 2px;
+  margin-bottom: var(--space-3);
+  font-size: var(--t-sm);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+@media (max-width: 959px) { .fields { grid-template-columns: 1fr; } }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fieldLabel {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.fieldValue {
+  font-size: var(--t-md);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.fieldHint {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+
+.card {
+  padding: var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  outline: none;
+}
+textarea.input {
+  height: auto;
+  min-height: 64px;
+  padding: var(--space-2) var(--space-3);
+  line-height: 1.5;
+  resize: vertical;
+}
+.input:focus,
+.btn:focus-visible,
+.segmented button:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+  outline: none;
+}
+
+/* Buttons: shape from the brand, style by role */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-4);
+  border-radius: var(--button-shape);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 150ms ease-out;
+}
+.btn:disabled { opacity: .5; }
+.btnCompact { height: 28px; padding: 0 var(--space-3); font-size: var(--t-sm); }
+
+.btnPrimary { background: var(--brand); color: var(--on-brand); }
+.btnPrimary:hover:not(:disabled) { background: var(--brand-600); }
+
+.btnSecondary { background: var(--brand-100); color: var(--brand-700); }
+.btnSecondary:hover:not(:disabled) { background: var(--brand-200); }
+
+.btnGhost { color: var(--ink-2); }
+.btnGhost:hover:not(:disabled) { background: var(--surface-2); }
+
+@media (prefers-color-scheme: dark) {
+  .btnSecondary { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
+  .btnSecondary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-400) 32%, transparent); }
+}
+
+/* Segmented control: buttons with aria-pressed */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+.segmented button {
+  height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-control) - 2px);
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 0 0 0.5px var(--hair);
+}
+
+/* Chips: neutral by default; .chipBrand for brand-tagged */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-chip);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chipBrand { background: var(--brand-100); color: var(--brand-700); }
+@media (prefers-color-scheme: dark) {
+  .chipBrand { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
+}
+
+/* Modal sheet: a native <dialog> shown with showModal() (top layer, focus trap, Esc) on glass. */
+.sheet {
+  width: min(520px, calc(100vw - 2 * var(--space-5)));
+  margin: auto;
+  padding: 0;
+  border-radius: var(--radius-modal);
+  color: var(--ink);
+  animation: sheetIn 220ms ease-out;
+}
+.sheet::backdrop { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+@keyframes sheetIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sheetBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.sheetHeading {
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.sheetActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.formError {
+  font-size: var(--t-sm);
+  color: var(--status-negative);
+}
+
+/* Visually hidden, still read by screen readers. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

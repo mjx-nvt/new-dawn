@@ -1,0 +1,92 @@
+.page { max-width: 880px; }
+
+.eyebrow {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--brand-text);
+  margin-bottom: var(--space-2);
+}
+
+.pageTitle {
+  font-size: var(--t-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.meta {
+  margin-top: var(--space-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.section { margin-top: var(--space-5); }
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.sectionSubtitle {
+  margin-top: 2px;
+  margin-bottom: var(--space-3);
+  font-size: var(--t-sm);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+@media (max-width: 959px) { .fields { grid-template-columns: 1fr; } }
+
+.label {
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.value {
+  font-size: var(--t-md);
+  font-weight: 500;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.card {
+  min-height: 72px;
+  padding: var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+/* Ghost slot: shape only, so .ghostCard supplies the dashed border. */
+.slot {
+  min-height: 72px;
+  border-radius: var(--radius-card);
+}
+
+.cardTitle {
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.body {
+  margin-top: var(--space-1);
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink-2);
+}

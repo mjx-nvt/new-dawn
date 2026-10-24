@@ -1,0 +1,92 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: left;
+}
+.row:hover { border-color: var(--ink-3); }
+
+.rowName {
+  flex: 1;
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.chevron { color: var(--ink-3); font-size: var(--t-lg); }
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.template {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+
+.check { justify-content: flex-start; }
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-md);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 0.5px solid var(--hair);
+}
+
+.blockHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.sectionRow {
+  display: grid;
+  grid-template-columns: 20px 180px 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.index {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-align: right;
+}
+
+.include {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.add { align-self: flex-start; }

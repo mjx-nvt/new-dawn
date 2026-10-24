@@ -25,7 +25,7 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 ## Architecture rules (non-negotiable)
 1. **Everything data goes through `kernel/hub.rs` (WorkspaceHub).** No module opens a database file. Cross-workspace views fan out across open pools in the hub.
 2. **Everything AI goes through `kernel/ai/`.** No feature calls Ollama or Whisper directly. `ai/` owns the two models, a sequential job queue (one AI job at a time), streaming and `ai_log`.
-3. **No network except `localhost`.** `scripts/check-localhost-only.sh` must pass: only `localhost`/`127.0.0.1` URLs in `src-tauri/src` and `src` (documentation links in comments excepted).
+3. **No network except `localhost`** — with one exception: `src-tauri/src/kernel/ai/models.rs` downloads model files from `huggingface.co` (redirects only to its `*.hf.co` CDN) at a pinned commit, only when the user clicks Download, SHA-256 verified (D-014). `scripts/check-localhost-only.sh` must pass: only `localhost`/`127.0.0.1` URLs in `src-tauri/src` and `src` (documentation links in comments and that one file excepted).
 4. **The recorder never blocks the UI.** Audio callbacks push into bounded channels; everything else is async tasks.
 5. **Thin commands.** `#[tauri::command]` functions in `commands/` validate input and call a module; they contain no logic.
 6. **One error type** (`error.rs`, `AppError`), every command returns `Result<T, AppError>`; errors serialise to `{ code, message }`.
@@ -53,7 +53,7 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 - Adding schema: `sqlx migrate add <name> --source src-tauri/migrations/<registry|workspace>` → review with the `migration-safety` agent → migrations run automatically on open.
 
 ## Never do
-- No cloud AI, no API keys, no telemetry, no network beyond localhost.
+- No cloud AI, no API keys, no telemetry, no network beyond localhost (model downloads in `kernel/ai/models.rs` excepted, rule 3).
 - No Tailwind / CSS-in-JS / other fonts / global state libraries / `any`.
 - No direct DB or AI calls outside the hub and gateway.
 - No unbounded channels in the recorder. No blocking calls on the main thread (all `window-vibrancy` calls happen on the main thread via `app.run_on_main_thread`).

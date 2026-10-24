@@ -1,0 +1,21 @@
+.banner {
+  position: sticky;
+  top: calc(-1 * var(--space-6));
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: calc(-1 * var(--space-6)) calc(-1 * var(--space-6)) var(--space-5);
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 0.5px solid var(--hair);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.warning {
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--canvas));
+  color: var(--status-warning);
+}
