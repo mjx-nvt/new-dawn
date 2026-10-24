@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -35,7 +35,11 @@ pub struct OllamaStatus {
 /// A client that never uses HTTP(S)_PROXY / ALL_PROXY: meeting text must not leave the Mac
 /// through an environment proxy (rule 3).
 fn client(read_timeout: Duration) -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder().no_proxy().connect_timeout(Duration::from_secs(5)).read_timeout(read_timeout).build()?)
+    Ok(reqwest::Client::builder()
+        .no_proxy()
+        .connect_timeout(Duration::from_secs(5))
+        .read_timeout(read_timeout)
+        .build()?)
 }
 
 /// Is Ollama reachable, and is the model pulled?
@@ -48,13 +52,31 @@ pub async fn status() -> OllamaStatus {
     struct Tag {
         name: String,
     }
-    let down = || OllamaStatus { running: false, model_installed: false, model: MODEL.to_owned() };
-    let Ok(client) = client(Duration::from_secs(2)) else { return down() };
-    let tags = client.get(format!("{BASE}/api/tags")).timeout(Duration::from_secs(2)).send().await;
+    let down = || OllamaStatus {
+        running: false,
+        model_installed: false,
+        model: MODEL.to_owned(),
+    };
+    let Ok(client) = client(Duration::from_secs(2)) else {
+        return down();
+    };
+    let tags = client
+        .get(format!("{BASE}/api/tags"))
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await;
     match tags {
         Ok(response) => {
-            let installed = response.json::<Tags>().await.map(|t| t.models.iter().any(|m| m.name == MODEL)).unwrap_or(false);
-            OllamaStatus { running: true, model_installed: installed, model: MODEL.to_owned() }
+            let installed = response
+                .json::<Tags>()
+                .await
+                .map(|t| t.models.iter().any(|m| m.name == MODEL))
+                .unwrap_or(false);
+            OllamaStatus {
+                running: true,
+                model_installed: installed,
+                model: MODEL.to_owned(),
+            }
         }
         Err(_) => down(),
     }
@@ -64,7 +86,12 @@ pub async fn status() -> OllamaStatus {
 pub async fn unload() {
     let body = serde_json::json!({ "model": MODEL, "keep_alive": 0 });
     if let Ok(client) = client(Duration::from_secs(10)) {
-        let _ = client.post(format!("{BASE}/api/generate")).timeout(Duration::from_secs(10)).json(&body).send().await;
+        let _ = client
+            .post(format!("{BASE}/api/generate"))
+            .timeout(Duration::from_secs(10))
+            .json(&body)
+            .send()
+            .await;
     }
 }
 
@@ -95,31 +122,54 @@ pub struct TextSession<'a> {
 }
 
 /// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
-pub async fn session<'a>(app: &'a AppHandle, pool: SqlitePool, meeting_id: Option<&str>) -> Result<TextSession<'a>> {
+pub async fn session<'a>(
+    app: &'a AppHandle,
+    pool: SqlitePool,
+    meeting_id: Option<&str>,
+) -> Result<TextSession<'a>> {
     let turn = app.state::<AiQueue>().inner().acquire().await;
     let ollama = status().await;
     if !ollama.running {
-        bail!(AppError::new("ollama_unavailable", "Ollama isn't running — open the Ollama app and try again"));
+        bail!(AppError::new(
+            "ollama_unavailable",
+            "Ollama isn't running — open the Ollama app and try again"
+        ));
     }
     if !ollama.model_installed {
-        bail!(AppError::new("ollama_model_missing", format!("Ollama doesn't have {MODEL} yet (run: ollama pull {MODEL})")));
+        bail!(AppError::new(
+            "ollama_model_missing",
+            format!("Ollama doesn't have {MODEL} yet (run: ollama pull {MODEL})")
+        ));
     }
     app.state::<WhisperEngine>().unload_now();
-    Ok(TextSession { _turn: turn, pool, meeting_id: meeting_id.map(str::to_owned) })
+    Ok(TextSession {
+        _turn: turn,
+        pool,
+        meeting_id: meeting_id.map(str::to_owned),
+    })
 }
 
 #[cfg(test)]
 impl<'a> TextSession<'a> {
     /// A session for tests: the caller supplies the queue turn (no AppHandle needed).
     pub fn for_test(turn: MutexGuard<'a, ()>, pool: SqlitePool) -> Self {
-        Self { _turn: turn, pool, meeting_id: None }
+        Self {
+            _turn: turn,
+            pool,
+            meeting_id: None,
+        }
     }
 }
 
 impl TextSession<'_> {
     /// One streamed `/api/chat` call. `on_token` gets the running count of generated tokens.
     /// Errors with `context_overflow` if the prompt filled the context (Ollama truncates silently).
-    pub async fn complete(&self, request: Request, cancel: &AtomicBool, mut on_token: impl FnMut(u32)) -> Result<Completion> {
+    pub async fn complete(
+        &self,
+        request: Request,
+        cancel: &AtomicBool,
+        mut on_token: impl FnMut(u32),
+    ) -> Result<Completion> {
         if cancel.load(Ordering::Relaxed) {
             bail!(AppError::new("cancelled", "Summary cancelled"));
         }
@@ -129,9 +179,20 @@ impl TextSession<'_> {
         // but keep the token counts in the log row that explains it.
         let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= NUM_CTX);
         let (status, error, prompt_tokens, output_tokens) = match &result {
-            Ok(c) if overflow => ("error", Some("context_overflow".to_owned()), Some(c.prompt_tokens), Some(c.output_tokens)),
+            Ok(c) if overflow => (
+                "error",
+                Some("context_overflow".to_owned()),
+                Some(c.prompt_tokens),
+                Some(c.output_tokens),
+            ),
             Ok(c) => ("ok", None, Some(c.prompt_tokens), Some(c.output_tokens)),
-            Err(err) if err.downcast_ref::<AppError>().is_some_and(|e| e.code == "cancelled") => ("cancelled", None, None, None),
+            Err(err)
+                if err
+                    .downcast_ref::<AppError>()
+                    .is_some_and(|e| e.code == "cancelled") =>
+            {
+                ("cancelled", None, None, None)
+            }
             Err(err) => ("error", Some(format!("{err:#}")), None, None),
         };
         let entry = AiLogEntry {
@@ -148,12 +209,20 @@ impl TextSession<'_> {
             tracing::warn!("could not write ai_log: {err:#}");
         }
         if overflow {
-            bail!(AppError::new("context_overflow", "The prompt filled the model's context"));
+            bail!(AppError::new(
+                "context_overflow",
+                "The prompt filled the model's context"
+            ));
         }
         result
     }
 
-    async fn stream(&self, request: Request, cancel: &AtomicBool, on_token: &mut impl FnMut(u32)) -> Result<Completion> {
+    async fn stream(
+        &self,
+        request: Request,
+        cancel: &AtomicBool,
+        on_token: &mut impl FnMut(u32),
+    ) -> Result<Completion> {
         #[derive(Deserialize)]
         struct Chunk {
             #[serde(default)]
@@ -188,7 +257,10 @@ impl TextSession<'_> {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            bail!(AppError::new("ollama_error", format!("Ollama returned {status}: {text}")));
+            bail!(AppError::new(
+                "ollama_error",
+                format!("Ollama returned {status}: {text}")
+            ));
         }
 
         let mut stream = response.bytes_stream();
@@ -207,7 +279,8 @@ impl TextSession<'_> {
                 if line.iter().all(u8::is_ascii_whitespace) {
                     continue;
                 }
-                let chunk: Chunk = serde_json::from_slice(&line).context("reading Ollama's reply")?;
+                let chunk: Chunk =
+                    serde_json::from_slice(&line).context("reading Ollama's reply")?;
                 if let Some(error) = chunk.error {
                     bail!(AppError::new("ollama_error", error));
                 }
@@ -224,9 +297,16 @@ impl TextSession<'_> {
             }
         }
         if truncated {
-            bail!(AppError::new("output_truncated", "The answer hit its length limit before finishing"));
+            bail!(AppError::new(
+                "output_truncated",
+                "The answer hit its length limit before finishing"
+            ));
         }
-        Ok(Completion { content: strip_think(&content), prompt_tokens, output_tokens })
+        Ok(Completion {
+            content: strip_think(&content),
+            prompt_tokens,
+            output_tokens,
+        })
     }
 }
 

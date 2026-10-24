@@ -1,7 +1,7 @@
 //! Microphone permission via AVCaptureDevice; System Audio Recording has no query API, so the
 //! recorder detects it (silent tap) and the UI links to the right System Settings pane.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use cidre::{av, blocks};
 use serde::Serialize;
 use specta::Type;
@@ -49,6 +49,8 @@ pub async fn request_microphone() -> Result<PermissionState> {
 }
 
 /// Privacy & Security → Screen & System Audio Recording.
-pub const SYSTEM_AUDIO_SETTINGS: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
+pub const SYSTEM_AUDIO_SETTINGS: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 /// Privacy & Security → Microphone.
-pub const MICROPHONE_SETTINGS: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+pub const MICROPHONE_SETTINGS: &str =
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";

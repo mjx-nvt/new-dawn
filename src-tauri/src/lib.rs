@@ -1,6 +1,6 @@
 use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
-use tauri_specta::{collect_commands, collect_events, Builder};
+use tauri_specta::{Builder, collect_commands, collect_events};
 use tracing_subscriber::EnvFilter;
 
 use error::AppError;
@@ -16,6 +16,11 @@ mod kernel {
         pub mod ollama;
         pub mod queue;
         pub mod whisper;
+    }
+    pub mod export {
+        pub mod docx;
+        pub mod model;
+        pub mod pdf;
     }
     pub mod glass;
     pub mod hub;
@@ -41,6 +46,7 @@ mod recorder {
 mod commands {
     pub mod glass;
     pub mod meetings;
+    pub mod minutes;
     pub mod models;
     pub mod recorder;
     pub mod summary;
@@ -79,6 +85,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::open_summary_in_mail,
             commands::summary::ollama_status,
             commands::summary::open_ollama_app,
+            commands::minutes::export_minutes_docx,
+            commands::minutes::export_minutes_pdf,
+            commands::minutes::list_minutes_exports,
+            commands::minutes::list_converters,
+            commands::minutes::open_minutes_file,
             commands::recorder::recorder_status,
             commands::recorder::start_recording,
             commands::recorder::set_recording_paused,
@@ -116,14 +127,19 @@ fn specta_builder() -> Builder<tauri::Wry> {
 
 fn export_bindings(builder: &Builder<tauri::Wry>) {
     builder
-        .export(specta_typescript::Typescript::default(), "../src/bindings.ts")
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
         .expect("failed to export src/bindings.ts");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let builder = specta_builder();
@@ -177,15 +193,22 @@ pub fn run() {
                     }
                     .await;
                     if let Err(err) = recovered {
-                        tracing::warn!("recovery skipped for workspace {}: {err:#}", workspace.slug);
+                        tracing::warn!(
+                            "recovery skipped for workspace {}: {err:#}",
+                            workspace.slug
+                        );
                     }
                 }
-                let idle = hub.app_setting(kernel::ai::whisper::IDLE_UNLOAD_SETTING).await?;
+                let idle = hub
+                    .app_setting(kernel::ai::whisper::IDLE_UNLOAD_SETTING)
+                    .await?;
                 anyhow::Ok((hub, idle.and_then(|v| v.parse().ok())))
             })?;
             let (hub, idle_unload_secs) = hub;
             app.manage(hub);
-            app.manage(kernel::ai::models::ModelStore::new(app.path().app_data_dir()?.join("models"))?);
+            app.manage(kernel::ai::models::ModelStore::new(
+                app.path().app_data_dir()?.join("models"),
+            )?);
             app.manage(kernel::ai::queue::AiQueue::default());
             app.manage(kernel::ai::whisper::WhisperEngine::new(
                 idle_unload_secs.unwrap_or(kernel::ai::whisper::DEFAULT_IDLE_UNLOAD_SECS),
@@ -197,7 +220,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                    handle.state::<kernel::ai::whisper::WhisperEngine>().unload_if_idle();
+                    handle
+                        .state::<kernel::ai::whisper::WhisperEngine>()
+                        .unload_if_idle();
                 }
             });
             Ok(())

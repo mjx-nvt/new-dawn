@@ -6,7 +6,7 @@ use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub const RATE: u32 = 16_000;
 const HEADER_LEN: u64 = 44;
@@ -20,9 +20,15 @@ pub struct WavWriter {
 
 impl WavWriter {
     pub fn create(path: &Path) -> Result<Self> {
-        let mut file = BufWriter::new(File::create(path).with_context(|| format!("creating {}", path.display()))?);
+        let mut file = BufWriter::new(
+            File::create(path).with_context(|| format!("creating {}", path.display()))?,
+        );
         file.write_all(&header(0))?;
-        Ok(Self { file, samples: 0, last_checkpoint: Instant::now() })
+        Ok(Self {
+            file,
+            samples: 0,
+            last_checkpoint: Instant::now(),
+        })
     }
 
     /// Appends samples (clamped to ±1, written as i16) and checkpoints every 2 s.
@@ -60,7 +66,11 @@ impl WavWriter {
 /// Fixes the header of a WAV written by `WavWriter` from the real file length (after a crash).
 /// Returns the number of samples in the file.
 pub fn repair(path: &Path) -> Result<u64> {
-    let mut file = OpenOptions::new().read(true).write(true).open(path).with_context(|| format!("opening {}", path.display()))?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .with_context(|| format!("opening {}", path.display()))?;
     let len = file.metadata()?.len();
     if len < HEADER_LEN {
         bail!("{} is too short to be a recording", path.display());
@@ -101,7 +111,9 @@ mod tests {
     use crate::modules::meetings::audio::load_16k_mono;
 
     fn tone(seconds: f32) -> Vec<f32> {
-        (0..(seconds * RATE as f32) as usize).map(|i| (i as f32 * 0.05).sin() * 0.5).collect()
+        (0..(seconds * RATE as f32) as usize)
+            .map(|i| (i as f32 * 0.05).sin() * 0.5)
+            .collect()
     }
 
     #[test]

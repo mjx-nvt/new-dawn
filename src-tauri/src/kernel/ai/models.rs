@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use futures_util::StreamExt;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -48,7 +48,10 @@ pub struct ModelSpec {
 
 impl ModelSpec {
     fn url(&self) -> String {
-        format!("https://huggingface.co/{}/resolve/{}/{}", self.repo, self.commit, self.file)
+        format!(
+            "https://huggingface.co/{}/resolve/{}/{}",
+            self.repo, self.commit, self.file
+        )
     }
 }
 
@@ -98,7 +101,9 @@ pub fn spec(id: &str) -> Result<&'static ModelSpec> {
 pub enum ModelState {
     Missing,
     /// A `.part` file from an interrupted or cancelled download; Download resumes it.
-    Partial { bytes: u32 },
+    Partial {
+        bytes: u32,
+    },
     Downloading,
     Ready,
 }
@@ -128,7 +133,10 @@ pub struct ModelStore {
 impl ModelStore {
     pub fn new(dir: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-        Ok(Self { dir, active: Mutex::default() })
+        Ok(Self {
+            dir,
+            active: Mutex::default(),
+        })
     }
 
     pub fn dir(&self) -> &Path {
@@ -141,7 +149,13 @@ impl ModelStore {
             .iter()
             .map(|spec| (spec, self.dir.join(spec.file)))
             .find(|(_, path)| path.exists())
-            .ok_or_else(|| AppError::new("model_missing", "No Whisper model downloaded yet (Settings → Models)").into())
+            .ok_or_else(|| {
+                AppError::new(
+                    "model_missing",
+                    "No Whisper model downloaded yet (Settings → Models)",
+                )
+                .into()
+            })
     }
 
     pub fn list(&self) -> Vec<ModelInfo> {
@@ -155,7 +169,9 @@ impl ModelStore {
                     ModelState::Ready
                 } else {
                     match std::fs::metadata(self.part_path(spec)) {
-                        Ok(meta) => ModelState::Partial { bytes: meta.len() as u32 },
+                        Ok(meta) => ModelState::Partial {
+                            bytes: meta.len() as u32,
+                        },
                         Err(_) => ModelState::Missing,
                     }
                 };
@@ -175,7 +191,10 @@ impl ModelStore {
         let spec = spec(id)?;
         let mut active = self.active.lock().expect("model lock poisoned");
         if active.contains_key(spec.id) {
-            bail!(AppError::invalid(format!("{} is already downloading", spec.label)));
+            bail!(AppError::invalid(format!(
+                "{} is already downloading",
+                spec.label
+            )));
         }
         let cancel = Arc::new(AtomicBool::new(false));
         active.insert(spec.id, cancel.clone());
@@ -194,12 +213,18 @@ impl ModelStore {
 
     pub fn delete(&self, id: &str) -> Result<()> {
         let spec = spec(id)?;
-        if self.active.lock().expect("model lock poisoned").contains_key(spec.id) {
+        if self
+            .active
+            .lock()
+            .expect("model lock poisoned")
+            .contains_key(spec.id)
+        {
             bail!(AppError::invalid("Cancel the download before deleting"));
         }
         for path in [self.dir.join(spec.file), self.part_path(spec)] {
             if path.exists() {
-                std::fs::remove_file(&path).with_context(|| format!("deleting {}", path.display()))?;
+                std::fs::remove_file(&path)
+                    .with_context(|| format!("deleting {}", path.display()))?;
             }
         }
         Ok(())
@@ -218,7 +243,10 @@ impl ModelStore {
         mut on_progress: impl FnMut(Progress),
     ) -> Result<()> {
         let part = self.part_path(spec);
-        let mut have = tokio::fs::metadata(&part).await.map(|m| m.len()).unwrap_or(0);
+        let mut have = tokio::fs::metadata(&part)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
 
         if have < spec.size {
             let client = reqwest::Client::builder()
@@ -229,7 +257,11 @@ impl ModelStore {
                     let allowed = ["huggingface.co", "hf.co"]
                         .iter()
                         .any(|h| host == *h || host.ends_with(&format!(".{h}")));
-                    if allowed && attempt.previous().len() < 10 { attempt.follow() } else { attempt.stop() }
+                    if allowed && attempt.previous().len() < 10 {
+                        attempt.follow()
+                    } else {
+                        attempt.stop()
+                    }
                 }))
                 .build()?;
             let mut request = client.get(spec.url());
@@ -241,10 +273,16 @@ impl ModelStore {
             let append = match status.as_u16() {
                 206 => true,
                 // stop() on a disallowed redirect leaves us holding the 3xx itself
-                300..=399 => bail!(AppError::new("download_failed", "Download was redirected outside Hugging Face")),
+                300..=399 => bail!(AppError::new(
+                    "download_failed",
+                    "Download was redirected outside Hugging Face"
+                )),
                 200 => false, // server ignored the range: start over
                 416 => true,  // nothing left to fetch; fall through to verification
-                _ => bail!(AppError::new("download_failed", format!("Download failed: HTTP {status}"))),
+                _ => bail!(AppError::new(
+                    "download_failed",
+                    format!("Download failed: HTTP {status}")
+                )),
             };
             if !append {
                 have = 0;
@@ -268,14 +306,20 @@ impl ModelStore {
                 loop {
                     if cancel.load(Ordering::Relaxed) {
                         file.flush().await?;
-                        bail!(AppError::new("cancelled", "Download cancelled; it will resume next time"));
+                        bail!(AppError::new(
+                            "cancelled",
+                            "Download cancelled; it will resume next time"
+                        ));
                     }
                     let chunk = match tokio::time::timeout(CANCEL_POLL, stream.next()).await {
                         Err(_) => {
                             idle += CANCEL_POLL;
                             if idle >= STALL_TIMEOUT {
                                 file.flush().await?;
-                                bail!(AppError::new("download_stalled", "No data for 30 s; try again to resume"));
+                                bail!(AppError::new(
+                                    "download_stalled",
+                                    "No data for 30 s; try again to resume"
+                                ));
                             }
                             continue;
                         }
@@ -298,7 +342,10 @@ impl ModelStore {
             }
             file.flush().await?;
             if have < spec.size {
-                bail!(AppError::new("download_incomplete", "The connection ended early; try again to resume"));
+                bail!(AppError::new(
+                    "download_incomplete",
+                    "The connection ended early; try again to resume"
+                ));
             }
         }
 
@@ -308,7 +355,10 @@ impl ModelStore {
         let verified = tokio::task::spawn_blocking(move || verify(&path, size, expected)).await??;
         if !verified {
             tokio::fs::remove_file(&part).await.ok();
-            bail!(AppError::new("checksum_mismatch", "The downloaded file failed its SHA-256 check and was deleted"));
+            bail!(AppError::new(
+                "checksum_mismatch",
+                "The downloaded file failed its SHA-256 check and was deleted"
+            ));
         }
         tokio::fs::rename(&part, self.dir.join(spec.file)).await?;
         Ok(())
@@ -334,7 +384,11 @@ pub fn start_download(app: &AppHandle, id: &str) -> Result<()> {
             .await;
         store.finish(spec.id);
         let error = result.err().map(AppError::from);
-        let _ = ModelDownloadFinished { id: spec.id.to_owned(), error }.emit(&app);
+        let _ = ModelDownloadFinished {
+            id: spec.id.to_owned(),
+            error,
+        }
+        .emit(&app);
     });
     Ok(())
 }
@@ -354,19 +408,27 @@ fn verify(path: &Path, size: u64, sha256_hex: &str) -> Result<bool> {
         }
         hasher.update(&buf[..n]);
     }
-    let digest: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    let digest: String = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     Ok(digest == sha256_hex)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{verify, CATALOGUE};
+    use super::{CATALOGUE, verify};
 
     /// Byte counts cross the bridge as u32 (see ModelInfo); every catalogue file must fit.
     #[test]
     fn catalogue_sizes_fit_u32() {
         for model in CATALOGUE {
-            assert!(model.size <= u64::from(u32::MAX), "{} is too large for u32", model.id);
+            assert!(
+                model.size <= u64::from(u32::MAX),
+                "{} is too large for u32",
+                model.id
+            );
         }
     }
 
@@ -384,8 +446,17 @@ mod tests {
     /// The bundled VAD model is the pinned file, byte for byte.
     #[test]
     fn bundled_vad_matches_pin() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("resources").join(super::BUNDLED_VAD);
-        assert!(verify(&path, 885_098, "29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf").unwrap());
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(super::BUNDLED_VAD);
+        assert!(
+            verify(
+                &path,
+                885_098,
+                "29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf"
+            )
+            .unwrap()
+        );
     }
 
     /// Network test (run with `cargo test -- --ignored`): download a small pinned file (the VAD
@@ -415,7 +486,12 @@ mod tests {
             let done = dir.join(vad.file);
             let part = dir.join(format!("{}.part", vad.file));
             std::fs::rename(&done, &part).unwrap();
-            std::fs::OpenOptions::new().write(true).open(&part).unwrap().set_len(400_000).unwrap();
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open(&part)
+                .unwrap()
+                .set_len(400_000)
+                .unwrap();
 
             store.download(vad, &cancel, |_| {}).await.unwrap();
             assert_eq!(std::fs::metadata(&done).unwrap().len(), vad.size);

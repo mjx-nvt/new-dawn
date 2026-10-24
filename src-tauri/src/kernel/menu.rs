@@ -5,7 +5,13 @@ use tauri_specta::Event;
 use crate::events::MenuAction;
 use crate::kernel::windows::{self, SettingsTab};
 
-fn item(app: &AppHandle, id: &str, text: &str, accelerator: Option<&str>, enabled: bool) -> tauri::Result<MenuItem<Wry>> {
+fn item(
+    app: &AppHandle,
+    id: &str,
+    text: &str,
+    accelerator: Option<&str>,
+    enabled: bool,
+) -> tauri::Result<MenuItem<Wry>> {
     let builder = MenuItemBuilder::with_id(id, text).enabled(enabled);
     match accelerator {
         Some(keys) => builder.accelerator(keys).build(app),
@@ -18,7 +24,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let app_menu = SubmenuBuilder::new(app, "New Dawn")
         .about(None)
         .separator()
-        .item(&item(app, "settings", "Settings…", Some("CmdOrCtrl+,"), true)?)
+        .item(&item(
+            app,
+            "settings",
+            "Settings…",
+            Some("CmdOrCtrl+,"),
+            true,
+        )?)
         .separator()
         .services()
         .separator()
@@ -30,8 +42,20 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .build()?;
 
     let file = SubmenuBuilder::new(app, "File")
-        .item(&item(app, "new-recording", "New Recording", Some("CmdOrCtrl+R"), true)?)
-        .item(&item(app, "import-audio", "Import Audio…", Some("CmdOrCtrl+Shift+I"), true)?)
+        .item(&item(
+            app,
+            "new-recording",
+            "New Recording",
+            Some("CmdOrCtrl+R"),
+            true,
+        )?)
+        .item(&item(
+            app,
+            "import-audio",
+            "Import Audio…",
+            Some("CmdOrCtrl+Shift+I"),
+            true,
+        )?)
         .separator()
         .close_window()
         .build()?;
@@ -47,7 +71,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .build()?;
 
     let view = SubmenuBuilder::new(app, "View")
-        .item(&item(app, "toggle-sidebar", "Toggle Sidebar", Some("CmdOrCtrl+Alt+S"), true)?)
+        .item(&item(
+            app,
+            "toggle-sidebar",
+            "Toggle Sidebar",
+            Some("CmdOrCtrl+Alt+S"),
+            true,
+        )?)
         .separator()
         .fullscreen()
         .build()?;
@@ -59,15 +89,27 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .item(&item(app, "tenant-setup", "Tenant Setup…", None, true)?)
         .build()?;
 
-    let window = SubmenuBuilder::new(app, "Window").minimize().maximize().build()?;
+    let window = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .maximize()
+        .build()?;
     window.set_as_windows_menu_for_nsapp()?;
 
     let help = SubmenuBuilder::new(app, "Help")
-        .item(&item(app, "reveal-data", "Reveal Data Folder in Finder", None, true)?)
+        .item(&item(
+            app,
+            "reveal-data",
+            "Reveal Data Folder in Finder",
+            None,
+            true,
+        )?)
         .build()?;
     help.set_as_help_menu_for_nsapp()?;
 
-    Menu::with_items(app, &[&app_menu, &file, &edit, &view, &workspace, &window, &help])
+    Menu::with_items(
+        app,
+        &[&app_menu, &file, &edit, &view, &workspace, &window, &help],
+    )
 }
 
 /// Handles menu-bar and tray items. Anything the UI owns is forwarded as a typed event.

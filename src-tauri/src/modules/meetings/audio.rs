@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Async, FixedAsync, Resampler, SincInterpolationParameters};
 use symphonia::core::codecs::audio::AudioDecoderOptions;
@@ -17,7 +17,9 @@ use crate::error::AppError;
 use crate::kernel::ai::whisper::SAMPLE_RATE;
 
 /// Extensions the import dialog accepts (all decodable by the enabled symphonia features).
-pub const SUPPORTED_EXTENSIONS: &[&str] = &["m4a", "mp4", "aac", "mp3", "wav", "aif", "aiff", "caf", "flac", "ogg"];
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[
+    "m4a", "mp4", "aac", "mp3", "wav", "aif", "aiff", "caf", "flac", "ogg",
+];
 
 /// Decode → mix to mono → peak-normalise → resample to 16 kHz → clamp.
 // ponytail: whole file in memory (mono at the source rate + a 16 kHz copy; ~0.9 GB peak for 1 h at
@@ -47,11 +49,22 @@ fn decode_mono(path: &Path) -> Result<(Vec<f32>, u32)> {
         hint.with_extension(ext);
     }
     let mut format = symphonia::default::get_probe()
-        .probe(&hint, stream, FormatOptions::default(), MetadataOptions::default())
+        .probe(
+            &hint,
+            stream,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
         .map_err(|_| AppError::invalid("This audio format is not supported"))?;
-    let track = format.default_track(TrackType::Audio).context("no audio track")?;
+    let track = format
+        .default_track(TrackType::Audio)
+        .context("no audio track")?;
     let track_id = track.id;
-    let params = track.codec_params.as_ref().and_then(|p| p.audio()).context("no audio codec parameters")?;
+    let params = track
+        .codec_params
+        .as_ref()
+        .and_then(|p| p.audio())
+        .context("no audio codec parameters")?;
     let mut decoder = symphonia::default::get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
         .map_err(|_| AppError::invalid("This audio codec is not supported"))?;
@@ -72,7 +85,11 @@ fn decode_mono(path: &Path) -> Result<(Vec<f32>, u32)> {
         let channels = buffer.spec().channels().count().max(1);
         interleaved.resize(buffer.samples_interleaved(), 0.0);
         buffer.copy_to_slice_interleaved(&mut interleaved);
-        mono.extend(interleaved.chunks_exact(channels).map(|frame| frame.iter().sum::<f32>() / channels as f32));
+        mono.extend(
+            interleaved
+                .chunks_exact(channels)
+                .map(|frame| frame.iter().sum::<f32>() / channels as f32),
+        );
     }
     Ok((mono, rate))
 }
@@ -97,10 +114,20 @@ fn normalise(mut samples: Vec<f32>) -> Vec<f32> {
 /// Sinc resampling (256 taps, BlackmanHarris2, rubato's automatic cutoff) of the whole clip.
 fn resample(samples: &[f32], from_rate: u32) -> Result<Vec<f32>> {
     let ratio = SAMPLE_RATE as f64 / from_rate as f64;
-    let mut resampler = Async::<f32>::new_sinc(ratio, 1.0, &SincInterpolationParameters::default(), 1024, 1, FixedAsync::Input)
-        .context("creating the resampler")?;
-    let input = InterleavedSlice::new(samples, 1, samples.len()).context("wrapping audio for the resampler")?;
-    let output = resampler.process_all(&input, samples.len(), None).context("resampling to 16 kHz")?;
+    let mut resampler = Async::<f32>::new_sinc(
+        ratio,
+        1.0,
+        &SincInterpolationParameters::default(),
+        1024,
+        1,
+        FixedAsync::Input,
+    )
+    .context("creating the resampler")?;
+    let input = InterleavedSlice::new(samples, 1, samples.len())
+        .context("wrapping audio for the resampler")?;
+    let output = resampler
+        .process_all(&input, samples.len(), None)
+        .context("resampling to 16 kHz")?;
     Ok(output.take_data())
 }
 
@@ -114,7 +141,12 @@ mod tests {
     fn decodes_and_resamples_say_output() {
         let path = std::env::temp_dir().join(format!("newdawn-say-{}.aiff", uuid::Uuid::now_v7()));
         let ok = std::process::Command::new("say")
-            .args(["-o", path.to_str().unwrap(), "--data-format=BEI16@22050", "Testing the audio decoder."])
+            .args([
+                "-o",
+                path.to_str().unwrap(),
+                "--data-format=BEI16@22050",
+                "Testing the audio decoder.",
+            ])
             .status()
             .unwrap()
             .success();
@@ -124,6 +156,9 @@ mod tests {
         let seconds = samples.len() as f32 / SAMPLE_RATE as f32;
         assert!((0.8..6.0).contains(&seconds), "{seconds} s");
         assert!(samples.iter().all(|s| (-1.0..=1.0).contains(s)));
-        assert!(samples.iter().any(|s| s.abs() > 0.5), "normalised audio should reach near peak");
+        assert!(
+            samples.iter().any(|s| s.abs() > 0.5),
+            "normalised audio should reach near peak"
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 pub mod audio;
 pub mod email;
+pub mod minutes;
 pub mod summarise;
 pub mod transcribe;
 
@@ -59,9 +60,11 @@ pub struct MeetingTypeSummary {
 }
 
 pub async fn meeting_types(pool: &SqlitePool) -> Result<Vec<MeetingTypeSummary>> {
-    Ok(sqlx::query_as("SELECT id, name, language, is_default FROM meeting_type ORDER BY is_default DESC, name")
-        .fetch_all(pool)
-        .await?)
+    Ok(sqlx::query_as(
+        "SELECT id, name, language, is_default FROM meeting_type ORDER BY is_default DESC, name",
+    )
+    .fetch_all(pool)
+    .await?)
 }
 
 /// One search result: the meeting, plus where the words were found in its transcript or summary.
@@ -84,16 +87,38 @@ pub fn fts_query(input: &str) -> Option<String> {
         .map(|w| format!("\"{w}\""))
         .collect();
     let last = words.len().checked_sub(1)?;
-    Some(words.iter().enumerate().map(|(i, w)| if i == last { format!("{w}*") } else { w.clone() }).collect::<Vec<_>>().join(" "))
+    Some(
+        words
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                if i == last {
+                    format!("{w}*")
+                } else {
+                    w.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
 }
 
 /// Title matches first, then transcript matches by FTS rank, then summary matches.
 pub async fn search(pool: &SqlitePool, input: &str) -> Result<Vec<MeetingHit>> {
-    let Some(query) = fts_query(input) else { return Ok(Vec::new()) };
+    let Some(query) = fts_query(input) else {
+        return Ok(Vec::new());
+    };
     // Titles: every word must appear, like the FTS side (LIKE ignores case for ASCII only).
     let patterns: Vec<String> = input
         .split_whitespace()
-        .map(|w| format!("%{}%", w.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")))
+        .map(|w| {
+            format!(
+                "%{}%",
+                w.replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_")
+            )
+        })
         .collect();
     let title_sql = format!(
         "SELECT id FROM meeting WHERE {} ORDER BY held_on DESC",
@@ -116,11 +141,12 @@ pub async fn search(pool: &SqlitePool, input: &str) -> Result<Vec<MeetingHit>> {
     .bind(&query)
     .fetch_all(pool)
     .await?;
-    let transcript_meetings: Vec<(String,)> =
-        sqlx::query_as("SELECT DISTINCT meeting_id FROM transcript_fts WHERE transcript_fts MATCH ?")
-            .bind(&query)
-            .fetch_all(pool)
-            .await?;
+    let transcript_meetings: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT meeting_id FROM transcript_fts WHERE transcript_fts MATCH ?",
+    )
+    .bind(&query)
+    .fetch_all(pool)
+    .await?;
     let summary: Vec<(String, String)> = sqlx::query_as(
         "SELECT meeting_id, snippet(summary_fts, 1, char(2), char(3), '…', 12) FROM summary_fts \
          WHERE summary_fts MATCH ? ORDER BY rank LIMIT 200",
@@ -129,20 +155,32 @@ pub async fn search(pool: &SqlitePool, input: &str) -> Result<Vec<MeetingHit>> {
     .fetch_all(pool)
     .await?;
 
-    let meetings: std::collections::HashMap<String, Meeting> = list(pool).await?.into_iter().map(|m| (m.id.clone(), m)).collect();
+    let meetings: std::collections::HashMap<String, Meeting> = list(pool)
+        .await?
+        .into_iter()
+        .map(|m| (m.id.clone(), m))
+        .collect();
     let mut seen = std::collections::HashSet::new();
     let mut hits = Vec::new();
     let mut push = |id: String, snippet: Option<String>, at_ms: Option<u32>| {
         if seen.insert(id.clone()) {
             if let Some(meeting) = meetings.get(&id) {
-                hits.push(MeetingHit { meeting: meeting.clone(), snippet, at_ms });
+                hits.push(MeetingHit {
+                    meeting: meeting.clone(),
+                    snippet,
+                    at_ms,
+                });
             }
         }
     };
     // A title hit still shows its best transcript snippet when there is one.
     for (id,) in titles {
         let best = transcript.iter().find(|(m, _, _)| *m == id);
-        push(id, best.map(|(_, s, _)| s.clone()), best.map(|(_, _, t)| *t));
+        push(
+            id,
+            best.map(|(_, s, _)| s.clone()),
+            best.map(|(_, _, t)| *t),
+        );
     }
     for (id, snippet, at) in transcript.iter().cloned() {
         push(id, Some(snippet), Some(at));
@@ -189,12 +227,19 @@ pub async fn create(pool: &SqlitePool, new: NewMeeting<'_>) -> Result<Meeting> {
 }
 
 pub async fn get(pool: &SqlitePool, id: &str) -> Result<Meeting> {
-    let found: Option<Meeting> = sqlx::query_as("SELECT * FROM meeting WHERE id = ?").bind(id).fetch_optional(pool).await?;
+    let found: Option<Meeting> = sqlx::query_as("SELECT * FROM meeting WHERE id = ?")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     Ok(found.ok_or_else(|| AppError::not_found(format!("No meeting '{id}'")))?)
 }
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Meeting>> {
-    Ok(sqlx::query_as("SELECT * FROM meeting ORDER BY held_on DESC").fetch_all(pool).await?)
+    Ok(
+        sqlx::query_as("SELECT * FROM meeting ORDER BY held_on DESC")
+            .fetch_all(pool)
+            .await?,
+    )
 }
 
 pub async fn set_status(pool: &SqlitePool, id: &str, status: MeetingStatus) -> Result<()> {
@@ -208,7 +253,10 @@ pub async fn set_status(pool: &SqlitePool, id: &str, status: MeetingStatus) -> R
 
 /// A recording that never captured anything (start failed).
 pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM meeting WHERE id = ?").bind(id).execute(pool).await?;
+    sqlx::query("DELETE FROM meeting WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -275,7 +323,11 @@ pub async fn save_summary(
 
 /// Meetings whose recording was cut short (a quit or crash left them `recording`).
 pub async fn interrupted_recordings(pool: &SqlitePool) -> Result<Vec<(String, Option<String>)>> {
-    Ok(sqlx::query_as("SELECT id, audio_path FROM meeting WHERE status = 'recording'").fetch_all(pool).await?)
+    Ok(
+        sqlx::query_as("SELECT id, audio_path FROM meeting WHERE status = 'recording'")
+            .fetch_all(pool)
+            .await?,
+    )
 }
 
 /// A job can't survive a quit or crash: settle meetings left `transcribing` at launch.
@@ -306,9 +358,17 @@ pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<Trans
 
 /// Replaces the meeting's transcript and marks it transcribed, in one transaction.
 /// Delete + insert (never REPLACE) so the FTS triggers stay correct (D-012).
-pub async fn save_transcript(pool: &SqlitePool, meeting_id: &str, segments: &[Segment], duration_ms: u32) -> Result<()> {
+pub async fn save_transcript(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    segments: &[Segment],
+    duration_ms: u32,
+) -> Result<()> {
     let mut tx = pool.begin().await?;
-    sqlx::query("DELETE FROM transcript_segment WHERE meeting_id = ?").bind(meeting_id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM transcript_segment WHERE meeting_id = ?")
+        .bind(meeting_id)
+        .execute(&mut *tx)
+        .await?;
     for (seq, segment) in segments.iter().enumerate() {
         sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(new_id())
@@ -333,16 +393,22 @@ pub async fn save_transcript(pool: &SqlitePool, meeting_id: &str, segments: &[Se
 
 #[cfg(test)]
 mod tests {
-    use super::{create, fts_query, save_transcript, search, MeetingStatus, NewMeeting};
+    use super::{MeetingStatus, NewMeeting, create, fts_query, save_transcript, search};
     use crate::kernel::ai::whisper::{Language, Segment};
     use crate::kernel::hub::WorkspaceHub;
 
     #[test]
     fn fts_query_is_safe() {
         assert_eq!(fts_query("acme cap").as_deref(), Some("\"acme\" \"cap\"*"));
-        assert_eq!(fts_query(r#"  "OR" NOT( a*b) "#).as_deref(), Some("\"OR\" \"NOT(\" \"a*b)\"*"));
+        assert_eq!(
+            fts_query(r#"  "OR" NOT( a*b) "#).as_deref(),
+            Some("\"OR\" \"NOT(\" \"a*b)\"*")
+        );
         assert_eq!(fts_query("   "), None);
-        assert_eq!(fts_query("Q3 - results").as_deref(), Some(r#""Q3" "results"*"#));
+        assert_eq!(
+            fts_query("Q3 - results").as_deref(),
+            Some(r#""Q3" "results"*"#)
+        );
     }
 
     #[test]
@@ -361,17 +427,27 @@ mod tests {
                 audio_path: "/tmp/x.wav",
                 status: MeetingStatus::Recorded,
             };
-            create(&pool, new("m1", "Partner call with Acme Capital")).await.unwrap();
+            create(&pool, new("m1", "Partner call with Acme Capital"))
+                .await
+                .unwrap();
             create(&pool, new("m2", "Internal sync")).await.unwrap();
-            let seg = |start_ms, text: &str| Segment { start_ms, end_ms: start_ms + 1000, text: text.into() };
+            let seg = |start_ms, text: &str| Segment {
+                start_ms,
+                end_ms: start_ms + 1000,
+                text: text.into(),
+            };
             save_transcript(
                 &pool,
                 "m2",
-                &[seg(0, "Welcome everyone"), seg(65_000, "Tiếng Việt: the sandbox framework is published"), seg(70_000, "Đồng ý với đối tác")],
+                &[
+                    seg(0, "Welcome everyone"),
+                    seg(65_000, "Tiếng Việt: the sandbox framework is published"),
+                    seg(70_000, "Đồng ý với đối tác"),
+                ],
                 75_000,
             )
-                .await
-                .unwrap();
+            .await
+            .unwrap();
 
             let hits = search(&pool, "acme").await.unwrap();
             assert_eq!(hits.len(), 1);
@@ -382,12 +458,35 @@ mod tests {
             assert_eq!(hits[0].at_ms, Some(65_000));
             assert!(hits[0].snippet.as_deref().unwrap().contains('\u{2}'));
 
-            assert_eq!(search(&pool, "tiếng").await.unwrap().len(), 1, "Vietnamese matches with its accents");
-            assert_eq!(search(&pool, "tieng viet").await.unwrap().len(), 1, "and without them (0002: remove_diacritics 2)");
-            assert!(search(&pool, r#"" OR ) NEAR("#).await.is_ok(), "operators are plain text");
-            assert_eq!(search(&pool, "dong y doi tac").await.unwrap().len(), 1, "đ folds to d (0002: folded column)");
-            assert_eq!(search(&pool, "sandbox - framework").await.unwrap().len(), 1, "lone punctuation is ignored");
-            assert_eq!(search(&pool, "acme partner").await.unwrap().len(), 1, "title words match in any order");
+            assert_eq!(
+                search(&pool, "tiếng").await.unwrap().len(),
+                1,
+                "Vietnamese matches with its accents"
+            );
+            assert_eq!(
+                search(&pool, "tieng viet").await.unwrap().len(),
+                1,
+                "and without them (0002: remove_diacritics 2)"
+            );
+            assert!(
+                search(&pool, r#"" OR ) NEAR("#).await.is_ok(),
+                "operators are plain text"
+            );
+            assert_eq!(
+                search(&pool, "dong y doi tac").await.unwrap().len(),
+                1,
+                "đ folds to d (0002: folded column)"
+            );
+            assert_eq!(
+                search(&pool, "sandbox - framework").await.unwrap().len(),
+                1,
+                "lone punctuation is ignored"
+            );
+            assert_eq!(
+                search(&pool, "acme partner").await.unwrap().len(),
+                1,
+                "title words match in any order"
+            );
             hub.close_all().await;
         });
         std::fs::remove_dir_all(root).unwrap();

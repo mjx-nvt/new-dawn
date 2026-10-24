@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use sqlx::SqlitePool;
@@ -19,7 +19,7 @@ use whisper_rs::{
 
 use crate::error::AppError;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
-use crate::kernel::ai::models::{ModelStore, BUNDLED_VAD};
+use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore};
 use crate::kernel::ai::queue::AiQueue;
 
 pub const SAMPLE_RATE: usize = 16_000;
@@ -103,11 +103,23 @@ pub async fn transcribe(
         }
         progress(Stage::DetectingSpeech, 15);
         let engine = app_for_job.state::<WhisperEngine>();
-        let speech_model = SpeechModel { id: model.id, path: &model_path };
-        let segments = engine.transcribe(speech_model, &vad_path, &samples, language, &cancel, |done| {
-            progress(Stage::Transcribing, 20 + (done * 75.0) as u32)
-        })?;
-        Ok(Transcript { model: model.id, segments, duration_ms: (samples.len() * 1000 / SAMPLE_RATE) as u32 })
+        let speech_model = SpeechModel {
+            id: model.id,
+            path: &model_path,
+        };
+        let segments = engine.transcribe(
+            speech_model,
+            &vad_path,
+            &samples,
+            language,
+            &cancel,
+            |done| progress(Stage::Transcribing, 20 + (done * 75.0) as u32),
+        )?;
+        Ok(Transcript {
+            model: model.id,
+            segments,
+            duration_ms: (samples.len() * 1000 / SAMPLE_RATE) as u32,
+        })
     })
     .await
     .map_err(anyhow::Error::from)
@@ -135,17 +147,23 @@ pub async fn transcribe(
 }
 
 /// Saves the idle period in `registry.db` and applies it to the running engine.
-pub async fn set_idle_unload(hub: &crate::kernel::hub::WorkspaceHub, engine: &WhisperEngine, secs: u32) -> Result<()> {
+pub async fn set_idle_unload(
+    hub: &crate::kernel::hub::WorkspaceHub,
+    engine: &WhisperEngine,
+    secs: u32,
+) -> Result<()> {
     if !(30..=3600).contains(&secs) {
         bail!(AppError::invalid("Choose between 30 seconds and 1 hour"));
     }
-    hub.set_app_setting(IDLE_UNLOAD_SETTING, &secs.to_string()).await?;
+    hub.set_app_setting(IDLE_UNLOAD_SETTING, &secs.to_string())
+        .await?;
     engine.set_idle_unload_secs(secs.into());
     Ok(())
 }
 
 pub fn is_cancelled(err: &anyhow::Error) -> bool {
-    err.downcast_ref::<AppError>().is_some_and(|e| e.code == "cancelled")
+    err.downcast_ref::<AppError>()
+        .is_some_and(|e| e.code == "cancelled")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -175,14 +193,20 @@ pub struct WhisperEngine {
 impl WhisperEngine {
     pub fn new(idle_unload_secs: u64) -> Self {
         whisper_rs::install_logging_hooks(); // whisper.cpp logs → tracing
-        Self { loaded: Mutex::new(None), idle_unload_secs: AtomicU64::new(idle_unload_secs) }
+        Self {
+            loaded: Mutex::new(None),
+            idle_unload_secs: AtomicU64::new(idle_unload_secs),
+        }
     }
 
     /// Drops the model now if no job is using it (before the text model runs).
     pub fn unload_now(&self) {
         if let Ok(mut loaded) = self.loaded.try_lock() {
             if let Some(model) = loaded.take() {
-                tracing::info!("whisper model {} unloaded for the text model", model.model_id);
+                tracing::info!(
+                    "whisper model {} unloaded for the text model",
+                    model.model_id
+                );
             }
         }
     }
@@ -203,7 +227,10 @@ impl WhisperEngine {
             Err(std::sync::TryLockError::WouldBlock) => return,
         };
         let idle = Duration::from_secs(self.idle_unload_secs());
-        if loaded.as_ref().is_some_and(|l| l.last_used.elapsed() >= idle) {
+        if loaded
+            .as_ref()
+            .is_some_and(|l| l.last_used.elapsed() >= idle)
+        {
             let model = loaded.take().map(|l| l.model_id).unwrap_or_default();
             tracing::info!("whisper model {model} unloaded after {idle:?} idle");
         }
@@ -227,21 +254,36 @@ impl WhisperEngine {
         let mut guard = self.loaded.lock().unwrap_or_else(PoisonError::into_inner);
         if guard.as_ref().is_none_or(|l| l.model_id != model.id) {
             *guard = None; // free the old model before loading the new one
-            let params = WhisperContextParameters { use_gpu: true, flash_attn: true, ..Default::default() };
+            let params = WhisperContextParameters {
+                use_gpu: true,
+                flash_attn: true,
+                ..Default::default()
+            };
             let path = model.path.to_str().context("model path is not UTF-8")?;
-            let ctx = WhisperContext::new_with_params(path, params).context("loading the Whisper model")?;
+            let ctx = WhisperContext::new_with_params(path, params)
+                .context("loading the Whisper model")?;
             tracing::info!("whisper model {} loaded", model.id);
-            *guard = Some(Loaded { model_id: model.id.to_owned(), ctx, last_used: Instant::now() });
+            *guard = Some(Loaded {
+                model_id: model.id.to_owned(),
+                ctx,
+                last_used: Instant::now(),
+            });
         }
         let loaded = guard.as_mut().expect("model loaded above");
-        let mut state = loaded.ctx.create_state().context("creating a Whisper state")?;
+        let mut state = loaded
+            .ctx
+            .create_state()
+            .context("creating a Whisper state")?;
 
         let mut segments = Vec::new();
         for (index, &(start, end)) in speech.iter().enumerate() {
             if cancel.load(Ordering::Relaxed) {
                 bail!(AppError::new("cancelled", "Transcription cancelled"));
             }
-            let mut params = FullParams::new(SamplingStrategy::BeamSearch { beam_size: 3, patience: -1.0 });
+            let mut params = FullParams::new(SamplingStrategy::BeamSearch {
+                beam_size: 3,
+                patience: -1.0,
+            });
             params.set_n_threads(threads);
             params.set_language(Some(language.code()));
             params.set_translate(false);
@@ -277,11 +319,18 @@ impl WhisperEngine {
             let offset_ms = (start * 1000 / SAMPLE_RATE) as u32;
             let limit_ms = (end * 1000 / SAMPLE_RATE) as u32;
             for segment in state.as_iter() {
-                let Some(text) = clean_text(&segment.to_str_lossy()?) else { continue };
+                let Some(text) = clean_text(&segment.to_str_lossy()?) else {
+                    continue;
+                };
                 // whisper timestamps are centiseconds from the start of this speech segment
                 let start_ms = offset_ms + (segment.start_timestamp().max(0) as u32) * 10;
-                let end_ms = (offset_ms + (segment.end_timestamp().max(0) as u32) * 10).min(limit_ms);
-                segments.push(Segment { start_ms, end_ms: end_ms.max(start_ms), text });
+                let end_ms =
+                    (offset_ms + (segment.end_timestamp().max(0) as u32) * 10).min(limit_ms);
+                segments.push(Segment {
+                    start_ms,
+                    end_ms: end_ms.max(start_ms),
+                    text,
+                });
             }
             progress((index + 1) as f32 / speech.len().max(1) as f32);
         }
@@ -312,20 +361,37 @@ fn detect_speech(vad_model: &Path, samples: &[f32], threads: i32) -> Result<Vec<
     params.set_min_silence_duration(2000);
     params.set_max_speech_duration(25.0);
     params.set_speech_pad(300);
-    let found = vad.segments_from_probabilities(params).context("finding speech segments")?;
+    let found = vad
+        .segments_from_probabilities(params)
+        .context("finding speech segments")?;
 
     let per_cs = SAMPLE_RATE / 100; // VAD timestamps are centiseconds
     Ok((0..found.num_segments())
         .filter_map(|i| found.get_segment(i))
-        .map(|s| ((s.start.max(0.0) as usize * per_cs).min(samples.len()), (s.end.max(0.0) as usize * per_cs).min(samples.len())))
+        .map(|s| {
+            (
+                (s.start.max(0.0) as usize * per_cs).min(samples.len()),
+                (s.end.max(0.0) as usize * per_cs).min(samples.len()),
+            )
+        })
         .filter(|(start, end)| end > start)
         .collect())
 }
 
 /// Whole-segment hallucinations Whisper produces on silence or music.
-const DROP_IF_EQUALS: &[&str] = &["thank you for watching", "thanks for watching", "please subscribe", "you"];
+const DROP_IF_EQUALS: &[&str] = &[
+    "thank you for watching",
+    "thanks for watching",
+    "please subscribe",
+    "you",
+];
 /// Distinctive fragments that only ever appear as hallucinations (EN and VI).
-const DROP_IF_CONTAINS: &[&str] = &["amara.org", "subscribe to my channel", "ghiền mì gõ", "subscribe cho kênh"];
+const DROP_IF_CONTAINS: &[&str] = &[
+    "amara.org",
+    "subscribe to my channel",
+    "ghiền mì gõ",
+    "subscribe cho kênh",
+];
 /// A chunk repeated this many times in a row is collapsed to one copy.
 const MIN_REPEATS: usize = 4;
 
@@ -334,13 +400,17 @@ const MIN_REPEATS: usize = 4;
 /// reduplication like "từ từ" survives). Returns None when nothing real is left.
 pub fn clean_text(raw: &str) -> Option<String> {
     let text = raw.trim();
-    let is_annotation = (text.starts_with('[') && text.ends_with(']')) || (text.starts_with('(') && text.ends_with(')'));
-    let core = text.trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace() || c == '♪');
+    let is_annotation = (text.starts_with('[') && text.ends_with(']'))
+        || (text.starts_with('(') && text.ends_with(')'));
+    let core =
+        text.trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace() || c == '♪');
     if is_annotation || core.is_empty() {
         return None;
     }
     let lower = core.to_lowercase();
-    if DROP_IF_EQUALS.contains(&lower.as_str()) || DROP_IF_CONTAINS.iter().any(|p| lower.contains(p)) {
+    if DROP_IF_EQUALS.contains(&lower.as_str())
+        || DROP_IF_CONTAINS.iter().any(|p| lower.contains(p))
+    {
         return None;
     }
     Some(collapse_repeats(text))
@@ -358,7 +428,9 @@ fn collapse_repeats(text: &str) -> String {
                 continue; // never collapse digits or punctuation ("10000", "....")
             }
             let mut count = 1;
-            while i + (count + 1) * period <= chars.len() && chars[i + count * period..i + (count + 1) * period] == *unit {
+            while i + (count + 1) * period <= chars.len()
+                && chars[i + count * period..i + (count + 1) * period] == *unit
+            {
                 count += 1;
             }
             if count >= MIN_REPEATS {
@@ -376,13 +448,13 @@ fn collapse_repeats(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
-    use super::{clean_text, Language, SpeechModel, WhisperEngine};
-    use crate::kernel::ai::models::{ModelStore, BUNDLED_VAD};
+    use super::{Language, SpeechModel, WhisperEngine, clean_text};
+    use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore};
     use crate::kernel::hub::WorkspaceHub;
-    use crate::modules::meetings::{self, audio, NewMeeting};
+    use crate::modules::meetings::{self, NewMeeting, audio};
 
     /// Encoder benchmark (D-017): `NEWDAWN_BENCH_MODEL=<ggml .bin> NEWDAWN_BENCH_AUDIO=<file>
     /// cargo test bench_transcribe -- --ignored --nocapture [--features coreml]`. Reports model load
@@ -390,23 +462,45 @@ mod tests {
     #[test]
     #[ignore]
     fn bench_transcribe() {
-        let (Ok(model), Ok(audio_path)) = (std::env::var("NEWDAWN_BENCH_MODEL"), std::env::var("NEWDAWN_BENCH_AUDIO")) else {
+        let (Ok(model), Ok(audio_path)) = (
+            std::env::var("NEWDAWN_BENCH_MODEL"),
+            std::env::var("NEWDAWN_BENCH_AUDIO"),
+        ) else {
             eprintln!("set NEWDAWN_BENCH_MODEL and NEWDAWN_BENCH_AUDIO");
             return;
         };
-        let _ = tracing_subscriber::fmt().with_env_filter("info").with_test_writer().try_init();
-        let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join(BUNDLED_VAD);
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("info")
+            .with_test_writer()
+            .try_init();
+        let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(BUNDLED_VAD);
         let samples = audio::load_16k_mono(std::path::Path::new(&audio_path)).unwrap();
         let engine = WhisperEngine::new(super::DEFAULT_IDLE_UNLOAD_SECS);
         let model_path = PathBuf::from(&model);
-        let speech = || SpeechModel { id: "bench", path: &model_path };
+        let speech = || SpeechModel {
+            id: "bench",
+            path: &model_path,
+        };
         let cancel = Arc::new(AtomicBool::new(false));
 
         let t = std::time::Instant::now();
-        engine.transcribe(speech(), &vad, &samples[..2 * super::SAMPLE_RATE], Language::En, &cancel, |_| {}).unwrap();
+        engine
+            .transcribe(
+                speech(),
+                &vad,
+                &samples[..2 * super::SAMPLE_RATE],
+                Language::En,
+                &cancel,
+                |_| {},
+            )
+            .unwrap();
         let load = t.elapsed();
         let t = std::time::Instant::now();
-        let segments = engine.transcribe(speech(), &vad, &samples, Language::En, &cancel, |_| {}).unwrap();
+        let segments = engine
+            .transcribe(speech(), &vad, &samples, Language::En, &cancel, |_| {})
+            .unwrap();
         let run = t.elapsed();
         let audio_s = samples.len() as f64 / super::SAMPLE_RATE as f64;
         eprintln!(
@@ -422,36 +516,78 @@ mod tests {
     #[test]
     #[ignore]
     fn transcribes_generated_speech() {
-        let _ = tracing_subscriber::fmt().with_env_filter("info").with_test_writer().try_init();
-        let app_data = PathBuf::from(std::env::var("HOME").unwrap()).join("Library/Application Support/co.majorisdigital.newdawn");
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("info")
+            .with_test_writer()
+            .try_init();
+        let app_data = PathBuf::from(std::env::var("HOME").unwrap())
+            .join("Library/Application Support/co.majorisdigital.newdawn");
         let models = ModelStore::new(app_data.join("models")).unwrap();
-        let (spec, model_path) = models.preferred_speech_model().expect("download a Whisper model first");
-        let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources").join(BUNDLED_VAD);
+        let (spec, model_path) = models
+            .preferred_speech_model()
+            .expect("download a Whisper model first");
+        let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(BUNDLED_VAD);
 
         let tmp = std::env::temp_dir().join(format!("newdawn-e2e-{}", uuid::Uuid::now_v7()));
         std::fs::create_dir_all(&tmp).unwrap();
         let (aiff, m4a) = (tmp.join("speech.aiff"), tmp.join("speech.m4a"));
         let script = "Good morning everyone. Today we review the partner agreement with Acme Capital. \
                       [[slnc 3000]] The first decision is to sign the term sheet by Friday.";
-        assert!(std::process::Command::new("say").args(["-o", aiff.to_str().unwrap(), script]).status().unwrap().success());
-        assert!(std::process::Command::new("afconvert")
-            .args(["-f", "m4af", "-d", "aac", aiff.to_str().unwrap(), m4a.to_str().unwrap()])
-            .status()
-            .unwrap()
-            .success());
+        assert!(
+            std::process::Command::new("say")
+                .args(["-o", aiff.to_str().unwrap(), script])
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            std::process::Command::new("afconvert")
+                .args([
+                    "-f",
+                    "m4af",
+                    "-d",
+                    "aac",
+                    aiff.to_str().unwrap(),
+                    m4a.to_str().unwrap()
+                ])
+                .status()
+                .unwrap()
+                .success()
+        );
 
         let samples = audio::load_16k_mono(&m4a).unwrap();
         let engine = WhisperEngine::new(super::DEFAULT_IDLE_UNLOAD_SECS);
-        let model = || SpeechModel { id: spec.id, path: &model_path };
+        let model = || SpeechModel {
+            id: spec.id,
+            path: &model_path,
+        };
         let started = std::time::Instant::now();
-        let segments = engine.transcribe(model(), &vad, &samples, Language::En, &Arc::new(AtomicBool::new(false)), |_| {}).unwrap();
+        let segments = engine
+            .transcribe(
+                model(),
+                &vad,
+                &samples,
+                Language::En,
+                &Arc::new(AtomicBool::new(false)),
+                |_| {},
+            )
+            .unwrap();
         eprintln!("{} in {:?}:", spec.id, started.elapsed());
         for s in &segments {
             eprintln!("  [{:>6} – {:>6}] {}", s.start_ms, s.end_ms, s.text);
         }
-        let text = segments.iter().map(|s| s.text.to_lowercase()).collect::<Vec<_>>().join(" ");
+        let text = segments
+            .iter()
+            .map(|s| s.text.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(text.contains("acme") && text.contains("friday"), "{text}");
-        assert!(segments.last().unwrap().start_ms > 3_000, "timestamps should be offset past the 3 s pause");
+        assert!(
+            segments.last().unwrap().start_ms > 3_000,
+            "timestamps should be offset past the 3 s pause"
+        );
 
         // Cancel mid-job: the abort callback must stop Whisper and surface code "cancelled".
         let flag = Arc::new(AtomicBool::new(false));
@@ -460,7 +596,9 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(300));
             setter.store(true, std::sync::atomic::Ordering::Relaxed);
         });
-        let err = engine.transcribe(model(), &vad, &samples, Language::En, &flag, |_| {}).unwrap_err();
+        let err = engine
+            .transcribe(model(), &vad, &samples, Language::En, &flag, |_| {})
+            .unwrap_err();
         stopper.join().unwrap();
         assert!(super::is_cancelled(&err), "{err:#}");
 
@@ -479,19 +617,34 @@ mod tests {
                 status: meetings::MeetingStatus::Recorded,
             };
             meetings::create(&pool, new).await.unwrap();
-            meetings::save_transcript(&pool, &id, &segments, (samples.len() / 16) as u32).await.unwrap();
-            assert_eq!(meetings::transcript(&pool, &id).await.unwrap().len(), segments.len());
-            assert_eq!(meetings::get(&pool, &id).await.unwrap().status, meetings::MeetingStatus::Transcribed);
-            let (hits,): (i64,) = sqlx::query_as("SELECT count(*) FROM transcript_fts WHERE transcript_fts MATCH 'friday'")
-                .fetch_one(&pool)
+            meetings::save_transcript(&pool, &id, &segments, (samples.len() / 16) as u32)
                 .await
                 .unwrap();
+            assert_eq!(
+                meetings::transcript(&pool, &id).await.unwrap().len(),
+                segments.len()
+            );
+            assert_eq!(
+                meetings::get(&pool, &id).await.unwrap().status,
+                meetings::MeetingStatus::Transcribed
+            );
+            let (hits,): (i64,) = sqlx::query_as(
+                "SELECT count(*) FROM transcript_fts WHERE transcript_fts MATCH 'friday'",
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
             assert!(hits >= 1, "full-text search should find the transcript");
 
             // A meeting left `transcribing` by a quit is settled on the next launch.
-            meetings::set_status(&pool, &id, meetings::MeetingStatus::Transcribing).await.unwrap();
+            meetings::set_status(&pool, &id, meetings::MeetingStatus::Transcribing)
+                .await
+                .unwrap();
             meetings::recover_interrupted(&pool).await.unwrap();
-            assert_eq!(meetings::get(&pool, &id).await.unwrap().status, meetings::MeetingStatus::Transcribed);
+            assert_eq!(
+                meetings::get(&pool, &id).await.unwrap().status,
+                meetings::MeetingStatus::Transcribed
+            );
             hub.close_all().await;
         });
         std::fs::remove_dir_all(tmp).unwrap();
@@ -500,16 +653,33 @@ mod tests {
     #[test]
     fn cleanup_is_language_safe() {
         // Kept as-is
-        assert_eq!(clean_text(" Từ từ đã, chúng ta bàn tiếp. ").as_deref(), Some("Từ từ đã, chúng ta bàn tiếp."));
+        assert_eq!(
+            clean_text(" Từ từ đã, chúng ta bàn tiếp. ").as_deref(),
+            Some("Từ từ đã, chúng ta bàn tiếp.")
+        );
         assert_eq!(clean_text("Thank you.").as_deref(), Some("Thank you."));
-        assert_eq!(clean_text("Revenue grew 10000 units....").as_deref(), Some("Revenue grew 10000 units...."));
+        assert_eq!(
+            clean_text("Revenue grew 10000 units....").as_deref(),
+            Some("Revenue grew 10000 units....")
+        );
         // Dropped
-        for junk in ["[Music]", "(applause)", "♪ ♪", "Thanks for watching!", "  ", "You", "Hãy subscribe cho kênh Ghiền Mì Gõ để không bỏ lỡ"] {
+        for junk in [
+            "[Music]",
+            "(applause)",
+            "♪ ♪",
+            "Thanks for watching!",
+            "  ",
+            "You",
+            "Hãy subscribe cho kênh Ghiền Mì Gõ để không bỏ lỡ",
+        ] {
             assert_eq!(clean_text(junk), None, "{junk}");
         }
         // Runaway repetition collapsed, short reduplication untouched
         assert_eq!(clean_text("ha ha ha ha ha").as_deref(), Some("ha"));
-        assert_eq!(clean_text("OK. OK. OK. OK. OK. Let's start").as_deref(), Some("OK. Let's start"));
+        assert_eq!(
+            clean_text("OK. OK. OK. OK. OK. Let's start").as_deref(),
+            Some("OK. Let's start")
+        );
         assert_eq!(clean_text("từ từ từ từ từ").as_deref(), Some("từ"));
     }
 }

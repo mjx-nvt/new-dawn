@@ -35,7 +35,10 @@ pub(crate) async fn open_pool(path: &Path, migrator: &Migrator) -> Result<Sqlite
 }
 
 pub(crate) async fn checkpoint_and_close(pool: SqlitePool) {
-    if let Err(err) = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)").execute(&pool).await {
+    if let Err(err) = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&pool)
+        .await
+    {
         tracing::warn!("WAL checkpoint failed: {err}");
     }
     pool.close().await;
@@ -51,7 +54,10 @@ impl WorkspaceHub {
     /// `root` is the app data dir: `~/Library/Application Support/co.majorisdigital.newdawn/`.
     pub async fn open(root: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&root).with_context(|| format!("creating {}", root.display()))?;
-        Ok(Self { registry: Registry::open(&root).await?, pools: RwLock::default() })
+        Ok(Self {
+            registry: Registry::open(&root).await?,
+            pools: RwLock::default(),
+        })
     }
 
     pub async fn open_all_active(&self) -> Result<()> {
@@ -92,14 +98,20 @@ impl WorkspaceHub {
         let all = self.registry.list().await?;
         let wanted = self.registry.setting(CURRENT_WORKSPACE_KEY).await?;
         let is_wanted = |w: &&Workspace| !w.archived && Some(&w.slug) == wanted.as_ref();
-        Ok(all.iter().find(is_wanted).or_else(|| all.iter().find(|w| !w.archived)).cloned())
+        Ok(all
+            .iter()
+            .find(is_wanted)
+            .or_else(|| all.iter().find(|w| !w.archived))
+            .cloned())
     }
 
     pub async fn set_current_workspace(&self, slug: &str) -> Result<Workspace> {
         if self.registry.get(slug).await?.archived {
             anyhow::bail!(AppError::invalid(format!("Workspace '{slug}' is archived")));
         }
-        self.registry.set_setting(CURRENT_WORKSPACE_KEY, slug).await?;
+        self.registry
+            .set_setting(CURRENT_WORKSPACE_KEY, slug)
+            .await?;
         self.registry.touch_opened(slug).await?;
         self.registry.get(slug).await
     }
@@ -137,7 +149,13 @@ impl WorkspaceHub {
 
     /// Checkpoints and closes every pool, registry last. Called on app exit.
     pub async fn close_all(&self) {
-        let pools: Vec<SqlitePool> = self.pools.write().expect("hub lock poisoned").drain().map(|(_, p)| p).collect();
+        let pools: Vec<SqlitePool> = self
+            .pools
+            .write()
+            .expect("hub lock poisoned")
+            .drain()
+            .map(|(_, p)| p)
+            .collect();
         for pool in pools {
             checkpoint_and_close(pool).await;
         }
@@ -145,7 +163,12 @@ impl WorkspaceHub {
     }
 
     async fn open_workspace(&self, workspace: &Workspace) -> Result<SqlitePool> {
-        if let Some(pool) = self.pools.read().expect("hub lock poisoned").get(&workspace.slug) {
+        if let Some(pool) = self
+            .pools
+            .read()
+            .expect("hub lock poisoned")
+            .get(&workspace.slug)
+        {
             return Ok(pool.clone());
         }
         let path = Path::new(&workspace.folder_path).join("workspace.db");
@@ -188,7 +211,10 @@ mod tests {
             for dir in ["brand", "recordings", "exports"] {
                 assert!(root.join("workspaces/vifc").join(dir).is_dir(), "{dir}");
             }
-            assert!(hub.create_workspace("Again", "vifc").await.is_err(), "duplicate slug");
+            assert!(
+                hub.create_workspace("Again", "vifc").await.is_err(),
+                "duplicate slug"
+            );
             hub.close_all().await;
 
             let hub = WorkspaceHub::open(root.clone()).await.unwrap();
@@ -230,9 +256,15 @@ mod tests {
             assert!(current.last_opened_at.is_some());
 
             // Archiving the current one falls back; archived ones can't be chosen.
-            hub.update_workspace("vifc", crate::kernel::registry::WorkspacePatch { name: None, archived: Some(true) })
-                .await
-                .unwrap();
+            hub.update_workspace(
+                "vifc",
+                crate::kernel::registry::WorkspacePatch {
+                    name: None,
+                    archived: Some(true),
+                },
+            )
+            .await
+            .unwrap();
             assert_eq!(hub.current_workspace().await.unwrap().unwrap().slug, "acme");
             assert!(hub.set_current_workspace("vifc").await.is_err());
             hub.close_all().await;

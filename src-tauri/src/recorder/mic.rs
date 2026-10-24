@@ -2,11 +2,11 @@
 //! bounded channel with `try_send` (never blocks; a full channel counts a drop). All processing
 //! happens on the mixer thread. `cpal::Stream` is not `Send`, so this lives on the capture thread.
 
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SyncSender;
-use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, Stream};
 
@@ -22,7 +22,9 @@ pub fn start(tx: SyncSender<Vec<f32>>, shared: Arc<Shared>) -> Result<Mic> {
     let device = cpal::default_host()
         .default_input_device()
         .ok_or_else(|| AppError::new("no_microphone", "No microphone found"))?;
-    let supported = device.default_input_config().context("reading the microphone format")?;
+    let supported = device
+        .default_input_config()
+        .context("reading the microphone format")?;
     let config = supported.config();
     let (rate, channels) = (config.sample_rate, config.channels.max(1) as usize);
     let chunk = (rate / 10) as usize; // 100 ms
@@ -42,24 +44,41 @@ pub fn start(tx: SyncSender<Vec<f32>>, shared: Arc<Shared>) -> Result<Mic> {
     let stream = match supported.sample_format() {
         SampleFormat::F32 => device.build_input_stream(
             config,
-            move |data: &[f32], _: &_| push(&mut data.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32)),
+            move |data: &[f32], _: &_| {
+                push(
+                    &mut data
+                        .chunks(channels)
+                        .map(|f| f.iter().sum::<f32>() / channels as f32),
+                )
+            },
             on_error,
             None,
         ),
         SampleFormat::I16 => device.build_input_stream(
             config,
             move |data: &[i16], _: &_| {
-                push(&mut data.chunks(channels).map(|f| f.iter().map(|s| *s as f32 / i16::MAX as f32).sum::<f32>() / channels as f32))
+                push(&mut data.chunks(channels).map(|f| {
+                    f.iter().map(|s| *s as f32 / i16::MAX as f32).sum::<f32>() / channels as f32
+                }))
             },
             on_error,
             None,
         ),
-        other => bail!(AppError::new("unsupported_microphone", format!("Microphone sample format {other:?} is not supported"))),
+        other => bail!(AppError::new(
+            "unsupported_microphone",
+            format!("Microphone sample format {other:?} is not supported")
+        )),
     }
     .context("opening the microphone")?;
     stream.play().context("starting the microphone")?;
-    tracing::info!("microphone started: {:?} at {rate} Hz, {channels} ch", supported.sample_format());
-    Ok(Mic { _stream: stream, sample_rate: rate })
+    tracing::info!(
+        "microphone started: {:?} at {rate} Hz, {channels} ch",
+        supported.sample_format()
+    );
+    Ok(Mic {
+        _stream: stream,
+        sample_rate: rate,
+    })
 }
 
 #[cfg(test)]
@@ -68,11 +87,19 @@ mod tests {
     #[test]
     #[ignore]
     fn mic_raw_levels() {
-        let _ = tracing_subscriber::fmt().with_env_filter("info").with_test_writer().try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("info")
+            .with_test_writer()
+            .try_init();
         let (tx, rx) = std::sync::mpsc::sync_channel(50);
         let _mic = super::start(tx, Default::default()).unwrap();
         let speak = std::env::var("NEWDAWN_SPEAK").is_ok();
-        let mut speaker = speak.then(|| std::process::Command::new("say").arg("New Dawn recorder test").spawn().unwrap());
+        let mut speaker = speak.then(|| {
+            std::process::Command::new("say")
+                .arg("New Dawn recorder test")
+                .spawn()
+                .unwrap()
+        });
         let mut all = Vec::new();
         while all.len() < if speak { 96_000 } else { 48_000 } {
             all.extend(rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap());
@@ -83,6 +110,10 @@ mod tests {
         if let Some(s) = speaker.as_mut() {
             s.wait().unwrap();
         }
-        eprintln!("raw mic: n={} peak={peak:.4} rms={rms:.4} non_finite={nan} first={:?}", all.len(), &all[..8]);
+        eprintln!(
+            "raw mic: n={} peak={peak:.4} rms={rms:.4} non_finite={nan} first={:?}",
+            all.len(),
+            &all[..8]
+        );
     }
 }

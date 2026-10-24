@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use sqlx::migrate::Migrator;
 use sqlx::SqlitePool;
+use sqlx::migrate::Migrator;
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -42,13 +42,18 @@ pub struct Registry {
 impl Registry {
     pub async fn open(root: &Path) -> Result<Self> {
         let pool = open_pool(&root.join("registry.db"), &REGISTRY_MIGRATOR).await?;
-        Ok(Self { pool, root: root.to_owned() })
+        Ok(Self {
+            pool,
+            root: root.to_owned(),
+        })
     }
 
     pub async fn list(&self) -> Result<Vec<Workspace>> {
-        Ok(sqlx::query_as("SELECT * FROM workspace ORDER BY name COLLATE NOCASE")
-            .fetch_all(&self.pool)
-            .await?)
+        Ok(
+            sqlx::query_as("SELECT * FROM workspace ORDER BY name COLLATE NOCASE")
+                .fetch_all(&self.pool)
+                .await?,
+        )
     }
 
     pub async fn get(&self, slug: &str) -> Result<Workspace> {
@@ -72,13 +77,16 @@ impl Registry {
             .fetch_optional(&self.pool)
             .await?;
         if taken.is_some() {
-            bail!(AppError::invalid(format!("Slug '{slug}' is already in use")));
+            bail!(AppError::invalid(format!(
+                "Slug '{slug}' is already in use"
+            )));
         }
 
         let folder = self.root.join("workspaces").join(slug);
         for dir in WORKSPACE_DIRS {
             let path = folder.join(dir);
-            std::fs::create_dir_all(&path).with_context(|| format!("creating {}", path.display()))?;
+            std::fs::create_dir_all(&path)
+                .with_context(|| format!("creating {}", path.display()))?;
         }
 
         sqlx::query("INSERT INTO workspace (id, slug, name, folder_path) VALUES (?, ?, ?, ?)")
@@ -143,7 +151,10 @@ impl Registry {
     }
 
     pub async fn remove(&self, slug: &str) -> Result<()> {
-        sqlx::query("DELETE FROM workspace WHERE slug = ?").bind(slug).execute(&self.pool).await?;
+        sqlx::query("DELETE FROM workspace WHERE slug = ?")
+            .bind(slug)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
@@ -155,11 +166,15 @@ impl Registry {
 /// Lowercase letters, digits and inner hyphens; 1–40 chars. Used as a folder name.
 fn validate_slug(slug: &str) -> Result<()> {
     let ok = (1..=40).contains(&slug.len())
-        && slug.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        && slug
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
         && !slug.starts_with('-')
         && !slug.ends_with('-');
     if !ok {
-        bail!(AppError::invalid("Slug must be 1–40 lowercase letters, digits or hyphens"));
+        bail!(AppError::invalid(
+            "Slug must be 1–40 lowercase letters, digits or hyphens"
+        ));
     }
     Ok(())
 }
@@ -173,7 +188,16 @@ mod tests {
         for good in ["vifc", "acme-capital", "a1"] {
             assert!(validate_slug(good).is_ok(), "{good}");
         }
-        for bad in ["", "VIFC", "-x", "x-", "a b", "../x", "x/y", &"a".repeat(41)] {
+        for bad in [
+            "",
+            "VIFC",
+            "-x",
+            "x-",
+            "a b",
+            "../x",
+            "x/y",
+            &"a".repeat(41),
+        ] {
             assert!(validate_slug(bad).is_err(), "{bad}");
         }
     }

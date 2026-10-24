@@ -1,0 +1,91 @@
+.exportCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.exportHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.cardTitle {
+  font-size: var(--t-lg);
+  font-weight: 700;
+}
+
+.exportRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.nameField { flex: 1; }
+
+.error {
+  margin-top: var(--space-3);
+  font-size: var(--t-sm);
+  color: var(--status-negative);
+}
+
+.block { margin-top: var(--space-5); }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+
+.rowText { min-width: 0; }
+
+.rowName {
+  overflow: hidden;
+  font-size: var(--t-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.rowActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+/* Ghost slots: shape only, so .ghostCard supplies the dashed border. */
+.slot {
+  min-height: 56px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
+.previewSlot {
+  height: 320px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  height: 720px;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}

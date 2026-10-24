@@ -27,12 +27,13 @@ workspaces/<slug>/brand/templates/
 ```
 The VIFC starter pack ships with a port of your official **TEMPLATE_Bien_ban_cuoc_hop** (logo + tagline header, Lầu 30 address + page numbers footer, Be Vietnam Pro body). Starter templates live in the repo under `brands/<slug>/templates/` and are copied into a workspace on creation; a workspace can upload more in Settings → Workspaces → Templates.
 
-**Placeholders** (the only thing the template designer needs to know):
-- Simple: `{{title}}`, `{{workspace.name}}`, `{{meeting.date}}`, `{{meeting.attendees}}`, `{{tagline.en}}`, `{{tagline.vi}}`, `{{generated_at}}`.
-- Image: a picture whose *alt text* is `{{logo}}` is replaced by the workspace logo at the same size.
-- Rich: `{{summary}}`, `{{decisions}}`, `{{open_questions}}` — Markdown rendered into the template's own styles (Heading 2, Normal, List Bullet, Strong).
-- Repeating table: a table row that starts with `{{#actions}}` and ends with `{{/actions}}` is cloned per action item with `{{action.text}}`, `{{action.owner}}`, `{{action.due}}`.
-- Optional block: `{{#transcript}} … {{/transcript}}` is kept only when the user ticks "Include transcript".
+**Placeholders** (the only thing the template designer needs to know — as built in P3.2, D-023):
+- Field: `{{name}}` — text, kept in the formatting of the run where it starts; newlines become line breaks. Dotted paths work (`{{a.b}}`). Inside a block, the item's own keys are looked up first, then the outer data (so an item key must not reuse an outer name — attendees use `job_title`, not `title`).
+- Block: `{{#list}} … {{/list}}`. Both markers in one paragraph → the paragraph repeats; in different cells of one row → the row repeats; in different paragraphs/rows → that range repeats. Tables never repeat as a unit. Blocks nest (attendee groups → members, discussion items → points).
+- A block's value decides how often it renders: a list → once per item; `true`, an object, a number or a non-empty string → once; missing, `false`, `null`, `""` or `[]` → removed (a table left with no rows is removed too).
+- Filled parts: `word/document.xml`, headers and footers. Everything the engine doesn't touch is written back byte for byte.
+- The VIFC template fields: `title`, `datetime`, `meeting_type`, `reference`, `agenda[n, topic]`, `summary`, `next_focus`, `attendee_groups[organisation, members[name, job_title, attendance]]`, `discussion[number, topic, points[text]]`, `decisions[id, text, decided_by, condition]`, `actions[id, item, owner, due, status]`, `open_issues[n, issue, who, by]`. Fields the AI can't know stay as the template's `[ ]` hints.
+- Not built (YAGNI until a template needs it): logo swap by alt text (the template carries its own logo), Markdown-rendered rich fields, header/footer cell widening.
 
 **Bilingual rule (house style):** English first, Vietnamese second; in headers and footers each language sits on its own single line; the engine widens header/footer cells so neither line wraps. The manifest records `bilingual: { order: ["en","vi"], one_line_each: true }` and the template check warns if a header/footer cell is too narrow for the longest value.
 
@@ -53,6 +54,8 @@ Converting a Word file to a *faithful* PDF needs a Word-compatible layout engine
 The Settings → General page shows which converters were found; the export dialog shows which one will be used. No converter found → DOCX only, with a one-line explanation.
 
 ### 2.5 UI
+> **As built in P3.2 (D-024):** the Minutes tab has Word / Word + PDF (Word by default; a PDF is never made unless asked), a file name and Export; an Exports list (Open, Open PDF or Make PDF from the saved DOCX, Reveal in Finder) and an in-app preview of the newest PDF. Settings → Converters lists Word / LibreOffice / Pages. Template picker, language mode, include transcript/attendees options, Copy path and Template check are not built yet. Word measured ~10 s including launch.
+
 - Meeting page → toolbar **Export ▾** → "Meeting minutes (Word)", "Meeting minutes (PDF)", "Both". Dialog: template picker, language (EN / VI / bilingual), include transcript, include attendees, file name; **Preview** renders the PDF in-app (via the asset protocol) when a converter exists.
 - Finder-style result row with "Reveal in Finder", "Open", "Copy path"; a `document_export` record per export (template, converter used, file paths, duration) so re-exports are one click.
 - Settings → Workspaces → Templates: upload `.docx`, run **Template check** (lists placeholders found, missing/unknown fields, run-split placeholders fixed automatically, header/footer width warnings), set as default for a document kind.

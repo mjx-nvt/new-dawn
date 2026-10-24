@@ -7,14 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::UNIX_EPOCH;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 use tauri_specta::Event;
 use tokio::io::AsyncWriteExt;
 
-use super::{audio, Meeting, MeetingStatus, NewMeeting};
+use super::{Meeting, MeetingStatus, NewMeeting, audio};
 use crate::error::AppError;
 use crate::events::{TranscriptionFinished, TranscriptionProgress};
 use crate::kernel::ai::whisper::{self, Language, Progress, Segment, Stage, TranscribeJob};
@@ -26,7 +26,12 @@ pub struct TranscriptionJobs(Mutex<HashMap<String, Arc<AtomicBool>>>);
 
 impl TranscriptionJobs {
     pub fn cancel(&self, meeting_id: &str) {
-        if let Some(flag) = self.0.lock().unwrap_or_else(PoisonError::into_inner).get(meeting_id) {
+        if let Some(flag) = self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(meeting_id)
+        {
             flag.store(true, Ordering::Relaxed);
         }
     }
@@ -48,7 +53,9 @@ pub async fn import(app: &AppHandle, request: ImportRequest) -> Result<Meeting> 
         .and_then(|e| e.to_str())
         .map(str::to_lowercase)
         .filter(|e| audio::SUPPORTED_EXTENSIONS.contains(&e.as_str()))
-        .ok_or_else(|| AppError::invalid("Choose an audio file (m4a, mp3, wav, aiff, flac, ogg…)"))?;
+        .ok_or_else(|| {
+            AppError::invalid("Choose an audio file (m4a, mp3, wav, aiff, flac, ogg…)")
+        })?;
     let title = request.title.trim();
     if title.is_empty() {
         bail!(AppError::invalid("Title is required"));
@@ -64,10 +71,14 @@ pub async fn import(app: &AppHandle, request: ImportRequest) -> Result<Meeting> 
     let workspace = hub.workspace(&request.slug).await?;
     let pool = hub.pool(&request.slug)?;
     let id = super::new_id();
-    let folder = Path::new(&workspace.folder_path).join("recordings").join(&id);
+    let folder = Path::new(&workspace.folder_path)
+        .join("recordings")
+        .join(&id);
     tokio::fs::create_dir_all(&folder).await?;
     let audio_path = folder.join(format!("audio.{ext}"));
-    tokio::fs::copy(&request.source, &audio_path).await.context("copying the audio file")?;
+    tokio::fs::copy(&request.source, &audio_path)
+        .await
+        .context("copying the audio file")?;
 
     let meeting = super::create(
         &pool,
@@ -90,15 +101,22 @@ pub async fn import(app: &AppHandle, request: ImportRequest) -> Result<Meeting> 
 pub async fn start(app: &AppHandle, slug: &str, meeting_id: &str) -> Result<()> {
     let pool = app.state::<WorkspaceHub>().pool(slug)?;
     let meeting = super::get(&pool, meeting_id).await?;
-    if !matches!(meeting.status, MeetingStatus::Recorded | MeetingStatus::Failed | MeetingStatus::Transcribed) {
-        bail!(AppError::invalid("This meeting can't be transcribed right now"));
+    if !matches!(
+        meeting.status,
+        MeetingStatus::Recorded | MeetingStatus::Failed | MeetingStatus::Transcribed
+    ) {
+        bail!(AppError::invalid(
+            "This meeting can't be transcribed right now"
+        ));
     }
     let cancel = Arc::new(AtomicBool::new(false));
     {
         let jobs = app.state::<TranscriptionJobs>();
         let mut jobs = jobs.0.lock().unwrap_or_else(PoisonError::into_inner);
         if jobs.contains_key(meeting_id) {
-            bail!(AppError::invalid("This meeting is already being transcribed"));
+            bail!(AppError::invalid(
+                "This meeting is already being transcribed"
+            ));
         }
         jobs.insert(meeting_id.to_owned(), cancel.clone());
     }
@@ -106,7 +124,11 @@ pub async fn start(app: &AppHandle, slug: &str, meeting_id: &str) -> Result<()> 
     tauri::async_runtime::spawn(async move {
         let title = meeting.title.clone();
         let result = run(&app, &slug, pool, meeting, cancel).await;
-        app.state::<TranscriptionJobs>().0.lock().unwrap_or_else(PoisonError::into_inner).remove(&meeting_id);
+        app.state::<TranscriptionJobs>()
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&meeting_id);
         if let Err(err) = &result {
             tracing::warn!("transcription of {meeting_id} ended: {err:#}");
         }
@@ -118,7 +140,12 @@ pub async fn start(app: &AppHandle, slug: &str, meeting_id: &str) -> Result<()> 
             }
         }
         let error = result.err().map(AppError::from);
-        let _ = TranscriptionFinished { workspace_slug: slug, meeting_id, error }.emit(&app);
+        let _ = TranscriptionFinished {
+            workspace_slug: slug,
+            meeting_id,
+            error,
+        }
+        .emit(&app);
     });
     Ok(())
 }
@@ -130,7 +157,13 @@ fn notify_finished(app: &AppHandle, meeting_title: &str, result: &Result<()>) {
         Err(err) if whisper::is_cancelled(err) => return,
         Err(_) => "Transcription failed",
     };
-    if let Err(err) = app.notification().builder().title(heading).body(meeting_title).show() {
+    if let Err(err) = app
+        .notification()
+        .builder()
+        .title(heading)
+        .body(meeting_title)
+        .show()
+    {
         tracing::warn!("could not show a notification: {err}");
     }
 }
@@ -138,27 +171,63 @@ fn notify_finished(app: &AppHandle, meeting_title: &str, result: &Result<()>) {
 /// Marks `transcribing`, runs the gateway, saves; on any failure after that point the status is
 /// set exactly once: cancel restores the previous status, an error becomes `failed` unless an
 /// earlier transcript exists.
-async fn run(app: &AppHandle, slug: &str, pool: SqlitePool, meeting: Meeting, cancel: Arc<AtomicBool>) -> Result<()> {
+async fn run(
+    app: &AppHandle,
+    slug: &str,
+    pool: SqlitePool,
+    meeting: Meeting,
+    cancel: Arc<AtomicBool>,
+) -> Result<()> {
     let previous = meeting.status;
-    let audio_path = PathBuf::from(meeting.audio_path.clone().context("meeting has no audio file")?);
+    let audio_path = PathBuf::from(
+        meeting
+            .audio_path
+            .clone()
+            .context("meeting has no audio file")?,
+    );
     let progress: Progress = {
         let (app, slug, meeting_id) = (app.clone(), slug.to_owned(), meeting.id.clone());
         Arc::new(move |stage, percent| {
-            let event = TranscriptionProgress { workspace_slug: slug.clone(), meeting_id: meeting_id.clone(), stage, percent };
+            let event = TranscriptionProgress {
+                workspace_slug: slug.clone(),
+                meeting_id: meeting_id.clone(),
+                stage,
+                percent,
+            };
             let _ = event.emit(&app);
         })
     };
     super::set_status(&pool, &meeting.id, MeetingStatus::Transcribing).await?;
 
     let outcome: Result<()> = async {
-        let job = TranscribeJob { meeting_id: &meeting.id, language: meeting.language, cancel };
+        let job = TranscribeJob {
+            meeting_id: &meeting.id,
+            language: meeting.language,
+            cancel,
+        };
         let source = audio_path.clone();
-        let transcript = whisper::transcribe(app, &pool, job, move || audio::load_16k_mono(&source), progress.clone()).await?;
+        let transcript = whisper::transcribe(
+            app,
+            &pool,
+            job,
+            move || audio::load_16k_mono(&source),
+            progress.clone(),
+        )
+        .await?;
         progress(Stage::Saving, 97);
-        super::save_transcript(&pool, &meeting.id, &transcript.segments, transcript.duration_ms).await?;
+        super::save_transcript(
+            &pool,
+            &meeting.id,
+            &transcript.segments,
+            transcript.duration_ms,
+        )
+        .await?;
         // Side file only; the database is the source of truth, so a failure here is not fatal.
         if let Some(folder) = audio_path.parent() {
-            if let Err(err) = write_transcript_json(folder, &meeting.id, transcript.model, &transcript.segments).await {
+            if let Err(err) =
+                write_transcript_json(folder, &meeting.id, transcript.model, &transcript.segments)
+                    .await
+            {
                 tracing::warn!("could not write transcript.json: {err:#}");
             }
         }
@@ -167,8 +236,15 @@ async fn run(app: &AppHandle, slug: &str, pool: SqlitePool, meeting: Meeting, ca
     .await;
 
     if let Err(err) = &outcome {
-        let had_transcript = matches!(previous, MeetingStatus::Transcribed | MeetingStatus::Summarising | MeetingStatus::Summarised);
-        let status = if whisper::is_cancelled(err) || had_transcript { previous } else { MeetingStatus::Failed };
+        let had_transcript = matches!(
+            previous,
+            MeetingStatus::Transcribed | MeetingStatus::Summarising | MeetingStatus::Summarised
+        );
+        let status = if whisper::is_cancelled(err) || had_transcript {
+            previous
+        } else {
+            MeetingStatus::Failed
+        };
         if let Err(e) = super::set_status(&pool, &meeting.id, status).await {
             tracing::warn!("could not reset meeting status: {e:#}");
         }
@@ -177,7 +253,12 @@ async fn run(app: &AppHandle, slug: &str, pool: SqlitePool, meeting: Meeting, ca
 }
 
 /// Side file next to the audio: temp file, fsync, then rename (atomic and durable).
-async fn write_transcript_json(folder: &Path, meeting_id: &str, model: &str, segments: &[Segment]) -> Result<()> {
+async fn write_transcript_json(
+    folder: &Path,
+    meeting_id: &str,
+    model: &str,
+    segments: &[Segment],
+) -> Result<()> {
     let body = serde_json::to_vec_pretty(&serde_json::json!({
         "meeting_id": meeting_id,
         "model": model,

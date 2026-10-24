@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri::{AppHandle, Manager};
@@ -24,7 +24,7 @@ use crate::events::{RecorderLevel, RecorderStatusChanged};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::permissions::{self, PermissionState};
-use crate::modules::meetings::{self, transcribe, Meeting, MeetingStatus, NewMeeting};
+use crate::modules::meetings::{self, Meeting, MeetingStatus, NewMeeting, transcribe};
 use sqlx::SqlitePool;
 
 /// Bounded channel size per source: 50 × ~100 ms = 5 s of slack before chunks are dropped.
@@ -84,7 +84,9 @@ struct Active {
 impl Active {
     fn elapsed(&self) -> Duration {
         let paused_now = self.paused_since.map(|t| t.elapsed()).unwrap_or_default();
-        self.started.elapsed().saturating_sub(self.paused_total + paused_now)
+        self.started
+            .elapsed()
+            .saturating_sub(self.paused_total + paused_now)
     }
 
     fn status(&self) -> RecorderStatus {
@@ -134,13 +136,16 @@ impl Recorder {
     }
 
     pub fn status(&self) -> RecorderStatus {
-        self.lock().as_ref().map(Active::status).unwrap_or(RecorderStatus {
-            phase: RecorderPhase::Idle,
-            workspace_slug: None,
-            meeting_id: None,
-            elapsed_ms: 0,
-            system_audio: SystemAudio::Ok,
-        })
+        self.lock()
+            .as_ref()
+            .map(Active::status)
+            .unwrap_or(RecorderStatus {
+                phase: RecorderPhase::Idle,
+                workspace_slug: None,
+                meeting_id: None,
+                elapsed_ms: 0,
+                system_audio: SystemAudio::Ok,
+            })
     }
 
     /// App exit: stop capture and finalise the WAV; the meeting is settled at next launch.
@@ -167,17 +172,26 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     }
     match permissions::request_microphone().await? {
         PermissionState::Granted => {}
-        _ => bail!(AppError::new("microphone_denied", "New Dawn needs microphone access (System Settings → Privacy & Security → Microphone)")),
+        _ => bail!(AppError::new(
+            "microphone_denied",
+            "New Dawn needs microphone access (System Settings → Privacy & Security → Microphone)"
+        )),
     }
 
     let hub = app.state::<WorkspaceHub>();
     let workspace = hub.workspace(&request.slug).await?;
     let pool = hub.pool(&request.slug)?;
     let id = meetings::new_id();
-    let folder = Path::new(&workspace.folder_path).join("recordings").join(&id);
-    tokio::fs::create_dir_all(&folder).await.with_context(|| format!("creating {}", folder.display()))?;
+    let folder = Path::new(&workspace.folder_path)
+        .join("recordings")
+        .join(&id);
+    tokio::fs::create_dir_all(&folder)
+        .await
+        .with_context(|| format!("creating {}", folder.display()))?;
     let path = folder.join("audio.wav");
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
     let meeting = meetings::create(
         &pool,
         NewMeeting {
@@ -196,11 +210,15 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<bool>>();
     let capture = spawn_capture(path, shared.clone(), stop_rx, ready_tx);
-    let ready = tokio::task::spawn_blocking(move || ready_rx.recv().map_err(|_| anyhow!("capture thread exited")))
-        .await
-        .map_err(anyhow::Error::from)
-        .and_then(|r| r)
-        .and_then(|r| r);
+    let ready = tokio::task::spawn_blocking(move || {
+        ready_rx
+            .recv()
+            .map_err(|_| anyhow!("capture thread exited"))
+    })
+    .await
+    .map_err(anyhow::Error::from)
+    .and_then(|r| r)
+    .and_then(|r| r);
     let tap_available = match ready {
         Ok(tap) => tap,
         Err(err) => {
@@ -233,7 +251,9 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
 pub fn pause(app: &AppHandle, paused: bool) -> Result<RecorderStatus> {
     let recorder = app.state::<Recorder>();
     let mut guard = recorder.lock();
-    let active = guard.as_mut().ok_or_else(|| AppError::invalid("Nothing is recording"))?;
+    let active = guard
+        .as_mut()
+        .ok_or_else(|| AppError::invalid("Nothing is recording"))?;
     match (paused, active.paused_since) {
         (true, None) => active.paused_since = Some(Instant::now()),
         (false, Some(since)) => {
@@ -253,17 +273,29 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
     let (slug, meeting_id, capture, stop) = {
         let recorder = app.state::<Recorder>();
         let mut guard = recorder.lock();
-        let active = guard.as_mut().ok_or_else(|| AppError::invalid("Nothing is recording"))?;
+        let active = guard
+            .as_mut()
+            .ok_or_else(|| AppError::invalid("Nothing is recording"))?;
         if active.stopping {
             bail!(AppError::invalid("Already stopping"));
         }
         active.stopping = true;
         let _ = RecorderStatusChanged(active.status()).emit(app);
-        (active.slug.clone(), active.meeting_id.clone(), active.capture.take(), active.stop.clone())
+        (
+            active.slug.clone(),
+            active.meeting_id.clone(),
+            active.capture.take(),
+            active.stop.clone(),
+        )
     };
     let _ = stop.send(());
     let joined: Result<u64> = match capture {
-        Some(handle) => match tokio::time::timeout(STOP_TIMEOUT, tokio::task::spawn_blocking(move || handle.join())).await {
+        Some(handle) => match tokio::time::timeout(
+            STOP_TIMEOUT,
+            tokio::task::spawn_blocking(move || handle.join()),
+        )
+        .await
+        {
             Ok(Ok(Ok(result))) => result,
             Ok(Ok(Err(_))) => Err(anyhow!("capture thread panicked")),
             Ok(Err(err)) => Err(err.into()),
@@ -285,7 +317,9 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
             match repair_file(meeting.audio_path).await {
                 Ok(samples) => samples,
                 Err(repair_err) => {
-                    meetings::set_status(&pool, &meeting_id, MeetingStatus::Failed).await.ok();
+                    meetings::set_status(&pool, &meeting_id, MeetingStatus::Failed)
+                        .await
+                        .ok();
                     return Err(repair_err);
                 }
             }
@@ -303,7 +337,9 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
 pub async fn recover(pool: &SqlitePool) -> Result<()> {
     for (id, path) in meetings::interrupted_recordings(pool).await? {
         match repair_file(path).await {
-            Ok(samples) if samples > 0 => meetings::finish_recording(pool, &id, saver::duration_ms(samples)).await?,
+            Ok(samples) if samples > 0 => {
+                meetings::finish_recording(pool, &id, saver::duration_ms(samples)).await?
+            }
             other => {
                 tracing::warn!("recording {id} could not be recovered: {:?}", other.err());
                 meetings::set_status(pool, &id, MeetingStatus::Failed).await?;
@@ -320,7 +356,12 @@ async fn repair_file(path: Option<String>) -> Result<u64> {
 
 /// Capture thread: owns the mic stream and the tap (neither is Send), runs the mixer, and keeps
 /// both alive until `stop`. Reports `Ok(tap_available)` or the start error through `ready`.
-fn spawn_capture(path: PathBuf, shared: Arc<Shared>, stop: mpsc::Receiver<()>, ready: Sender<Result<bool>>) -> JoinHandle<Result<u64>> {
+fn spawn_capture(
+    path: PathBuf,
+    shared: Arc<Shared>,
+    stop: mpsc::Receiver<()>,
+    ready: Sender<Result<bool>>,
+) -> JoinHandle<Result<u64>> {
     std::thread::Builder::new()
         .name("recorder-capture".into())
         .spawn(move || -> Result<u64> {
@@ -341,14 +382,22 @@ fn spawn_capture(path: PathBuf, shared: Arc<Shared>, stop: mpsc::Receiver<()>, r
             let tap = match system_tap::start(sys_tx, shared.clone()) {
                 Ok(tap) => Some(tap),
                 Err(err) => {
-                    tracing::warn!("system audio unavailable, recording the microphone only: {err:#}");
+                    tracing::warn!(
+                        "system audio unavailable, recording the microphone only: {err:#}"
+                    );
                     None
                 }
             };
             let _ = ready.send(Ok(tap.is_some()));
 
-            let mic_source = Source { rx: mic_rx, rate: mic.sample_rate };
-            let sys_source = tap.as_ref().map(|t| Source { rx: sys_rx, rate: t.sample_rate });
+            let mic_source = Source {
+                rx: mic_rx,
+                rate: mic.sample_rate,
+            };
+            let sys_source = tap.as_ref().map(|t| Source {
+                rx: sys_rx,
+                rate: t.sample_rate,
+            });
             let mixer_shared = shared.clone();
             let mixer = std::thread::Builder::new()
                 .name("recorder-mixer".into())
@@ -378,8 +427,15 @@ fn spawn_meter(app: AppHandle) {
                 let guard = recorder.lock();
                 guard.as_ref().map(|a| (a.shared.levels(), a.status()))
             };
-            let Some(((you, them), status)) = snapshot else { break };
-            let _ = RecorderLevel { you, them, elapsed_ms: status.elapsed_ms }.emit(&app);
+            let Some(((you, them), status)) = snapshot else {
+                break;
+            };
+            let _ = RecorderLevel {
+                you,
+                them,
+                elapsed_ms: status.elapsed_ms,
+            }
+            .emit(&app);
             if last_system != Some(status.system_audio) {
                 last_system = Some(status.system_audio);
                 let _ = RecorderStatusChanged(status).emit(&app);
@@ -391,10 +447,10 @@ fn spawn_meter(app: AppHandle) {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::Ordering;
-    use std::sync::{mpsc, Arc};
+    use std::sync::{Arc, mpsc};
     use std::time::Duration;
 
-    use super::{spawn_capture, Shared};
+    use super::{Shared, spawn_capture};
     use crate::kernel::permissions;
     use crate::modules::meetings::audio::load_16k_mono;
 
@@ -403,8 +459,14 @@ mod tests {
     #[test]
     #[ignore]
     fn live_capture() {
-        let _ = tracing_subscriber::fmt().with_env_filter("info").with_test_writer().try_init();
-        eprintln!("microphone permission: {:?}", permissions::microphone().unwrap());
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter("info")
+            .with_test_writer()
+            .try_init();
+        eprintln!(
+            "microphone permission: {:?}",
+            permissions::microphone().unwrap()
+        );
         let path = std::env::temp_dir().join(format!("newdawn-live-{}.wav", uuid::Uuid::now_v7()));
         let shared = Arc::new(Shared::default());
         let (stop_tx, stop_rx) = mpsc::channel();
@@ -413,7 +475,10 @@ mod tests {
         let tap = ready_rx.recv().unwrap().expect("capture should start");
         eprintln!("system tap available: {tap}");
 
-        let mut speaker = std::process::Command::new("say").arg("New Dawn recorder test").spawn().unwrap();
+        let mut speaker = std::process::Command::new("say")
+            .arg("New Dawn recorder test")
+            .spawn()
+            .unwrap();
         let mut peak_them = 0.0f32;
         let mut peak_you = 0.0f32;
         for _ in 0..30 {

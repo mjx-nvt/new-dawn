@@ -30,6 +30,13 @@ export const commands = {
 	openSummaryInMail: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_summary_in_mail", { slug, meetingId })),
 	ollamaStatus: () => typedError<OllamaStatus, AppError>(__TAURI_INVOKE("ollama_status")),
 	openOllamaApp: () => typedError<null, AppError>(__TAURI_INVOKE("open_ollama_app")),
+	exportMinutesDocx: (slug: string, meetingId: string, options: ExportOptions_Deserialize) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_docx", { slug, meetingId, options })),
+	/**  PDF of an existing export's DOCX (picks up edits made in Word since; replaces an older PDF). */
+	exportMinutesPdf: (slug: string, exportId: string) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_pdf", { slug, exportId })),
+	listMinutesExports: (slug: string, meetingId: string) => typedError<MinutesExport_Serialize[], AppError>(__TAURI_INVOKE("list_minutes_exports", { slug, meetingId })),
+	listConverters: () => typedError<ConverterInfo_Serialize[], AppError>(__TAURI_INVOKE("list_converters")),
+	/**  Opens an export's DOCX or PDF in its default app, or shows it in Finder (`reveal`). */
+	openMinutesFile: (slug: string, exportId: string, file: MinutesFile, reveal: boolean) => typedError<null, AppError>(__TAURI_INVOKE("open_minutes_file", { slug, exportId, file, reveal })),
 	recorderStatus: () => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("recorder_status")),
 	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId })),
 	setRecordingPaused: (paused: boolean) => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("set_recording_paused", { paused })),
@@ -85,6 +92,64 @@ export type ActionItem = {
 export type AppError = {
 	code: string,
 	message: string,
+};
+
+export type Attendee = Attendee_Serialize | Attendee_Deserialize;
+
+export type Attendee_Deserialize = {
+	name?: string,
+	organisation?: string,
+	/**  Job title, as said. */
+	title?: string,
+	attendance?: string,
+};
+
+export type Attendee_Serialize = {
+	name: string,
+	organisation: string,
+	/**  Job title, as said. */
+	title: string,
+	attendance: string,
+};
+
+export type Converter = "word" | "libreoffice" | "pages";
+
+export type ConverterInfo = ConverterInfo_Serialize | ConverterInfo_Deserialize;
+
+export type ConverterInfo_Deserialize = {
+	converter: Converter,
+	name: string,
+	/**  Where the app was found; `None` when it isn't installed. */
+	path?: string | null,
+};
+
+export type ConverterInfo_Serialize = {
+	converter: Converter,
+	name: string,
+	/**  Where the app was found; `None` when it isn't installed. */
+	path: string | null,
+};
+
+export type Decision = {
+	text: string,
+	decided_by: string,
+	condition: string,
+};
+
+export type ExportOptions = ExportOptions_Serialize | ExportOptions_Deserialize;
+
+export type ExportOptions_Deserialize = {
+	/**  Fills a `{{#transcript}}` block when the template has one. */
+	include_transcript: boolean,
+	/**  Without extension; default "<yyyy-mm-dd> <title>". */
+	file_name?: string | null,
+};
+
+export type ExportOptions_Serialize = {
+	/**  Fills a `{{#transcript}}` block when the template has one. */
+	include_transcript: boolean,
+	/**  Without extension; default "<yyyy-mm-dd> <title>". */
+	file_name: string | null,
 };
 
 export type GlassStatus = "liquid_glass" | "vibrancy" | "none";
@@ -155,6 +220,30 @@ export type MenuAction = "switch_workspace" | "toggle_sidebar" | "open_tenant_se
 /**  File → New Recording (⌘R) or the tray item: start when idle, stop when recording. */
 "toggle_recording";
 
+export type MinutesExport = MinutesExport_Serialize | MinutesExport_Deserialize;
+
+export type MinutesExport_Deserialize = {
+	id: string,
+	meeting_id: string,
+	docx_path?: string | null,
+	pdf_path?: string | null,
+	converter?: Converter | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type MinutesExport_Serialize = {
+	id: string,
+	meeting_id: string,
+	docx_path: string | null,
+	pdf_path: string | null,
+	converter: Converter | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type MinutesFile = "docx" | "pdf";
+
 /**  A model download ended: `error` is None on success. */
 export type ModelDownloadFinished = ModelDownloadFinished_Serialize | ModelDownloadFinished_Deserialize;
 
@@ -194,6 +283,24 @@ export type OllamaStatus = {
 	running: boolean,
 	model_installed: boolean,
 	model: string,
+};
+
+export type OpenIssue = OpenIssue_Serialize | OpenIssue_Deserialize;
+
+export type OpenIssue_Deserialize = {
+	issue?: string,
+	/**  Who can answer it. */
+	who?: string,
+	/**  By when. */
+	by?: string,
+};
+
+export type OpenIssue_Serialize = {
+	issue: string,
+	/**  Who can answer it. */
+	who: string,
+	/**  By when. */
+	by: string,
 };
 
 /**  Ask an already-open Settings window to show a tab. */
@@ -252,11 +359,38 @@ export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "
 /**  Where a transcription job is; sent to the UI with a 0–100 percent. */
 export type Stage = "queued" | "decoding" | "detecting_speech" | "transcribing" | "saving";
 
-/**  What `summary.sections_json` holds. */
-export type SummaryDoc = {
+/**
+ *  What `summary.sections_json` holds. The structured lists feed the email sections and the
+ *  minutes document; fields added in P3.2 default to empty for older summaries.
+ */
+export type SummaryDoc = SummaryDoc_Serialize | SummaryDoc_Deserialize;
+
+/**
+ *  What `summary.sections_json` holds. The structured lists feed the email sections and the
+ *  minutes document; fields added in P3.2 default to empty for older summaries.
+ */
+export type SummaryDoc_Deserialize = {
 	sections: Section[],
-	decisions: string[],
+	attendees?: Attendee_Deserialize[],
+	discussion?: Topic_Deserialize[],
+	decisions: Decision[],
 	action_items: ActionItem[],
+	open_issues?: OpenIssue_Deserialize[],
+	next_focus?: string,
+};
+
+/**
+ *  What `summary.sections_json` holds. The structured lists feed the email sections and the
+ *  minutes document; fields added in P3.2 default to empty for older summaries.
+ */
+export type SummaryDoc_Serialize = {
+	sections: Section[],
+	attendees: Attendee_Serialize[],
+	discussion: Topic_Serialize[],
+	decisions: Decision[],
+	action_items: ActionItem[],
+	open_issues: OpenIssue_Serialize[],
+	next_focus: string,
 };
 
 /**  A summary job ended: `error` is None on success; code `cancelled` when stopped. */
@@ -293,7 +427,7 @@ export type SummaryView = SummaryView_Serialize | SummaryView_Deserialize;
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView_Deserialize = {
-	doc: SummaryDoc,
+	doc: SummaryDoc_Deserialize,
 	sections_html: string[],
 	email_subject: string,
 	email_md: string,
@@ -304,7 +438,7 @@ export type SummaryView_Deserialize = {
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView_Serialize = {
-	doc: SummaryDoc,
+	doc: SummaryDoc_Serialize,
 	sections_html: string[],
 	email_subject: string,
 	email_md: string,
@@ -320,6 +454,21 @@ export type SystemAudio =
 "silent" | 
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
+
+/**  One agenda item / topic and what was said about it. */
+export type Topic = Topic_Serialize | Topic_Deserialize;
+
+/**  One agenda item / topic and what was said about it. */
+export type Topic_Deserialize = {
+	topic?: string,
+	points?: string[],
+};
+
+/**  One agenda item / topic and what was said about it. */
+export type Topic_Serialize = {
+	topic: string,
+	points: string[],
+};
 
 export type TranscriptSegment = {
 	seq: number,

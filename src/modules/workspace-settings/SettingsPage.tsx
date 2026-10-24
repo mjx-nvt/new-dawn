@@ -2,9 +2,9 @@ import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useOpenSettingsTab, useWorkspacesSync } from "../../kernel/bridge/events";
 import type { SettingsTab } from "../../kernel/bridge/settings";
 import AboutTab from "./AboutTab";
+import ConvertersPanel from "./ConvertersPanel";
 import GeneralTab from "./GeneralTab";
 import ModelsPanel from "../models/ModelsPanel";
-import GhostTab from "./GhostTab";
 import styles from "./SettingsPage.module.css";
 import WorkspacesPanel from "./WorkspacesPanel";
 
@@ -27,9 +27,7 @@ function TabContent({ tab }: { tab: SettingsTab }) {
     case "models":
       return <ModelsPanel />;
     case "converters":
-      return (
-        <GhostTab sections={[{ title: "PDF converter", subtitle: "Word, LibreOffice or Pages turns the minutes into a PDF" }]} />
-      );
+      return <ConvertersPanel />;
     case "about":
       return <AboutTab />;
   }

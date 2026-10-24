@@ -4,8 +4,8 @@ use serde::Serialize;
 use specta::Type;
 use tauri::WebviewWindow;
 use window_vibrancy::{
-    apply_liquid_glass, apply_vibrancy, LiquidGlassOptions, NSGlassEffectViewStyle,
-    NSVisualEffectMaterial,
+    LiquidGlassOptions, NSGlassEffectViewStyle, NSVisualEffectMaterial, apply_liquid_glass,
+    apply_vibrancy,
 };
 
 /// Matches `--radius-window` in src/styles/tokens.css.
@@ -29,7 +29,12 @@ pub fn apply_shell_glass(window: &WebviewWindow) {
         Ok(()) => GlassStatus::LiquidGlass,
         Err(liquid_err) => {
             tracing::warn!("liquid glass unavailable ({liquid_err}); falling back to vibrancy");
-            match apply_vibrancy(window, NSVisualEffectMaterial::Sidebar, None, Some(WINDOW_RADIUS)) {
+            match apply_vibrancy(
+                window,
+                NSVisualEffectMaterial::Sidebar,
+                None,
+                Some(WINDOW_RADIUS),
+            ) {
                 Ok(()) => GlassStatus::Vibrancy,
                 Err(err) => {
                     tracing::warn!("vibrancy unavailable ({err}); window stays transparent");

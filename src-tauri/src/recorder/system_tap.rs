@@ -4,11 +4,11 @@
 
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::SyncSender;
-use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use cidre::{arc, cat, cf, core_audio as ca, ns, os};
 
 use super::mixer::Shared;
@@ -41,18 +41,30 @@ struct TapContext {
 }
 
 pub fn start(tx: SyncSender<Vec<f32>>, shared: Arc<Shared>) -> Result<SystemTap> {
-    let output = ca::System::default_output_device().map_err(|e| anyhow!("no output device: {e:?}"))?;
-    let output_uid = output.uid().map_err(|e| anyhow!("output device uid: {e:?}"))?;
+    let output =
+        ca::System::default_output_device().map_err(|e| anyhow!("no output device: {e:?}"))?;
+    let output_uid = output
+        .uid()
+        .map_err(|e| anyhow!("output device uid: {e:?}"))?;
 
     let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
-    let tap = tap_desc.create_process_tap().map_err(|e| anyhow!("creating the process tap: {e:?}"))?;
-    let asbd = tap.asbd().map_err(|e| anyhow!("reading the tap format: {e:?}"))?;
+    let tap = tap_desc
+        .create_process_tap()
+        .map_err(|e| anyhow!("creating the process tap: {e:?}"))?;
+    let asbd = tap
+        .asbd()
+        .map_err(|e| anyhow!("reading the tap format: {e:?}"))?;
     if asbd.bits_per_channel != 32 || !asbd.format_flags.contains(cat::AudioFormatFlags::IS_FLOAT) {
-        bail!("unexpected tap format: {} bits, flags {:?}", asbd.bits_per_channel, asbd.format_flags);
+        bail!(
+            "unexpected tap format: {} bits, flags {:?}",
+            asbd.bits_per_channel,
+            asbd.format_flags
+        );
     }
     let tap_uid = tap.uid().map_err(|e| anyhow!("tap uid: {e:?}"))?;
 
-    let sub_tap = cf::DictionaryOf::with_keys_values(&[ca::sub_device_keys::uid()], &[tap_uid.as_type_ref()]);
+    let sub_tap =
+        cf::DictionaryOf::with_keys_values(&[ca::sub_device_keys::uid()], &[tap_uid.as_type_ref()]);
     let agg_desc = cf::DictionaryOf::with_keys_values(
         &[
             ca::aggregate_device_keys::is_private(),
@@ -73,11 +85,17 @@ pub fn start(tx: SyncSender<Vec<f32>>, shared: Arc<Shared>) -> Result<SystemTap>
             &cf::ArrayOf::from_slice(&[sub_tap.as_ref()]),
         ],
     );
-    let agg = ca::AggregateDevice::with_desc(&agg_desc).map_err(|e| anyhow!("creating the aggregate device: {e:?}"))?;
+    let agg = ca::AggregateDevice::with_desc(&agg_desc)
+        .map_err(|e| anyhow!("creating the aggregate device: {e:?}"))?;
     let sample_rate = agg.nominal_sample_rate().unwrap_or(asbd.sample_rate) as u32;
 
     let chunk = (sample_rate / 10).max(1) as usize;
-    let ctx = Box::into_raw(Box::new(TapContext { tx, shared, pending: Vec::with_capacity(chunk * 2), chunk }));
+    let ctx = Box::into_raw(Box::new(TapContext {
+        tx,
+        shared,
+        pending: Vec::with_capacity(chunk * 2),
+        chunk,
+    }));
     // SAFETY: `ctx` comes from `Box::into_raw` and stays valid until `SystemTap::drop` (or the
     // error paths below) frees it, always after the device has stopped calling `io_proc`.
     let ctx = unsafe { NonNull::new_unchecked(ctx) };
@@ -95,9 +113,18 @@ pub fn start(tx: SyncSender<Vec<f32>>, shared: Arc<Shared>) -> Result<SystemTap>
             bail!("starting system audio capture: {e:?}");
         }
     };
-    tracing::info!("system audio tap started at {sample_rate} Hz ({} ch)", asbd.channels_per_frame);
+    tracing::info!(
+        "system audio tap started at {sample_rate} Hz ({} ch)",
+        asbd.channels_per_frame
+    );
 
-    Ok(SystemTap { started: ManuallyDrop::new(started), ctx, _tap: tap, _agg_desc: agg_desc, sample_rate })
+    Ok(SystemTap {
+        started: ManuallyDrop::new(started),
+        ctx,
+        _tap: tap,
+        _agg_desc: agg_desc,
+        sample_rate,
+    })
 }
 
 /// Core Audio IO proc (real-time thread): copy the tap's float samples, never block.
@@ -110,7 +137,9 @@ extern "C" fn io_proc(
     _output_time: &cat::AudioTimeStamp,
     ctx: Option<&mut TapContext>,
 ) -> os::Status {
-    let Some(ctx) = ctx else { return os::Status::NO_ERR };
+    let Some(ctx) = ctx else {
+        return os::Status::NO_ERR;
+    };
     if input.number_buffers == 0 {
         return os::Status::NO_ERR;
     }
@@ -121,7 +150,10 @@ extern "C" fn io_proc(
         // SAFETY: Core Audio gives a valid buffer of `data_bytes_size` bytes of f32 samples for the
         // duration of this call (the tap format is 32-bit float PCM).
         let data = unsafe { std::slice::from_raw_parts(buf.data as *const f32, floats) };
-        ctx.pending.extend(data.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32));
+        ctx.pending.extend(
+            data.chunks(channels)
+                .map(|f| f.iter().sum::<f32>() / channels as f32),
+        );
         // ponytail: one allocation per ~100 ms chunk on the real-time thread (like Meetily); move
         // to a preallocated ring buffer if dropouts ever show up.
         if ctx.pending.len() >= ctx.chunk {

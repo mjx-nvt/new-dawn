@@ -2,6 +2,34 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-024 — Minutes export: structured summary, PDF only on request, converter chain
+_2026-10-24_
+
+**Decision** (user-approved D2 for P3.2; "PDF is an option, never forced"):
+- **One summary call, richer JSON**: attendees (organisation, job title, attendance), discussion per topic, decisions with `decided_by` / `condition`, open issues with `who` / `by`, `next_focus`. The email's Key points / Decisions / Action items / Open questions sections are rendered from these lists (Key points now grouped by topic). Older summaries still load (decisions stored as plain strings are read as `{text}`). Live: 42 s for the test meeting (was 24 s).
+- **Model** `kernel/export/model.rs` maps meeting + summary onto the template fields (docs/document-export.md §2.2): local-time date line "Friday, 24/10/2026 — 10:00–11:30" (chrono `Local`), reference `BB-DDMMYYYY-NN` where NN is the meeting's position among meetings held the same local day (no stored counter), attendees grouped by organisation. Numbering prefixes ("3.", "QĐ-", "CV-") live in the template; data gives `n` and `nn`.
+- **Exports are explicit**: nothing is exported automatically. `export_minutes_docx` writes `exports/<yyyy-mm-dd> <title>.docx` (never overwrites: " 2", " 3"…) and a `document_export` row; `export_minutes_pdf` converts an export's DOCX **as it is on disk**, so edits made in Word are kept. The Minutes tab offers Word or Word + PDF (Word by default).
+- **PDF** `kernel/export/pdf.rs`: Microsoft Word → LibreOffice → Pages, first found and working; 60 s timeout, process killed on drop; paths passed to AppleScript as `argv`. Word and Pages work inside their own sandbox container (no file-access prompt); Word is quit afterwards only if the export launched it. Measured: Word 10.5 s including launch. One conversion at a time (a process-wide lock); the Word script addresses its document by a unique file name, never "the active document". Stored export paths are only opened/converted when they resolve inside the workspace's `exports/` folder.
+- **Template lookup**: the workspace's `brand/templates/meeting-minutes/template.docx`, else the bundled starter pack with the same slug (until tenant setup copies packs into workspaces).
+- `NSAppleEventsUsageDescription` added to Info.plist and `com.apple.security.automation.apple-events` to the entitlements (needed for hardened-runtime builds, P4.1).
+
+**Known limits**: hand edits to Key points / Decisions / Action items / Open questions on the Summary tab change the email only — the minutes use the structured lists (to be solved with review/editing, P3.3). LibreOffice and Pages paths are untested on this Mac (not installed). The first PDF may show macOS prompts: control Microsoft Word (Automation) and possibly "access data from other apps" (writing into Word's container).
+
+---
+
+## D-023 — Minutes DOCX: template engine, VIFC placeholder template, unknown fields stay as hints
+_2026-10-24_
+
+**Decision** (user-approved D1–D4 for P3.2):
+- **Engine** `kernel/export/docx.rs`: a minimal DOM over quick-xml that keeps every tag's raw source, so everything the engine doesn't fill is written back byte for byte. Template language in plain Word text: `{{field}}` (newlines → line breaks) and `{{#list}} … {{/list}}` blocks — a paragraph repeats when both markers are in it, a row when they're in different cells, a range of paragraphs/rows when they're in different elements; tables never repeat as a unit; empty/missing lists remove the block; blocks nest. Placeholders split across runs are merged first (the run where the placeholder starts keeps its formatting). Document, headers and footers are filled; other zip entries are raw-copied; output written to a temp file then renamed.
+- **The VIFC template is a hand-filled form** (bracket hints, worked examples, two "delete before issue" instruction boxes, no placeholders). `scripts/vifc_template_placeholders.py` produced `brands/vifc/templates/meeting-minutes/template.docx` from the original (kept as `original.docx`): only text is edited, run by run, so each run keeps its own formatting (bold labels, blue bullets/numbers); guidance lines, examples and instruction boxes are removed; one example row/paragraph is kept as the pattern to clone. Attendees are grouped by organisation; actions are not grouped by session (the summary doesn't group them).
+- **Fields the AI can't know stay as the template's `[ ]` hints** (venue, chair, minute-taker, classification, relationship register, circulation table, signature names) for the user to complete in Word before issue.
+- **Starter pack in the repo**: the original + placeholder template and the two VIFC logo SVGs are in `brands/vifc/` (company files in the user's private repo, user-approved).
+- Verified by converting a filled sample with Microsoft Word (AppleScript, inside Word's sandbox container — 7.9 s, no prompts) and rendering the PDF pages: layout, header/logo, bilingual slogan, footer and page numbers identical to the template; agenda/bullets/open issues keep their mixed formatting; grouped attendees stay one table.
+- Robustness (architect review): runs are merged before blocks are found; marker stripping fails rather than loops; empty blocks leave valid cells/tables; BOM stripped; XML-forbidden characters dropped. Item keys are looked up before outer keys, so templates avoid reusing outer names inside blocks.
+
+---
+
 ## D-022 — Accent-insensitive Vietnamese search (FTS rebuild, user-approved)
 _2026-10-24_
 

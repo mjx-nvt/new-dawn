@@ -9,6 +9,7 @@ import {
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { formatClock, formatWhen, LANGUAGE_LABEL } from "./format";
 import styles from "./MeetingPage.module.css";
+import MinutesTab from "./MinutesTab";
 import ProgressBar from "./ProgressBar";
 import StatusChip from "./StatusChip";
 import SummaryTab from "./SummaryTab";
@@ -106,25 +107,7 @@ export default function MeetingPage() {
 
       {tab === "transcript" && m && workspace && <TranscriptView slug={workspace.slug} meeting={m} startMs={t} />}
       {tab === "summary" && m && workspace && <SummaryTab slug={workspace.slug} meeting={m} />}
-      {tab === "minutes" && (
-        <GhostSections sections={[["Minutes document", "The tenant's Word template filled in, plus a PDF"]]} />
-      )}
+      {tab === "minutes" && m && workspace && <MinutesTab slug={workspace.slug} meeting={m} />}
     </div>
-  );
-}
-
-function GhostSections({ sections }: { sections: [string, string][] }) {
-  return (
-    <>
-      {sections.map(([title, subtitle]) => (
-        <section key={title} className="section">
-          <h2 className="sectionTitle">{title}</h2>
-          <p className="sectionSubtitle">{subtitle}</p>
-          <p className="ghostText">Not yet captured</p>
-          <div className={`${styles.slot} ghostCard`} />
-          <div className={`${styles.slot} ghostCard`} />
-        </section>
-      ))}
-    </>
   );
 }

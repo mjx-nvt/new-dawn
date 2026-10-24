@@ -21,7 +21,16 @@ pub async fn start_recording(
     language: Language,
     meeting_type_id: Option<String>,
 ) -> Result<Meeting, AppError> {
-    Ok(session::start(&app, StartRequest { slug, title, language, meeting_type_id }).await?)
+    Ok(session::start(
+        &app,
+        StartRequest {
+            slug,
+            title,
+            language,
+            meeting_type_id,
+        },
+    )
+    .await?)
 }
 
 #[tauri::command]
@@ -53,7 +62,11 @@ pub async fn request_microphone_permission() -> Result<PermissionState, AppError
 #[tauri::command]
 #[specta::specta]
 pub fn open_privacy_settings(system_audio: bool) -> Result<(), AppError> {
-    let url = if system_audio { permissions::SYSTEM_AUDIO_SETTINGS } else { permissions::MICROPHONE_SETTINGS };
+    let url = if system_audio {
+        permissions::SYSTEM_AUDIO_SETTINGS
+    } else {
+        permissions::MICROPHONE_SETTINGS
+    };
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(anyhow::Error::from)?;
     Ok(())
 }

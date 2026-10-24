@@ -43,7 +43,10 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
-tokio = { version = "1", features = ["fs", "io-util", "time", "sync"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
+quick-xml = "0.42"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+tokio = { version = "1", features = ["fs", "io-util", "time", "sync", "process"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "json"] }
 futures-util = "0.3"
 sha2 = "0.11"

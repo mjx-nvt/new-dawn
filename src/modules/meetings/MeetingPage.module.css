@@ -61,10 +61,3 @@
   border-bottom-color: var(--brand);
   color: var(--ink);
 }
-
-/* Ghost slot: shape only, so .ghostCard supplies the dashed border. */
-.slot {
-  min-height: 56px;
-  margin-top: var(--space-3);
-  border-radius: var(--radius-card);
-}

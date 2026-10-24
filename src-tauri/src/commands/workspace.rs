@@ -13,7 +13,9 @@ pub async fn list_workspaces(hub: State<'_, WorkspaceHub>) -> Result<Vec<Workspa
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_current_workspace(hub: State<'_, WorkspaceHub>) -> Result<Option<Workspace>, AppError> {
+pub async fn get_current_workspace(
+    hub: State<'_, WorkspaceHub>,
+) -> Result<Option<Workspace>, AppError> {
     Ok(hub.current_workspace().await?)
 }
 

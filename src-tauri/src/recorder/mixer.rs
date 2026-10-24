@@ -6,9 +6,9 @@
 //! published through `Shared` for the 10 Hz meter.
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -16,7 +16,7 @@ use ebur128::{EbuR128, Mode};
 use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Async, FixedAsync, Resampler, SincInterpolationParameters};
 
-use super::saver::{WavWriter, RATE};
+use super::saver::{RATE, WavWriter};
 
 const WINDOW: usize = RATE as usize * 600 / 1000;
 /// If system audio runs ahead of the mic by more than this, the oldest excess is dropped.
@@ -39,7 +39,10 @@ pub struct Shared {
 
 impl Shared {
     pub fn levels(&self) -> (f32, f32) {
-        (f32::from_bits(self.you.load(Ordering::Relaxed)), f32::from_bits(self.them.load(Ordering::Relaxed)))
+        (
+            f32::from_bits(self.you.load(Ordering::Relaxed)),
+            f32::from_bits(self.them.load(Ordering::Relaxed)),
+        )
     }
 }
 
@@ -49,7 +52,12 @@ pub struct Source {
 }
 
 /// Runs until the mic channel closes (the session dropped the streams). Returns samples written.
-pub fn run(mic: Source, system: Option<Source>, shared: Arc<Shared>, mut wav: WavWriter) -> Result<u64> {
+pub fn run(
+    mic: Source,
+    system: Option<Source>,
+    shared: Arc<Shared>,
+    mut wav: WavWriter,
+) -> Result<u64> {
     let mut mic_chain = MicChain::new(mic.rate)?;
     let mut sys_resampler = match &system {
         Some(s) => Some(ToRate::new(s.rate)?),
@@ -79,9 +87,15 @@ pub fn run(mic: Source, system: Option<Source>, shared: Arc<Shared>, mut wav: Wa
             while let Ok(chunk) = system.rx.try_recv() {
                 let them = rms(&chunk).min(1.0);
                 store(&shared.them, them);
-                zero_ms = if chunk.iter().all(|s| *s == 0.0) { zero_ms + chunk_ms(&chunk, system.rate) } else { 0 };
+                zero_ms = if chunk.iter().all(|s| *s == 0.0) {
+                    zero_ms + chunk_ms(&chunk, system.rate)
+                } else {
+                    0
+                };
                 let mic_active = shared.levels().0 > 0.005;
-                shared.system_silent.store(zero_ms >= SILENT_AFTER_MS && mic_active, Ordering::Relaxed);
+                shared
+                    .system_silent
+                    .store(zero_ms >= SILENT_AFTER_MS && mic_active, Ordering::Relaxed);
                 sys_q.extend(resampler.process(&chunk)?);
             }
         }
@@ -151,13 +165,21 @@ impl ToRate {
         } else {
             let ratio = RATE as f64 / from as f64;
             let params = SincInterpolationParameters::default();
-            Some(Async::<f32>::new_sinc(ratio, 1.0, &params, 1024, 1, FixedAsync::Input).context("creating a resampler")?)
+            Some(
+                Async::<f32>::new_sinc(ratio, 1.0, &params, 1024, 1, FixedAsync::Input)
+                    .context("creating a resampler")?,
+            )
         };
-        Ok(Self { resampler, pending: Vec::new() })
+        Ok(Self {
+            resampler,
+            pending: Vec::new(),
+        })
     }
 
     fn process(&mut self, input: &[f32]) -> Result<Vec<f32>> {
-        let Some(resampler) = self.resampler.as_mut() else { return Ok(input.to_vec()) };
+        let Some(resampler) = self.resampler.as_mut() else {
+            return Ok(input.to_vec());
+        };
         self.pending.extend_from_slice(input);
         let mut out = Vec::new();
         loop {
@@ -165,8 +187,14 @@ impl ToRate {
             if self.pending.len() < need {
                 break;
             }
-            let block = InterleavedSlice::new(&self.pending[..need], 1, need).context("wrapping audio")?;
-            out.extend(resampler.process(&block, None).context("resampling")?.take_data());
+            let block =
+                InterleavedSlice::new(&self.pending[..need], 1, need).context("wrapping audio")?;
+            out.extend(
+                resampler
+                    .process(&block, None)
+                    .context("resampling")?
+                    .take_data(),
+            );
             self.pending.drain(..need);
         }
         Ok(out)
@@ -198,7 +226,9 @@ impl MicChain {
         for s in &mut samples {
             *s = self.high_pass.run(*s);
         }
-        self.meter.add_frames_f32(&samples).context("measuring loudness")?;
+        self.meter
+            .add_frames_f32(&samples)
+            .context("measuring loudness")?;
         let loudness = self.meter.loudness_shortterm().unwrap_or(f64::NEG_INFINITY);
         if loudness > -50.0 {
             // Only adapt while someone is speaking, so silence is never boosted into hiss.
@@ -227,7 +257,11 @@ impl Biquad {
         let cos = w.cos();
         let a0 = 1.0 + alpha;
         Self {
-            b: [(1.0 + cos) / 2.0 / a0, -(1.0 + cos) / a0, (1.0 + cos) / 2.0 / a0],
+            b: [
+                (1.0 + cos) / 2.0 / a0,
+                -(1.0 + cos) / a0,
+                (1.0 + cos) / 2.0 / a0,
+            ],
             a: [-2.0 * cos / a0, (1.0 - alpha) / a0],
             x: [0.0; 2],
             y: [0.0; 2],
@@ -235,7 +269,9 @@ impl Biquad {
     }
 
     fn run(&mut self, x: f32) -> f32 {
-        let y = self.b[0] * x + self.b[1] * self.x[0] + self.b[2] * self.x[1] - self.a[0] * self.y[0] - self.a[1] * self.y[1];
+        let y = self.b[0] * x + self.b[1] * self.x[0] + self.b[2] * self.x[1]
+            - self.a[0] * self.y[0]
+            - self.a[1] * self.y[1];
         self.x = [x, self.x[0]];
         self.y = [y, self.y[0]];
         y
@@ -270,8 +306,12 @@ mod tests {
     fn high_pass_removes_rumble_keeps_speech() {
         let amplitude = |freq: f32| {
             let mut f = Biquad::high_pass(80.0, RATE as f32);
-            let out: Vec<f32> = (0..RATE as usize).map(|i| f.run((2.0 * std::f32::consts::PI * freq * i as f32 / RATE as f32).sin())).collect();
-            out[RATE as usize / 2..].iter().fold(0.0f32, |m, s| m.max(s.abs()))
+            let out: Vec<f32> = (0..RATE as usize)
+                .map(|i| f.run((2.0 * std::f32::consts::PI * freq * i as f32 / RATE as f32).sin()))
+                .collect();
+            out[RATE as usize / 2..]
+                .iter()
+                .fold(0.0f32, |m, s| m.max(s.abs()))
         };
         assert!(amplitude(20.0) < 0.1, "20 Hz rumble should be cut");
         assert!(amplitude(1000.0) > 0.95, "1 kHz speech band should pass");

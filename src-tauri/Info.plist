@@ -7,6 +7,8 @@
     <string>New Dawn records your microphone when you start a meeting recording. Audio never leaves your Mac.</string>
     <key>NSAudioCaptureUsageDescription</key>
     <string>New Dawn captures the audio of your calls (the other participants) when you record a meeting. Audio never leaves your Mac.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>New Dawn asks Microsoft Word or Pages to save your meeting minutes as a PDF. The document never leaves your Mac.</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
     <key>NSHumanReadableCopyright</key>

@@ -5,5 +5,8 @@
     <!-- Hardened-runtime entitlements. Keep this list minimal: only documented keys. -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
+    <!-- Word / Pages convert the minutes to PDF via Apple Events (D-024). -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
 </dict>
 </plist>
