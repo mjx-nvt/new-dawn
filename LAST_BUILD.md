@@ -1,4 +1,13 @@
-# Last Build — Vocabulary that steers Whisper, two-column summary, progress with time left · release 0.5.0
+# Last Build — Notes above the summary, both columns pinned · release 0.5.1
+_2026-10-25_
+
+- **Your notes** moved to the top of the summary column (above Highlights) and stay pinned while you scroll; long notes scroll inside the box (at most a quarter of the window) so the pinned card never covers the summary.
+- The **right column** (Email, Attendees) is pinned as one block too; taller than the window, it scrolls on its own.
+- Verified by screenshot at the top and scrolled.
+
+---
+
+# Vocabulary that steers Whisper, two-column summary, progress with time left · release 0.5.0
 _2026-10-25_
 
 ## What changed

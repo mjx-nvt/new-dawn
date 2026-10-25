@@ -28,8 +28,8 @@ import styles from "./SummaryTab.module.css";
 // Until meeting types drive the structure (P1.4), the same sections the backend uses by default.
 const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Next steps", "Open questions"];
 
-/** Executive summary: the sections on the left (editable), and on the right what goes with
- *  them — your notes (pinned while you scroll), the email, who attended. */
+/** Executive summary: your notes on top (pinned while you scroll), then the summary with its
+ *  highlights and sections; the email and attendees on the right, which stay in view too. */
 export default function SummaryTab({ slug, meeting }: { slug: string; meeting: Meeting }) {
   const summary = useSummary(slug, meeting.id);
   const progress = useSummaryProgress(meeting.id);
@@ -55,6 +55,9 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
             {error.message}
           </p>
         )}
+        <div className={`card ${styles.asideCard} ${styles.notesPinned}`}>
+          <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
+        </div>
         {view ? (
           <Sections slug={slug} meeting={meeting} view={view} busy={busy} canRun={ollamaReady} onRun={run} />
         ) : (
@@ -86,9 +89,6 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
       </div>
 
       <aside className={styles.aside}>
-        <div className={`card ${styles.asideCard} ${styles.notesPinned}`}>
-          <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
-        </div>
         <EmailCard slug={slug} meeting={meeting} view={view ?? undefined} busy={busy} />
         <div className={`card ${styles.asideCard}`}>
           <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />

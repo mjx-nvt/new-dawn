@@ -69,7 +69,7 @@ DM Sans via `@fontsource-variable/dm-sans` (`opsz.css` + `opsz-italic.css`, vari
 ## Forms and actions (System Settings shape)
 - **Grouped lists** `.group` > `.groupRow` (`.rowText` with `.rowLabel` + `.rowHint`, `.rowControl` on the right); `.groupTitle` above a group. Use for every settings pane.
 - **One primary action** per screen state (`.btnPrimary`); secondary actions in a `⋯` `MenuButton` (`.menu` glass popover). Destructive actions are red: `.btnDanger` (text) and the `DangerButton` component for two-step confirms (red fill on the confirm step), `.menuItemDanger` in menus.
-- **Pages fill the panel** (`.page` has no max-width); prose limits its own measure (`max-width: 76ch`). The Summary tab is always two columns (summary + a 400 pt aside); the Notes card is first in the aside and `position: sticky` (`.notesPinned`, `--shadow-raised`), the aside stretches to the summary's height so it stays pinned.
+- **Pages fill the panel** (`.page` has no max-width); prose limits its own measure (`max-width: 76ch`). The Summary tab is always two columns (summary + a 400 pt aside). The Notes card is the first thing in the summary column, above Highlights, and `position: sticky` (`.notesPinned`, `--shadow-raised`, textarea capped at 24vh); the aside (Email, Attendees) is sticky as one block with `max-height: calc(100vh - 52px)` and its own scroll.
 - Settings window (app-only): **fixed 780 × 580, not resizable** (System Settings); a glass sidebar of panes on the left (200 px, grouped App / AI on this Mac), the pane on the right with a 22/700 title. A workspace's own settings (Overview, Brand, Meeting types, People) are the Workspace page in the main window, as a segmented control.
 
 ## Ghost classes (every dossier stylesheet includes them)

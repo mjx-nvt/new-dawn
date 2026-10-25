@@ -1,5 +1,5 @@
-/* Always two columns (the window is at least 1180 pt wide, D-036): the summary on the left,
-   its companions on the right — your notes pinned at the top, the email and attendees below. */
+/* Always two columns (the window is at least 1180 pt wide, D-036): your notes (pinned) and the
+   summary on the left; the email and attendees on the right, pinned as a column. */
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 400px;
@@ -13,23 +13,32 @@
   max-width: 76ch; /* prose measure; the panel itself is full width */
 }
 
+/* The right column stays in view as one block; taller than the window, it scrolls by itself.
+   WebKit measures sticky offsets inside the scroller's padding (40 pt), so
+   `top: calc(-1 * var(--space-7))` is the panel's top edge. 52 pt = the toolbar. */
 .aside {
+  position: sticky;
+  top: calc(-1 * var(--space-7));
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  align-self: stretch; /* as tall as the summary, so the pinned notes stay pinned to its end */
+  align-self: start;
+  max-height: calc(100vh - 52px);
   min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-/* Your notes stay in view while the summary scrolls; the cards below slide under them. */
+/* Your notes, above the highlights, stay in view while the summary scrolls under them. */
 .notesPinned {
   position: sticky;
-  /* WebKit measures sticky offsets inside the scroller's padding (40 pt), so this is the
-     panel's top edge: nothing scrolls by above the card. */
   top: calc(-1 * var(--space-7));
   z-index: 2;
+  margin-bottom: var(--space-5);
   box-shadow: var(--shadow-raised);
 }
+/* Pinned, it must not cover the summary: long notes scroll inside the box. */
+.notesPinned textarea { max-height: 24vh; }
 
 .asideCard {
   display: flex;
