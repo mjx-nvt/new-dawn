@@ -14,7 +14,7 @@ Check specifically, with file:line evidence:
 4. **Bounded channels** — any `mpsc::unbounded_channel` or `crossbeam::channel::unbounded`, especially under `recorder/`.
 5. **Thin commands** — business logic, SQL or loops inside `src-tauri/src/commands/`.
 6. **Single error type** — commands returning `Result<_, String>` or ad-hoc error enums instead of `AppError`.
-7. **Design tokens** — hard-coded hex colours, `font-family`, or pixel radii in component CSS instead of variables from `src/styles/tokens.css`; any font other than Be Vietnam Pro.
+7. **Design tokens** — hard-coded hex colours, `font-family`, or pixel radii in component CSS instead of variables from `src/styles/tokens.css`; any font other than DM Sans; any CSS variable set from a workspace's brand pack (the UI palette is fixed, D-033).
 8. **Ghost pattern** — detail/dossier sections that return `null` or hide when data is empty.
 9. **Main-thread safety** — `window_vibrancy` calls not wrapped in `run_on_main_thread`.
 10. **Typed bridge** — UI calling `invoke()` directly instead of through `src/kernel/bridge/` and generated `bindings.ts` types; any `any`.

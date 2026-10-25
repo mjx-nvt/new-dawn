@@ -1,12 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-// Typeface — Be Vietnam Pro is the single typeface for every workspace (see CLAUDE.md "Stack").
-import "@fontsource/be-vietnam-pro/400.css";
-import "@fontsource/be-vietnam-pro/400-italic.css";
-import "@fontsource/be-vietnam-pro/500.css";
-import "@fontsource/be-vietnam-pro/600.css";
-import "@fontsource/be-vietnam-pro/700.css";
+// Typeface — DM Sans (Majoris) is the single UI typeface, bundled (see CLAUDE.md "Stack").
+import "@fontsource-variable/dm-sans/opsz.css";
+import "@fontsource-variable/dm-sans/opsz-italic.css";
 
 // Design tokens first, then base styles.
 import "./styles/tokens.css";
@@ -15,14 +12,17 @@ import "./styles/components.css";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
+import CrashScreen from "./kernel/shell/CrashScreen";
 import { router } from "./router";
 
 const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <CrashScreen>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </CrashScreen>
   </React.StrictMode>,
 );

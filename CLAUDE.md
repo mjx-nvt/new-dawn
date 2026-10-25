@@ -9,7 +9,7 @@ This file is the source of truth for how to work on this codebase. Read it at th
 ## Stack
 - **App**: Tauri 2 (Rust engine) + React 19 + TypeScript strict + Vite. pnpm.
 - **UI styling**: plain CSS modules + CSS variables. NO Tailwind, NO CSS-in-JS.
-- **Typeface**: Be Vietnam Pro (bundled via `@fontsource/be-vietnam-pro`) for everything inside the window; never introduce another UI typeface. A tenant's `document_fonts` (heading/body) apply **only to exported documents**, never to the UI.
+- **Typeface**: DM Sans (Majoris; bundled via `@fontsource-variable/dm-sans`) for everything inside the window; never introduce another UI typeface. A tenant's `document_fonts` (heading/body) apply **only to exported documents**, never to the UI.
 - **Native look**: real Liquid Glass shell on macOS 26+ via the `window-vibrancy` crate (`apply_liquid_glass`), `apply_vibrancy` fallback on older macOS.
 - **Database**: SQLite via `sqlx` (runtime-tokio). `registry.db` + one `workspace.db` per workspace. Two migration sets: `src-tauri/migrations/registry/` and `src-tauri/migrations/workspace/`.
 - **Search**: SQLite FTS5; later `sqlite-vec`.
@@ -32,9 +32,9 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 7. **Migrations are append-only**; the `migration-safety` agent reviews any migration before it runs.
 
 ## Design rules
-- **Apple owns the shell; the brand owns the content.** Window background, sidebar and toolbar are native glass (window is `transparent: true`, body transparent). The content area paints a near-solid surface over the glass (`--canvas` at ~92 % under normal transparency, 100 % under `prefers-reduced-transparency`).
-- **Brand = tokens, not code.** A tenant's `brand/tokens.json` (schema v2 in `.claude/skills/newdawn-ui-patterns`) is applied as CSS variables on the content root: `--brand`, `--brand-50…950`, `--secondary`, `--accent`, `--canvas`, `--status-*`, `--radius-*`, `--button-*`, `--logo-url`, `--logo-dark-url`. `slogan` and `document_fonts` are for exported documents. Nothing else is brandable. **Meeting types** (template + summary structure + email format) are the unit of per-tenant configuration.
-- **Tint sparingly.** Brand colour on primary buttons, chips, section eyebrows, charts, workspace badge — never a wash over glass.
+- **Apple owns the shell and the controls; Majoris owns the palette and type (D-033).** Window background, sidebar and toolbar are native glass (window is `transparent: true`, body transparent); buttons, segmented controls, search and menus are capsules. The content area paints a near-solid surface over the glass (`--canvas` at ~92 % under normal transparency, 100 % under `prefers-reduced-transparency`). Colours and type come from the Majoris Design System: Slate neutrals, **orange as the one primary** (`--primary`, 500 fills / 600 hover / 700 pressed and text), green / yellow / red status.
+- **The workspace brand is for documents only.** A tenant's `brand/tokens.json` (schema v2 in `.claude/skills/newdawn-ui-patterns`) feeds exported documents (minutes DOCX/PDF, later PPTX) and nothing in the UI except the logo in the workspace badge. No CSS variable is ever set from a pack. **Meeting types** (template + summary structure + email format) are the unit of per-tenant configuration.
+- **Tint sparingly.** Orange on the primary button, the active sidebar item, chips, eyebrows, progress and links — never a wash over glass, never on secondary buttons.
 - **System settings win**: dark mode via `prefers-color-scheme`; accent colour via `AccentColor` for selection/focus; `prefers-reduced-transparency` turns all CSS glass solid; `prefers-reduced-motion` disables transitions.
 - **Golden Gate shape**: edge-to-edge sidebar, unified toolbar, a single corner radius for the window and major panels, overlay title bar with hidden title.
 - **Transparency pattern (ghost sections)**: every dossier/detail section always renders its structure; empty fields show "Not yet captured", empty lists show 2–3 dashed ghost cards. Never hide a section because it's empty (type-conditional sections excepted).

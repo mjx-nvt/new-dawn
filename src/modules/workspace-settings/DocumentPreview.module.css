@@ -1,0 +1,67 @@
+/* A sheet of paper, in the brand being edited. Fixed light colours: it previews a document. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 520px;
+  padding: var(--space-5) var(--space-6);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: #FFFFFF;
+  color: #1E293B;
+  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.08);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.logo { max-width: 140px; max-height: 28px; }
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  color: #FFFFFF;
+  font-size: var(--t-sm);
+  font-weight: 700;
+}
+
+.eyebrow {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.title {
+  font-size: var(--t-xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.meta {
+  font-size: var(--t-xs);
+  color: #64748B;
+}
+
+.rule { height: 2px; width: 48px; margin: var(--space-2) 0; }
+
+.line {
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+
+.footer {
+  margin-top: var(--space-4);
+  padding-top: var(--space-2);
+  border-top: 0.5px solid #E2E8F0;
+  font-size: 10px;
+  color: #94A3B8;
+}

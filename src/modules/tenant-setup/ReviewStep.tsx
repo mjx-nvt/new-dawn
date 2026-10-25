@@ -58,7 +58,7 @@ export default function ReviewStep() {
               <span className={styles.typeName}>{name}</span>
               <span className="chip">{lang}</span>
               <span className="fieldHint">{sections}</span>
-              {isDefault && <span className="chip chipBrand">Default</span>}
+              {isDefault && <span className="chip chipPrimary">Default</span>}
             </li>
           ))}
         </ul>

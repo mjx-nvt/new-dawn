@@ -1,51 +1,8 @@
-/* A miniature content panel in the brand being edited. */
+/* Placeholder while the pack loads; the real preview is DocumentPreview. */
 .preview {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   min-height: 160px;
-  padding: var(--space-5);
-  border: 0.5px solid var(--hair);
+  max-width: 520px;
   border-radius: var(--radius-card);
-  background: var(--canvas);
-  color: var(--ink);
-  --brand-text: var(--brand);
-}
-@media (prefers-color-scheme: dark) { .preview { --brand-text: var(--brand-400); } }
-
-.previewHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.previewLogo {
-  max-width: 140px;
-  max-height: 28px;
-}
-
-.previewMark {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-chip);
-  background: var(--brand);
-  color: var(--on-brand);
-  font-size: var(--t-xs);
-  font-weight: 700;
-}
-
-.previewTitle {
-  font-size: var(--t-xl);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.previewRow {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 .logoBox {
@@ -59,7 +16,7 @@
   background: var(--surface);
 }
 .logoBox img { max-width: 100%; max-height: 100%; }
-.logoBoxDark { background: var(--brand-950); }
+.logoBoxDark { background: #0F172A; } /* fixed slate-900: the logo on a dark document background, not themed */
 
 .swatch {
   width: 32px;

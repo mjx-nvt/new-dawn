@@ -21,9 +21,10 @@ html, body, #root {
 
 ::selection { background: color-mix(in srgb, var(--focus) 30%, transparent); }
 
-a { color: var(--brand-text); text-decoration: none; }
+a { color: var(--primary-text); text-decoration: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
 input, textarea { font: inherit; color: inherit; user-select: text; }
+select { font: inherit; color: inherit; }
 
 /* Content area paints over the glass so reading surfaces stay calm. */
 .content-root {
@@ -35,7 +36,7 @@ input, textarea { font: inherit; color: inherit; user-select: text; }
   user-select: text;
 }
 
-/* In-page glass — only for drawer, popovers, quick capture, menus. */
+/* In-page glass — only for drawer, popovers, quick capture, menus, the player strip. */
 .glass {
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);

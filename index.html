@@ -8,6 +8,11 @@
 
   <body>
     <div id="root"></div>
+    <!-- Before any module loads: an error that stops the app from mounting still reaches the console. -->
+    <script>
+      window.addEventListener("error", (e) => console.error("Uncaught before mount:", e.message, e.error && e.error.stack));
+      window.addEventListener("unhandledrejection", (e) => console.error("Unhandled rejection before mount:", e.reason));
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -21,8 +21,8 @@
   width: 20px;
   height: 20px;
   border-radius: var(--radius-chip);
-  background: var(--brand);
-  color: var(--on-brand);
+  background: var(--primary);
+  color: var(--on-primary);
   font-size: var(--t-xs);
   font-weight: 700;
 }
@@ -88,7 +88,7 @@
 .check {
   width: 14px;
   flex: none;
-  color: var(--brand-text);
+  color: var(--primary-text);
   font-size: var(--t-sm);
   font-weight: 700;
 }

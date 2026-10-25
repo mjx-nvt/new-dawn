@@ -1,9 +1,6 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useBrandSync } from "../../kernel/bridge/brand";
 import { useOpenSettingsTab, useWorkspacesSync } from "../../kernel/bridge/events";
 import type { SettingsTab } from "../../kernel/bridge/settings";
-import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
-import { useBrandProps } from "../../kernel/theme/applyBrand";
 import ModelsPanel from "../models/ModelsPanel";
 import AboutTab from "./AboutTab";
 import BackupPanel from "./BackupPanel";
@@ -50,10 +47,7 @@ function Pane({ tab }: { tab: SettingsTab }) {
 export default function SettingsPage() {
   const { tab } = route.useSearch();
   const navigate = useNavigate();
-  const { data: workspace } = useCurrentWorkspace();
-  const brand = useBrandProps(workspace?.slug);
   useWorkspacesSync();
-  useBrandSync();
   useOpenSettingsTab((next) => void navigate({ to: "/settings", search: { tab: next }, replace: true }));
   const current = SETTINGS_TABS.find((t) => t.id === tab);
   const groups = [...new Set(SETTINGS_TABS.map((t) => t.group))];
@@ -80,7 +74,7 @@ export default function SettingsPage() {
           </div>
         ))}
       </nav>
-      <main className={`content-root ${styles.content}`} {...brand}>
+      <main className={`content-root ${styles.content}`}>
         <div className={styles.pane}>
           <h1 className={styles.paneTitle}>{current?.label}</h1>
           <Pane tab={tab} />

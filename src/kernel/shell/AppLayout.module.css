@@ -26,11 +26,8 @@
   padding: var(--space-3) var(--space-4);
   border: 0.5px solid var(--hair);
   border-radius: var(--radius-card);
-  background: var(--brand-50);
+  background: var(--primary-tint-soft);
   font-size: var(--t-sm);
   font-weight: 500;
 }
 .updateBanner > span { flex: 1 1 200px; }
-@media (prefers-color-scheme: dark) {
-  .updateBanner { background: color-mix(in srgb, var(--brand-400) 14%, transparent); }
-}

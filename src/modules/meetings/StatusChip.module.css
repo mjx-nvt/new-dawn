@@ -1,9 +1,9 @@
 .positive {
-  background: color-mix(in srgb, var(--status-positive) 12%, transparent);
+  background: var(--status-positive-tint);
   color: var(--status-positive);
 }
 
 .negative {
-  background: color-mix(in srgb, var(--status-negative) 12%, transparent);
+  background: var(--status-negative-tint);
   color: var(--status-negative);
 }

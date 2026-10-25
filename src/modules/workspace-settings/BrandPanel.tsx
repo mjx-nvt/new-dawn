@@ -1,39 +1,32 @@
 import { useEffect, useState } from "react";
-import { useBrand, useResetBrand, useSetBrandLogo, useUpdateBrand, type BrandPatch, type BrandView } from "../../kernel/bridge/brand";
+import { useBrand, useResetBrand, useSetBrandLogo, useUpdateBrand, type BrandPatch } from "../../kernel/bridge/brand";
 import DangerButton from "../../kernel/shell/DangerButton";
-import { useMediaQuery } from "../../kernel/shell/useMediaQuery";
-import { brandProps, useBrandLogo } from "../../kernel/theme/applyBrand";
+import { logoUrl } from "../../kernel/theme/brandLogo";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import styles from "./BrandPanel.module.css";
+import DocumentPreview from "./DocumentPreview";
 
-const RADIUS = [
-  ["sharp", "Sharp"],
-  ["soft", "Soft"],
-  ["round", "Round"],
-] as const;
-const SHAPES = [
-  ["square", "Square"],
-  ["rounded", "Rounded"],
-  ["pill", "Pill"],
-] as const;
-const PRIMARY = ["filled", "soft", "outline"] as const;
-const SECONDARY = ["soft", "outline", "ghost"] as const;
-
-/** Settings → Brand: the colours, logo, corners and document details of one workspace,
- *  saved to its brand/tokens.json and applied to the content area straight away. */
+/** Workspace → Brand: the logo, colours, slogan and fonts of one company's documents, saved
+ *  to its brand/tokens.json. The app's own look never changes with it (D-033). */
 export default function BrandPanel({ slug }: { slug: string }) {
   const brand = useBrand(slug);
   const update = useUpdateBrand(slug);
   const setLogo = useSetBrandLogo(slug);
   const reset = useResetBrand(slug);
-  const dark = useMediaQuery("(prefers-color-scheme: dark)");
   const error = update.error ?? setLogo.error ?? reset.error ?? brand.error;
   const b = brand.data;
   const save = (patch: BrandPatch) => update.mutate(patch);
 
   return (
     <>
-      {b ? <Preview brand={b} dark={dark} slug={slug} /> : <div className={`${styles.preview} ghostCard`} />}
+      {b ? (
+        <DocumentPreview name={b.name} primary={b.primary} text={b.text} headingFont={b.document_fonts.heading} bodyFont={b.document_fonts.body} slogan={b.slogan.en} logo={b.logo_primary ? logoUrl(b.logo_primary, b.logo_version) : null} />
+      ) : (
+        <div className={`${styles.preview} ghostCard`} />
+      )}
+      <p className="fieldHint" style={{ marginTop: "var(--space-3)" }}>
+        For documents only — minutes, PDFs and decks carry this brand; the app keeps its own look.
+      </p>
 
       <p className="groupTitle">Logo</p>
       <div className="group">
@@ -43,33 +36,17 @@ export default function BrandPanel({ slug }: { slug: string }) {
 
       <p className="groupTitle">Colours</p>
       <div className="group">
-        <ColourRow label="Primary" hint="Buttons, chips, section eyebrows. Changing it rebuilds the tints and shades." value={b?.primary ?? ""} onSave={(v) => save({ primary: v })} />
+        <ColourRow label="Primary" hint="Headings, rules and accents." value={b?.primary ?? ""} onSave={(v) => save({ primary: v })} />
         <ColourRow label="Secondary" hint="Optional." value={b?.secondary ?? ""} optional onSave={(v) => save({ secondary: v })} />
         <ColourRow label="Accent" hint="Optional." value={b?.accent ?? ""} optional onSave={(v) => save({ accent: v })} />
-        <ColourRow label="Canvas" hint="The reading surface (light mode)." value={b?.canvas ?? ""} onSave={(v) => save({ canvas: v })} />
+        <ColourRow label="Text" value={b?.text ?? ""} onSave={(v) => save({ text: v })} />
       </div>
 
-      <p className="groupTitle">Status colours</p>
+      <p className="groupTitle">Words and fonts</p>
       <div className="group">
-        <ColourRow label="Positive" value={b?.status.positive ?? ""} onSave={(v) => save({ positive: v })} />
-        <ColourRow label="Warning" value={b?.status.warning ?? ""} onSave={(v) => save({ warning: v })} />
-        <ColourRow label="Negative" value={b?.status.negative ?? ""} onSave={(v) => save({ negative: v })} />
-      </div>
-
-      <p className="groupTitle">Shape</p>
-      <div className="group">
-        <Choice label="Corners" value={b?.radius.preset ?? "soft"} options={RADIUS} onChange={(v) => save({ radius_preset: v })} />
-        <Choice label="Buttons" value={b?.button.shape ?? "rounded"} options={SHAPES} onChange={(v) => save({ button_shape: v })} />
-        <Choice label="Primary button" value={b?.button.primary ?? "filled"} options={PRIMARY.map((v) => [v, v[0].toUpperCase() + v.slice(1)] as const)} onChange={(v) => save({ button_primary: v })} />
-        <Choice label="Secondary button" value={b?.button.secondary ?? "soft"} options={SECONDARY.map((v) => [v, v[0].toUpperCase() + v.slice(1)] as const)} onChange={(v) => save({ button_secondary: v })} />
-      </div>
-
-      <p className="groupTitle">Documents</p>
-      <div className="group">
-        <ColourRow label="Text" hint="Exported documents only; the app keeps its own text colour." value={b?.text ?? ""} onSave={(v) => save({ text: v })} />
         <TextRow label="Slogan (English)" value={b?.slogan.en ?? ""} onSave={(v) => save({ slogan_en: v })} />
         <TextRow label="Slogan (Tiếng Việt)" value={b?.slogan.vi ?? ""} onSave={(v) => save({ slogan_vi: v })} />
-        <TextRow label="Heading font" hint="Exported documents only; the app keeps Be Vietnam Pro." value={b?.document_fonts.heading ?? ""} onSave={(v) => save({ font_heading: v })} />
+        <TextRow label="Heading font" hint="Installed on this Mac, or bundled in the brand folder." value={b?.document_fonts.heading ?? ""} onSave={(v) => save({ font_heading: v })} />
         <TextRow label="Body font" value={b?.document_fonts.body ?? ""} onSave={(v) => save({ font_body: v })} />
       </div>
 
@@ -85,29 +62,6 @@ export default function BrandPanel({ slug }: { slug: string }) {
         </p>
       )}
     </>
-  );
-}
-
-/** A small content panel in the workspace's brand, so a change is seen before it's trusted. */
-function Preview({ brand, dark, slug }: { brand: BrandView; dark: boolean; slug: string }) {
-  const logo = useBrandLogo(slug);
-  return (
-    <div className={styles.preview} {...brandProps(brand, dark)}>
-      <div className={styles.previewHead}>
-        {logo ? <img className={styles.previewLogo} src={logo} alt="" /> : <span className={styles.previewMark}>{brand.name.charAt(0)}</span>}
-        <span className="eyebrow">{brand.name}</span>
-      </div>
-      <p className={styles.previewTitle}>Quarterly partner review</p>
-      <p className={styles.previewRow}>
-        <span className="chip chipBrand">Summarised</span>
-        <span className="chip">Weekly meeting</span>
-      </p>
-      <p className={styles.previewRow}>
-        <span className="btn btnPrimary btnCompact">Export minutes</span>
-        <span className="btn btnSecondary btnCompact">Copy as email</span>
-        <span className="btn btnGhost btnCompact">Re-run</span>
-      </p>
-    </div>
   );
 }
 
@@ -189,23 +143,6 @@ function ColourRow({ label, hint, value, optional, onSave }: { label: string; hi
           onBlur={(e) => commit(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         />
-      </div>
-    </div>
-  );
-}
-
-function Choice<V extends string>({ label, value, options, onChange }: { label: string; value: V | string; options: readonly (readonly [V, string])[]; onChange: (v: V) => void }) {
-  return (
-    <div className="groupRow">
-      <p className="rowLabel">{label}</p>
-      <div className="rowControl">
-        <div className="segmented" role="group" aria-label={label}>
-          {options.map(([v, text]) => (
-            <button key={v} type="button" aria-pressed={value === v} onClick={() => onChange(v)}>
-              {text}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );

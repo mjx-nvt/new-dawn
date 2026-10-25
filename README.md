@@ -3,7 +3,7 @@
 A local-first, native macOS personal workspace for people who work across several companies at once.
 
 - **One app, many workspaces** — each company or project gets its own SQLite database and its own brand pack (logo, colours, corner radius, buttons). Each workspace also defines its meeting types.
-- **Looks native** — real Liquid Glass shell, Be Vietnam Pro everywhere, dark mode, system accent colour.
+- **Looks native** — real Liquid Glass shell, DM Sans everywhere, Majoris colours, dark mode, system accent colour.
 - **100 % local AI** — Whisper for speech, Qwen via Ollama for text. No cloud, no API keys, no network beyond `localhost`.
 - **Records meetings itself** — microphone plus the call's system audio, no bot in the call; full transcript after Stop, an executive summary for email, and branded meeting-minutes DOCX/PDF.
 

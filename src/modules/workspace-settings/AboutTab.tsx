@@ -50,7 +50,7 @@ export default function AboutTab() {
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Check automatically</p>
-            <p className="rowHint">Shortly after launch and once a day while the app runs. You still choose when to install.</p>
+            <p className="rowHint">After launch and once a day. You choose when to install.</p>
           </div>
           <div className="rowControl">
             <div className="segmented" role="group" aria-label="Check automatically">

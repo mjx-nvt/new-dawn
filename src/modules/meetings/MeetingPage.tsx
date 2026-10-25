@@ -14,6 +14,7 @@ import {
 } from "../../kernel/bridge/meetings";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
+import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import { formatClock, formatWhen, LANGUAGE_LABEL } from "./format";
 import styles from "./MeetingPage.module.css";
@@ -76,10 +77,12 @@ export default function MeetingPage() {
     switch (m.status) {
       case "recorded":
       case "failed":
-        return { label: "Transcribe", onClick: () => retranscribe.mutate({ slug, meetingId }), disabled: retranscribe.isPending };
+        return { label: "Transcribe", ai: true, busy: retranscribe.isPending, onClick: () => retranscribe.mutate({ slug, meetingId }), disabled: retranscribe.isPending };
       case "transcribed":
         return {
           label: "Write summary",
+          ai: true,
+          busy: summarise.isPending,
           onClick: () => {
             summarise.mutate({ slug, meetingId, deep: false, keepEdits: true });
             showTab("summary");
@@ -88,7 +91,7 @@ export default function MeetingPage() {
           title: ollamaReady ? undefined : "Ollama isn't running with the text model — see Settings → Models",
         };
       case "summarised":
-        return { label: "Export minutes", onClick: () => showTab("minutes"), disabled: false };
+        return { label: "Export minutes", ai: false, busy: false, onClick: () => showTab("minutes"), disabled: false };
       default:
         return null;
     }
@@ -119,7 +122,15 @@ export default function MeetingPage() {
         {m && workspace && (
           <div className={styles.actions}>
             {primary && (
-              <button type="button" className="btn btnPrimary" disabled={primary.disabled} title={primary.title} onClick={primary.onClick}>
+              <button
+                type="button"
+                className={primary.ai ? "btn btnPrimary btnAi" : "btn btnPrimary"}
+                aria-busy={primary.busy || undefined}
+                disabled={primary.disabled}
+                title={primary.title}
+                onClick={primary.onClick}
+              >
+                {primary.ai && <SparkleIcon />}
                 {primary.label}
               </button>
             )}
@@ -145,7 +156,7 @@ export default function MeetingPage() {
             <p id="retranscribe-title" className={styles.noticeTitle}>
               Transcribe again?
             </p>
-            <p className="fieldHint">The transcript is written anew, including any lines you corrected. The summary stays until you re-run it.</p>
+            <p className="fieldHint">Lines you corrected are replaced. The summary stays until you re-run it.</p>
           </div>
           <div className={styles.noticeActions}>
             <button type="button" className="btn btnGhost btnCompact" autoFocus onClick={() => setConfirmRetranscribe(false)}>
@@ -153,12 +164,13 @@ export default function MeetingPage() {
             </button>
             <button
               type="button"
-              className="btn btnPrimary btnCompact"
+              className="btn btnPrimary btnCompact btnAi"
               onClick={() => {
                 setConfirmRetranscribe(false);
                 retranscribe.mutate({ slug, meetingId });
               }}
             >
+              <SparkleIcon />
               Transcribe again
             </button>
           </div>
@@ -174,7 +186,7 @@ export default function MeetingPage() {
             </button>
           </div>
           {progress ? <ProgressBar progress={progress} label={m?.title} /> : <p className="fieldHint">Waiting for the job to report progress</p>}
-          <p className="fieldHint">You can leave this page; you'll get a notification when the transcript is ready.</p>
+          <p className="fieldHint">You'll be notified when the transcript is ready.</p>
         </div>
       )}
       {error && (
@@ -246,7 +258,7 @@ function TypePicker({ slug, meeting }: { slug: string; meeting: Meeting }) {
   return (
     <>
       <select
-        className={`input ${styles.typePicker}`}
+        className="input"
         aria-label="Meeting type"
         value={meeting.meeting_type_id ?? ""}
         disabled={setType.isPending}

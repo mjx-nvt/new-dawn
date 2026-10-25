@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-033 — Majoris Design System on an Apple glass shell; the workspace brand is for documents only
+_2026-10-25_
+
+**Decision** (user: "apply the Majoris design system … keep Apple Liquid Glass … primary = orange 500, but don't change everything aggressively — a feeling that orange is the primary; the app UI should be separate from the workspace brand"):
+- **Split of ownership.** Apple owns the shell and the control shapes: native glass window/sidebar/toolbar, capsule buttons, segmented controls, search and menus, hover and press behaviour, system accent for selection/focus. Majoris owns colour and type: DM Sans (bundled, variable), Slate neutrals, **orange as the one primary** (`--primary` = orange-500 fills, 600 hover, 700 pressed), green/yellow/red status. Majoris's own 4 px radii, blue shell and 300-weight body are *not* adopted — they would fight the Mac.
+- **Orange only where navy was.** The old brand variables were renamed to `--primary*` and seeded with the Majoris orange ramp; nothing new is tinted. Secondary buttons became neutral (Apple grey), so orange appears on: the primary button, the active sidebar/settings item, orange chips, eyebrows, links, the progress bar, the playing transcript segment, the update banner.
+- **Contrast.** Orange 500/600 fail 4.5:1 as text on white (2.8 / 3.2), so `--primary-text` is 700 (4.5) in light and 400 in dark; chips use 100/800 (6.0). Status text uses green-700, yellow-800, red-600 (the Majoris 600s for green and yellow fail as text). White on an orange-500 button is 2.8:1 — accepted as the user's explicit choice (Apple's own orange accent has the same ratio); the label is 14.5 px / 500.
+- **Brand pack → documents only.** `applyBrand` is gone; `kernel/theme/brandLogo.ts` keeps just the logo for the workspace badge. `ContentRoot` and the Settings window no longer set any variable from a pack; the Brand page previews a paper-white first page (`DocumentPreview`) and edits logo, colours, slogan and fonts; its radius/button/status/canvas controls were removed (UI concepts). Known gap, now visible: the DOCX export takes its look from the meeting type's template, not from `tokens.json` — the pack's colours/fonts will be read when the app generates documents itself (PDF/PPTX).
+- **AI is marked, nothing else is.** Every action Whisper or Qwen performs carries a sparkle (Material `auto_awesome`) and the app's one gradient (Majoris blue-600 → the orange primary): a fill on the primary AI button, a hairline ring elsewhere, animated while running; AI-written content says "Written by <model> · <date>" with the sparkle. Dropdowns are all the same capsule (`select.input`), the native element restyled rather than a custom component.
+- **Playback is a waveform, not a system control.** The recording's peaks are computed once in Rust (`waveform.json` beside the recording, 1200 buckets, decoded through the same loader as transcription) and drawn on a canvas in the app's colours; the `<audio>` element stays as the hidden engine. Chosen over Web Audio decoding in the webview (a 46-minute file would mean hundreds of MB of floats in the page) and over computing during transcription (would save the few seconds of the first open; add when it bothers).
+- **Never a blank window**: a root error boundary (`CrashScreen`) shows what broke with a Reload button, and uncaught errors are logged — a rendering bug must never leave the user with an empty glass window.
+- Supersedes the D-004 typeface clause, its D-030 amendment, and D-030's "brand is live on the content area". CLAUDE.md "Typeface" and the design rules, the UI skill and the architect-reviewer agent were updated accordingly. Shared Majoris families beyond orange/slate/status (blue, cyan, charts) are added when charts arrive, not before.
+
+---
+
 ## D-032 — Attendee corrections fix names everywhere, deterministically
 _2026-10-25_
 
@@ -339,7 +354,7 @@ _2026-10-23_
 
 **Decision**: v1 = tenant setup (brand, meeting types, templates) + record (mic + system audio, no bot) → batch transcript after Stop → executive summary as email body → branded minutes DOCX/PDF. One Whisper model and one Ollama model (`qwen3.5:9b`, thinking on), run one job at a time; no tiers, no scheduler, no live transcription. Tasks/cockpit, notes, knowledge modules, research, speaker labels and bundled Ollama are deferred.
 
-**Amends D-004**: Be Vietnam Pro remains the only UI typeface; a tenant's `document_fonts` (heading/body) apply only to exported documents.
+**Amends D-004** (superseded by D-033 for the UI typeface, now DM Sans): Be Vietnam Pro remains the only UI typeface; a tenant's `document_fonts` (heading/body) apply only to exported documents.
 
 **Rationale**: It is the loop that pays back first (every meeting produces an email and a document), and removing live transcription removes the only reason two models would ever run at once on 16 GB.
 
@@ -370,7 +385,7 @@ _2026-10-23_
 ## D-004 — Apple owns the shell, the brand owns the content; one typeface
 _2026-10-23_
 
-**Decision**: The window chrome (background, sidebar, toolbar) is native Liquid Glass and follows macOS 27 Golden Gate conventions. A workspace's brand is applied only to the content area and only through four knobs: logo, colours, corner-radius style, button style. **Be Vietnam Pro is the single typeface for every tenant** and is not brandable.
+**Decision**: The window chrome (background, sidebar, toolbar) is native Liquid Glass and follows macOS 27 Golden Gate conventions. A workspace's brand is applied only to the content area and only through four knobs: logo, colours, corner-radius style, button style. **Be Vietnam Pro is the single typeface for every tenant** and is not brandable. _(The brand-on-content-area part is superseded by D-033: the pack is for documents only.)_
 
 **Rationale**: Two things want to own the look — Apple's glass and the company's brand. Keeping the shell native makes the app feel first-party and honours the user's glass-intensity and accessibility settings; keeping the brand in content tokens makes switching workspaces a data change, not a code change. One typeface keeps every workspace reading as the same app and is Vietnamese-ready.
 

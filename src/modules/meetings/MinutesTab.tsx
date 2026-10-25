@@ -96,7 +96,7 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
         {withPdf && converters.data && !hasConverter && (
           <p className="fieldHint">No PDF converter found. Install Microsoft Word, LibreOffice or Pages (Settings → Converters).</p>
         )}
-        <p className="fieldHint">Filled from the summary, with your edits. The bracketed hints in the template (venue, chair, signatures) are for you to complete in Word.</p>
+        <p className="fieldHint">Filled from the summary and your edits. Bracketed hints (venue, chair, signatures) are yours to complete in Word.</p>
       </div>
 
       {(error ?? openError) && (
@@ -170,7 +170,7 @@ function ExportRow({
         <p className={styles.rowMeta}>
           {formatWhen(item.created_at)}
           <span className="chip">DOCX</span>
-          {item.pdf_path && <span className="chip chipBrand">PDF{item.converter && ` · ${CONVERTER_LABEL[item.converter]}`}</span>}
+          {item.pdf_path && <span className="chip chipPrimary">PDF{item.converter && ` · ${CONVERTER_LABEL[item.converter]}`}</span>}
         </p>
       </div>
       <div className={styles.rowActions}>

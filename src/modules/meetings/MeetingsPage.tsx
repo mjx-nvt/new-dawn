@@ -164,7 +164,7 @@ function Select({ label, value, onChange, children }: { label: string; value: st
   return (
     <label className={styles.filter}>
       <span className="srOnly">{label}</span>
-      <select className={`input ${styles.select}`} value={value} onChange={(e) => onChange(e.target.value)}>
+      <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
         {children}
       </select>
     </label>

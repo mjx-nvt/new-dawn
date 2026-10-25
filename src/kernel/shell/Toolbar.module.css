@@ -75,7 +75,7 @@
   height: 28px;
   padding: 0 var(--space-3);
   border: 0.5px solid var(--hair);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--surface) 55%, transparent);
   font-size: var(--t-sm);
   outline: none;

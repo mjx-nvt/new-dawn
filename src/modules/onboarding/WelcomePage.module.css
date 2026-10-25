@@ -27,7 +27,7 @@
   pointer-events: none; /* the strip stays draggable */
 }
 .past { color: var(--ink-2); }
-.current { color: var(--brand-text); }
+.current { color: var(--primary-text); }
 
 .content {
   overflow-y: auto;

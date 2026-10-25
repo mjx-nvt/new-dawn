@@ -52,7 +52,7 @@ export default function ModelsPanel() {
               <p className={styles.name}>
                 Silero VAD v5.1.2
                 <span className="fieldHint">0.9 MB</span>
-                <span className="chip chipBrand">Built in</span>
+                <span className="chip chipPrimary">Built in</span>
               </p>
               <p className="fieldHint">Ships with New Dawn; nothing to download.</p>
             </div>
@@ -131,7 +131,7 @@ function ModelRow({ model, progress, error }: { model: ModelInfo; progress?: Dow
         <p className={styles.name}>
           {model.label}
           <span className="fieldHint">{formatSize(model.size_bytes)}</span>
-          {status.state === "ready" && <span className="chip chipBrand">Ready</span>}
+          {status.state === "ready" && <span className="chip chipPrimary">Ready</span>}
           {status.state === "partial" && <span className="chip">Paused at {Math.round(percent)} %</span>}
         </p>
         <p className="fieldHint">{model.description}</p>

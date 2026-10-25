@@ -150,7 +150,7 @@ function PermissionsStep() {
       <div className={styles.rows}>
         <Row title="Microphone" hint="Your side of the call.">
           {mic.data === "granted" ? (
-            <span className="chip chipBrand">Allowed</span>
+            <span className="chip chipPrimary">Allowed</span>
           ) : mic.data === "not_determined" ? (
             <button type="button" className="btn btnSecondary btnCompact" onClick={() => request.mutate()}>
               Allow…
@@ -193,7 +193,7 @@ function OllamaStep() {
       <div className={styles.rows}>
         <Row title="Ollama" hint={s?.running ? "Running." : openFailed ? "Not found in Applications — install it first." : "Not running."}>
           {s?.running ? (
-            <span className="chip chipBrand">Running</span>
+            <span className="chip chipPrimary">Running</span>
           ) : (
             <button type="button" className="btn btnSecondary btnCompact" onClick={() => void openOllamaApp().then((ok) => setOpenFailed(!ok))}>
               Open Ollama
@@ -209,7 +209,7 @@ function OllamaStep() {
           }
         >
           {s?.model_installed || pull.done ? (
-            <span className="chip chipBrand">Installed</span>
+            <span className="chip chipPrimary">Installed</span>
           ) : (
             <button type="button" className="btn btnSecondary btnCompact" disabled={!s?.running || pull.running} onClick={() => pull.start()}>
               {pull.running ? "Downloading…" : "Download"}

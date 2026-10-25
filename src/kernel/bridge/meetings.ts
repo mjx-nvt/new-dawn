@@ -31,6 +31,7 @@ const keys = {
   meetings: (slug: string) => ["meetings", slug] as const,
   meeting: (slug: string, id: string) => ["meeting", slug, id] as const,
   transcript: (slug: string, id: string) => ["transcript", slug, id] as const,
+  waveform: (slug: string, id: string) => ["waveform", slug, id] as const,
   types: (slug: string) => ["meeting-types", slug] as const,
   progress: (id: string) => ["transcription-progress", id] as const,
   error: (id: string) => ["transcription-error", id] as const,
@@ -58,6 +59,17 @@ export function useTranscript(slug: string | undefined, id: string) {
     queryKey: keys.transcript(slug ?? "", id),
     queryFn: () => unwrap(commands.getTranscript(slug ?? "", id)),
     enabled: !!slug,
+  });
+}
+
+/** The recording's peaks for the player; the first call decodes the file (seconds), then it's cached. */
+export function useWaveform(slug: string | undefined, id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.waveform(slug ?? "", id),
+    queryFn: () => unwrap(commands.getWaveform(slug ?? "", id)),
+    enabled: !!slug && enabled,
+    staleTime: Infinity,
+    retry: false,
   });
 }
 

@@ -93,10 +93,10 @@ function Overview({ slug, name, folder, archived }: { slug: string; name: string
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Status</p>
-            <p className="rowHint">Archived workspaces keep their data; their database is closed. Manage all workspaces in Settings.</p>
+            <p className="rowHint">Archived workspaces keep their data. Manage them in Settings.</p>
           </div>
           <div className="rowControl">
-            <span className={archived ? "chip" : "chip chipBrand"}>{archived ? "Archived" : "Active"}</span>
+            <span className={archived ? "chip" : "chip chipPrimary"}>{archived ? "Archived" : "Active"}</span>
           </div>
         </div>
       </div>

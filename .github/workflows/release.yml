@@ -14,13 +14,13 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
@@ -40,11 +40,31 @@ jobs:
           version=$(node -p "require('./src-tauri/tauri.conf.json').version")
           test "v$version" = "${{ github.ref_name }}" || { echo "tag ${{ github.ref_name }} != v$version"; exit 1; }
 
+      # The updater key: Tauri wants the key file's content, which is one base64 line (it starts
+      # with "dW50cnVzdGVk" = "untrusted comment:" encoded). Accept the decoded two-line form too,
+      # strip stray whitespace, and stop here — not after an 11-minute build — when it's missing.
+      - name: Check the updater signing key
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          key=$(printf '%s' "$KEY" | tr -d '[:space:]')
+          if [ -z "$key" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. On the Mac that holds the key: gh secret set TAURI_SIGNING_PRIVATE_KEY --repo ${{ github.repository }} < ~/.tauri/newdawn.key"
+            exit 1
+          fi
+          case "$key" in
+            dW50cnVzdGVk*) ;;                                   # already the base64 file content
+            *) key=$(printf '%s' "$KEY" | base64 | tr -d '\n') ;; # decoded form pasted: encode it
+          esac
+          printf '%s' "$key" | base64 --decode | head -c 18 | grep -q '^untrusted comment' \
+            || { echo "::error::TAURI_SIGNING_PRIVATE_KEY is not a Tauri updater key (expected the content of ~/.tauri/newdawn.key)"; exit 1; }
+          echo "::add-mask::$key"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$key" >> "$GITHUB_ENV"
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}

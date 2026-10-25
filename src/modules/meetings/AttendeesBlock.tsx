@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SparkleIcon } from "../../kernel/shell/icons";
 import type { Attendee_Serialize } from "../../bindings";
 import { useUpdateAttendees } from "../../kernel/bridge/people";
 import { useSummarise } from "../../kernel/bridge/summary";
@@ -74,7 +75,8 @@ export default function AttendeesBlock({
           <span className="fieldHint">Names fixed across the summary, email and minutes.</span>
           <button
             type="button"
-            className="btn btnGhost btnCompact"
+            className="btn btnCompact btnAi"
+            aria-busy={summarise.isPending || undefined}
             disabled={locked || summarise.isPending}
             title="Qwen rewrites the summary with the corrected people; your edited sections are kept"
             onClick={() => {
@@ -82,6 +84,7 @@ export default function AttendeesBlock({
               summarise.mutate({ slug, meetingId, deep: false, keepEdits: true });
             }}
           >
+            <SparkleIcon />
             Re-run with corrected names
           </button>
           <button type="button" className="btn btnGhost btnCompact" aria-label="Dismiss" onClick={() => setSaved(false)}>
@@ -146,7 +149,7 @@ function AttendeesSheet({
           <h2 id="attendees-title" className="sheetHeading">
             Attendees
           </h2>
-          <p className="fieldHint">Correct a misheard name once: it's fixed everywhere in this summary and remembered for the next meeting.</p>
+          <p className="fieldHint">Fix a name once: it's corrected everywhere and remembered.</p>
         </div>
 
         <div className={styles.table}>

@@ -156,6 +156,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::meetings::list_meetings,
             commands::meetings::get_meeting,
             commands::meetings::get_transcript,
+            commands::meetings::get_waveform,
             commands::meetings::import_audio,
             commands::meetings::transcribe_meeting,
             commands::meetings::cancel_transcription,

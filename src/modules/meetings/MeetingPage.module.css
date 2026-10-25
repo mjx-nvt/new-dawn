@@ -39,14 +39,6 @@
   color: var(--ink-3);
 }
 
-.typePicker {
-  width: auto;
-  height: 24px;
-  padding: 0 var(--space-2);
-  font-size: var(--t-xs);
-  font-weight: 600;
-}
-
 .notice,
 .progressCard {
   display: flex;

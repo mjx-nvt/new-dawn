@@ -19,7 +19,7 @@ export function useBrand(slug: string | undefined) {
   });
 }
 
-/** Re-applies a brand in this window when any window changes it. Mount once per window. */
+/** Refreshes the cached brand pack (badge logo, Brand pane) when any window changes it. Mount once per window. */
 export function useBrandSync() {
   const queryClient = useQueryClient();
   useEffect(() => {

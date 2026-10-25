@@ -1,12 +1,14 @@
 /* ─────────────────────────────────────────────────────────────
    New Dawn — design tokens
-   Base tokens (never brand) + brand slots (set per workspace by
-   applyBrand() on .content-root). Specs: .claude/skills/newdawn-ui-patterns
+   Majoris Design System colours and type on an Apple Liquid Glass
+   shell (D-033). The app's palette is fixed: a workspace's brand pack
+   never reaches the UI — it is for exported documents only.
+   Specs: .claude/skills/newdawn-ui-patterns
    ───────────────────────────────────────────────────────────── */
 
 :root {
-  /* Typeface — fixed for all tenants */
-  --font: 'Be Vietnam Pro', -apple-system, system-ui, sans-serif;
+  /* Typeface — DM Sans (Majoris), bundled; variable weight 100–1000 */
+  --font: 'DM Sans Variable', 'DM Sans', -apple-system, system-ui, sans-serif;
 
   /* Text sizes */
   --t-xs: 11.5px;
@@ -26,72 +28,88 @@
   --space-7: 40px;
   --space-8: 48px;
 
-  /* Light appearance */
-  --ink: #0B1220;
-  --ink-2: #3F4756;
-  --ink-3: #8A93A3;
-  --hair: rgba(11, 18, 32, 0.14);
+  /* Light appearance — Majoris Slate */
+  --ink: #0F172A;                          /* slate-900 */
+  --ink-2: #475569;                        /* slate-600 */
+  --ink-3: #64748B;                        /* slate-500 (≥ 4.5:1 on white; slate-400 is for placeholders only) */
+  --hair: rgba(15, 23, 42, 0.14);
   --surface: #FFFFFF;
-  --surface-2: #F3F4F6;
+  --surface-2: #F1F5F9;                    /* slate-100 */
+  --canvas: #FFFFFF;
   --glass-tint: rgba(255, 255, 255, 0.55);
   --shell-scrim: transparent;              /* neutral wash behind sidebar + toolbar; dark mode only */
-  --on-brand: #FFFFFF;                     /* text on brand fills */
 
-  /* System accent for selection and focus rings. Not brandable: the brand slot is --accent below. */
+  /* System accent for selection and focus rings (never the primary) */
   --focus: AccentColor;
 
   /* Window / panel geometry (Golden Gate: one radius) */
   --radius-window: 12px;                   /* keep in sync with WINDOW_RADIUS in src-tauri/src/kernel/glass.rs */
   --radius-pill: 999px;
-
-  /* ── Brand slots — populated per workspace; these are neutral defaults ── */
-  --brand: #3B5BDB;
-  --brand-50: #F2F5FD;
-  --brand-100: #E1E8FA;
-  --brand-200: #BCCAF3;
-  --brand-300: #8EA4EA;
-  --brand-400: #5F7DE2;
-  --brand-500: #3B5BDB;
-  --brand-600: #2F49B3;
-  --brand-700: #25398C;
-  --brand-800: #1B2A66;
-  --brand-900: #121C45;
-  --brand-950: #0A1028;
-  --secondary: var(--brand-700);
-  --accent: var(--brand);
-  --canvas: #FFFFFF;
-  --status-positive: #1F7A4D;
-  --status-warning: #9A6A00;
-  --status-negative: #B3261E;
   --radius-card: 10px;
   --radius-chip: 6px;
   --radius-control: 8px;
   --radius-modal: 14px;
-  --button-shape: var(--radius-control);   /* 6px | var(--radius-control) | 999px */
-  --button-primary: filled;                /* filled | soft | outline */
-  --button-secondary: soft;                /* soft | outline | ghost */
-  --logo-url: none;
-  --logo-dark-url: none;
-}
+  --button-shape: var(--radius-pill);      /* Apple: controls are capsules */
+  --chevron: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="%2364748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M3 4.5l3 3 3-3"/%3E%3C/svg%3E');
 
-/* Brand-coloured text. Declared on .content-root too so it follows the tenant brand set there. */
-:root, .content-root { --brand-text: var(--brand); }
+  /* ── Primary — Majoris Orange. Fills at 500, hover 600, pressed 700. ── */
+  --primary: #F97316;
+  --primary-50: #FFF7ED;
+  --primary-100: #FFEDD5;
+  --primary-200: #FED7AA;
+  --primary-300: #FDB06B;
+  --primary-400: #FB923C;
+  --primary-500: #F97316;
+  --primary-600: #EA6A0A;
+  --primary-700: #C2570A;
+  --primary-800: #9A3D07;
+  --primary-900: #7C2D04;
+  --primary-950: #431403;
+  --on-primary: #FFFFFF;                   /* text on primary fills */
+  --primary-text: var(--primary-700);      /* orange as text on white/--surface only (4.5:1); on --surface-2 use --ink */
+  /* Tinted surfaces (active item, orange chip, playing row, banner). Tokens, not per-rule media
+     blocks, and rgba() literals rather than color-mix(…, transparent): WebKit does not repaint a
+     background whose value is such a color-mix when the appearance changes while the app runs. */
+  --primary-tint: var(--primary-100);
+  --primary-tint-soft: var(--primary-50);
+  --on-primary-tint: var(--primary-800);
+
+  /* AI marker (the only gradient in the app): Majoris blue-500 → the orange primary */
+  --ai-from: #4F46E5;                      /* blue-600: white on it is 6.3:1 (blue-500 is 4.5) */
+  --ai-to: var(--primary);
+  --ai-gradient: linear-gradient(135deg, var(--ai-from), var(--ai-to));
+
+  /* Status — Majoris green / yellow / red, at the first step ≥ 4.5:1 as text on white */
+  --status-positive: #047857;              /* green-700 */
+  --status-warning: #7D5C02;               /* yellow-800 */
+  --status-negative: #DC2626;              /* red-600 */
+  --status-positive-tint: rgba(4, 120, 87, 0.12);
+  --status-warning-tint: rgba(125, 92, 2, 0.12);
+  --status-negative-tint: rgba(220, 38, 38, 0.12);
+}
 
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #F2F4F8;
     --ink-2: #B9C0CC;
-    --ink-3: #7E8798;
+    --ink-3: #8A94A6;
     --hair: rgba(255, 255, 255, 0.18);
     --surface: #1C1F26;
     --surface-2: #262A33;
+    --canvas: #15171C;
     --glass-tint: rgba(28, 31, 38, 0.55);
     --shell-scrim: rgba(0, 0, 0, 0.4);
-    --canvas: #15171C;
-    /* Status text must stay ≥ 4.5:1 on the dark canvas (applyBrand may override in light mode). */
-    --status-positive: #4CC38A;
-    --status-warning: #E2B24A;
-    --status-negative: #F2726A;
+    --primary-text: var(--primary-400);
+    --primary-tint: rgba(251, 146, 60, 0.22);       /* primary-400 at 22 %: a literal, not color-mix — see the note above */
+    --primary-tint-soft: rgba(251, 146, 60, 0.14);  /* primary-400 at 14 % */
+    --on-primary-tint: var(--primary-200);
+    --chevron: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="%23B9C0CC" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M3 4.5l3 3 3-3"/%3E%3C/svg%3E');
+    /* Status text must stay ≥ 4.5:1 on the dark canvas. */
+    --status-positive: #34D399;
+    --status-warning: #FACC15;
+    --status-negative: #F87171;
+    --status-positive-tint: rgba(52, 211, 153, 0.14);
+    --status-warning-tint: rgba(250, 204, 21, 0.14);
+    --status-negative-tint: rgba(248, 113, 113, 0.14);
   }
-  :root, .content-root { --brand-text: var(--brand-400); }
 }

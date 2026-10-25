@@ -23,10 +23,10 @@
 .sectionLabel {
   padding: 0 var(--space-3) var(--space-1);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: .08em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .footer {
@@ -54,9 +54,9 @@
 
 .active,
 .active:hover {
-  background: var(--brand-100);
-  color: var(--brand-700);
-  font-weight: 600;
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+  font-weight: 500;
 }
 
 .item > svg { flex: none; color: var(--ink-2); }
@@ -81,10 +81,3 @@
   padding: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  .active,
-  .active:hover {
-    background: color-mix(in srgb, var(--brand-400) 22%, transparent);
-    color: var(--brand-200);
-  }
-}

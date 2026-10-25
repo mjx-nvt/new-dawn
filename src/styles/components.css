@@ -1,7 +1,7 @@
 /* ─────────────────────────────────────────────────────────────
    New Dawn — shared page typography and controls (global classes).
-   Sizes and rules: .claude/skills/newdawn-ui-patterns. Buttons read
-   the brand's --button-shape; colours come from tokens only.
+   Sizes and rules: .claude/skills/newdawn-ui-patterns. Colours come
+   from tokens only; nothing here follows a workspace's brand.
    ───────────────────────────────────────────────────────────── */
 
 /* Page + section rhythm — the page uses the panel's width; prose limits its own measure. */
@@ -10,10 +10,10 @@
 .eyebrow {
   margin-bottom: var(--space-1);
   font-size: var(--t-xs);
-  font-weight: 700;
-  letter-spacing: .1em;
+  font-weight: 500;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  color: var(--brand-text);
+  color: var(--primary-text);
 }
 
 .pageTitle {
@@ -160,6 +160,23 @@ textarea.input {
   line-height: 1.5;
   resize: vertical;
 }
+
+/* Every dropdown is the same capsule (the meeting-type picker look): native <select>, own chevron. */
+select.input {
+  width: auto;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 calc(var(--space-3) + 16px) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  appearance: none;
+  background: var(--surface) var(--chevron) no-repeat right var(--space-2) center / 12px;
+  cursor: default;
+}
+select.input:hover:not(:disabled) { background-color: var(--surface-2); }
+select.input:disabled { opacity: .5; }
+.field > select.input { width: 100%; }
 .input:focus,
 .btn:focus-visible,
 .segmented button:focus-visible {
@@ -167,7 +184,7 @@ textarea.input {
   outline: none;
 }
 
-/* Buttons: shape from the brand, style by role */
+/* Buttons: Apple capsules. Orange only on the primary; the rest is neutral glass. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -176,29 +193,20 @@ textarea.input {
   height: 32px;
   padding: 0 var(--space-4);
   border-radius: var(--button-shape);
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
-  transition: background 150ms ease-out;
+  transition: background 150ms ease-out, transform 120ms ease-out;
 }
+.btn:active:not(:disabled) { transform: scale(.97); }
 .btn:disabled { opacity: .5; }
 .btnCompact { height: 28px; padding: 0 var(--space-3); font-size: var(--t-sm); }
 
-.btnPrimary { background: var(--brand); color: var(--on-brand); }
-.btnPrimary:hover:not(:disabled) { background: var(--brand-600); }
+.btnPrimary { background: var(--primary); color: var(--on-primary); }
+.btnPrimary:hover:not(:disabled) { background: var(--primary-600); }
+.btnPrimary:active:not(:disabled) { background: var(--primary-700); }
 
-.btnSecondary { background: var(--brand-100); color: var(--brand-700); }
-.btnSecondary:hover:not(:disabled) { background: var(--brand-200); }
-
-/* The brand's button styles (tokens.json `button.primary` / `button.secondary`), set as data
-   attributes on .content-root by applyBrand. Defaults above are filled / soft. */
-[data-btn-primary="soft"] .btnPrimary { background: var(--brand-100); color: var(--brand-700); }
-[data-btn-primary="soft"] .btnPrimary:hover:not(:disabled) { background: var(--brand-200); }
-[data-btn-primary="outline"] .btnPrimary { background: transparent; box-shadow: inset 0 0 0 0.5px var(--brand); color: var(--brand-text); }
-[data-btn-primary="outline"] .btnPrimary:hover:not(:disabled) { background: var(--brand-50); }
-[data-btn-secondary="outline"] .btnSecondary { background: transparent; box-shadow: inset 0 0 0 0.5px var(--brand); color: var(--brand-text); }
-[data-btn-secondary="outline"] .btnSecondary:hover:not(:disabled) { background: var(--brand-50); }
-[data-btn-secondary="ghost"] .btnSecondary { background: transparent; color: var(--ink-2); }
-[data-btn-secondary="ghost"] .btnSecondary:hover:not(:disabled) { background: var(--surface-2); }
+.btnSecondary { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 0.5px var(--hair); }
+.btnSecondary:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 10%, var(--surface-2)); }
 
 .btnGhost { color: var(--ink-2); }
 .btnGhost:hover:not(:disabled) { background: var(--surface-2); }
@@ -206,29 +214,70 @@ textarea.input {
 /* Destructive: red text; the confirm step (`.btnDangerFilled`) is a red fill. */
 .btnDanger { color: var(--status-negative); }
 .btnDanger:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 10%, transparent); }
-.btnDangerFilled { background: var(--status-negative); color: var(--on-brand); }
+.btnDangerFilled { background: var(--status-negative); color: var(--on-primary); }
 .btnDangerFilled:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 85%, black); }
 
-@media (prefers-color-scheme: dark) {
-  .btnSecondary { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
-  .btnSecondary:hover:not(:disabled) { background: color-mix(in srgb, var(--brand-400) 32%, transparent); }
+/* AI marker: a sparkle and the one gradient in the app, on every action Whisper or Qwen performs.
+   Primary → gradient fill; others → gradient hairline ring. aria-busy animates it while running. */
+.btnAi { position: relative; }
+.btnAi > svg { flex: none; }
+.btnPrimary.btnAi {
+  background: var(--ai-gradient);
+  background-size: 200% 200%;
+}
+.btnPrimary.btnAi:hover:not(:disabled),
+.btnPrimary.btnAi:active:not(:disabled) { background: var(--ai-gradient) 100% 100% / 200% 200%; }
+.btnAi:not(.btnPrimary) {
+  background: var(--surface);
+  color: var(--ink);
+}
+.btnAi:not(.btnPrimary)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--ai-gradient);
+  background-size: 200% 200%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.btnAi:not(.btnPrimary):hover:not(:disabled) { background: var(--surface-2); }
+.btnAi[aria-busy="true"],
+.btnAi[aria-busy="true"]::before { animation: aiShimmer 1.6s linear infinite; }
+@keyframes aiShimmer {
+  from { background-position: 0% 0%; }
+  to { background-position: 200% 200%; }
+}
+/* "Written by Qwen · 24 Oct": a sparkle in the gradient beside AI-written content. */
+.aiMark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.aiMark > svg {
+  flex: none;
+  color: var(--ai-to);
 }
 
-/* Segmented control: buttons with aria-pressed */
+/* Segmented control: a capsule of capsules, buttons with aria-pressed */
 .segmented {
   display: inline-flex;
   padding: 2px;
   border: 0.5px solid var(--hair);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--surface-2);
 }
 .segmented button {
   height: 26px;
   padding: 0 var(--space-3);
-  border-radius: calc(var(--radius-control) - 2px);
+  border-radius: var(--radius-pill);
   color: var(--ink-2);
   font-size: var(--t-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 .segmented button[aria-pressed="true"],
 .segmented button[aria-selected="true"] {
@@ -237,7 +286,7 @@ textarea.input {
   box-shadow: 0 0 0 0.5px var(--hair);
 }
 
-/* Chips: neutral by default; .chipBrand for brand-tagged */
+/* Chips: neutral by default; .chipPrimary for the orange-tagged (Majoris badge pair 100 / 800) */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -247,13 +296,10 @@ textarea.input {
   background: var(--surface-2);
   color: var(--ink-2);
   font-size: var(--t-xs);
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
 }
-.chipBrand { background: var(--brand-100); color: var(--brand-700); }
-@media (prefers-color-scheme: dark) {
-  .chipBrand { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
-}
+.chipPrimary { background: var(--primary-tint); color: var(--on-primary-tint); }
 
 /* Popover menu (the ⋯ button): a glass list of actions. */
 .menu {

@@ -114,6 +114,8 @@ export const commands = {
 	listMeetings: (slug: string) => typedError<Meeting_Serialize[], AppError>(__TAURI_INVOKE("list_meetings", { slug })),
 	getMeeting: (slug: string, id: string) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("get_meeting", { slug, id })),
 	getTranscript: (slug: string, meetingId: string) => typedError<TranscriptSegment[], AppError>(__TAURI_INVOKE("get_transcript", { slug, meetingId })),
+	/**  The recording's peaks for the player (cached beside the recording after the first call). */
+	getWaveform: (slug: string, meetingId: string) => typedError<Waveform, AppError>(__TAURI_INVOKE("get_waveform", { slug, meetingId })),
 	/**  Copies the audio into the workspace, creates the meeting and starts transcription. */
 	importAudio: (slug: string, path: string, title: string, language: Language, meetingTypeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("import_audio", { slug, path, title, language, meetingTypeId })),
 	/**  Re-runs transcription (after a failure or cancel, or to retry with another model). */
@@ -976,6 +978,12 @@ export type TranscriptionProgress = {
 	meeting_id: string,
 	stage: Stage,
 	percent: number,
+};
+
+export type Waveform = {
+	/**  One peak (max |sample|, 0–255) per equal slice of the recording. */
+	peaks: number[],
+	duration_ms: number,
 };
 
 export type Workspace = Workspace_Serialize | Workspace_Deserialize;

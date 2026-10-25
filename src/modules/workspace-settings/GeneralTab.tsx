@@ -27,7 +27,7 @@ export default function GeneralTab() {
             <p className="rowLabel">Current workspace</p>
             <p className="rowHint">{workspace?.folder_path ?? "Not yet captured"}</p>
           </div>
-          <div className="rowControl">{workspace ? <span className="chip chipBrand">{workspace.name}</span> : <span className="ghostText">Not yet captured</span>}</div>
+          <div className="rowControl">{workspace ? <span className="chip chipPrimary">{workspace.name}</span> : <span className="ghostText">Not yet captured</span>}</div>
         </div>
       </div>
 
@@ -55,7 +55,7 @@ export default function GeneralTab() {
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Call audio</p>
-            <p className="rowHint">The other side. macOS asks the first time you record; a banner appears if it stays silent.</p>
+            <p className="rowHint">The other side. macOS asks the first time you record.</p>
           </div>
           <div className="rowControl">
             <button type="button" className="btn btnGhost btnCompact" onClick={() => openPrivacySettings(true)}>

@@ -72,6 +72,17 @@ pub async fn get_transcript(
     Ok(meetings::transcript(&hub.pool(&slug)?, &meeting_id).await?)
 }
 
+/// The recording's peaks for the player (cached beside the recording after the first call).
+#[tauri::command]
+#[specta::specta]
+pub async fn get_waveform(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+) -> Result<meetings::waveform::Waveform, AppError> {
+    Ok(meetings::waveform::get(&hub.pool(&slug)?, &meeting_id).await?)
+}
+
 /// Copies the audio into the workspace, creates the meeting and starts transcription.
 #[tauri::command]
 #[specta::specta]

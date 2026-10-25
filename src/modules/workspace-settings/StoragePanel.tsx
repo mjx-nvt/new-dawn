@@ -29,7 +29,7 @@ export default function StoragePanel() {
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Keep recordings for</p>
-            <p className="rowHint">After the summary is written. Then the audio goes to the Trash; the transcript, summary and minutes stay.</p>
+            <p className="rowHint">Counted from the day the summary was written; checked daily. The audio goes to the Trash; transcript, summary and minutes stay.</p>
           </div>
           <div className="rowControl">
             <div className="segmented" role="group" aria-label="Keep recordings for">
@@ -44,7 +44,7 @@ export default function StoragePanel() {
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Compression</p>
-            <p className="rowHint">Once transcribed, a recording becomes a small AAC file (about 20 MB an hour instead of 115 MB) and the original is removed.</p>
+            <p className="rowHint">After transcription, recordings are compressed to about 20 MB an hour.</p>
           </div>
         </div>
       </div>

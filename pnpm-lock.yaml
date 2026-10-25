@@ -8,8 +8,8 @@ importers:
 
   .:
     dependencies:
-      '@fontsource/be-vietnam-pro':
-        specifier: ^5.0.0
+      '@fontsource-variable/dm-sans':
+        specifier: ^5.3.0
         version: 5.3.0
       '@tanstack/react-query':
         specifier: ^5.104.5
@@ -60,8 +60,8 @@ importers:
 
 packages:
 
-  '@fontsource/be-vietnam-pro@5.3.0':
-    resolution: {integrity: sha512-xhAQBGHDxP5BF8IJxedy5MoWUmc1DlPCcZbMLhvnPkf8TaYCbbUVs3LjpuJ4BYdTrdiCLaewNaY8z+owq/FqFw==}
+  '@fontsource-variable/dm-sans@5.3.0':
+    resolution: {integrity: sha512-BpUG5bqePiDFMBM4ZtLSlPdAIOM990uB1dlXzIf4aw21yQR7BmykedLXXXMqGWsR18aMLOsbWccwJNh3ztTQaA==}
 
   '@oxc-project/types@0.155.0':
     resolution: {integrity: sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==}
@@ -524,7 +524,7 @@ packages:
 
 snapshots:
 
-  '@fontsource/be-vietnam-pro@5.3.0': {}
+  '@fontsource-variable/dm-sans@5.3.0': {}
 
   '@oxc-project/types@0.155.0': {}
 

@@ -7,6 +7,7 @@ pub mod review;
 pub mod summarise;
 pub mod template;
 pub mod transcribe;
+pub mod waveform;
 
 use anyhow::{Result, bail};
 use serde::Serialize;

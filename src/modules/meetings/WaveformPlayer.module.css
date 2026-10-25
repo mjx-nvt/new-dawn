@@ -1,0 +1,46 @@
+/* A glass strip: play · waveform · time · ±10 s · speed. Sticks under the tabs while reading. */
+.player {
+  position: sticky;
+  top: calc(-1 * var(--space-6));
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+}
+
+.play {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.wave {
+  flex: 1 1 240px;
+  min-width: 0;
+  height: 44px;
+  border-radius: var(--radius-control);
+  cursor: default;
+}
+.wave:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.wave[aria-busy="true"] { opacity: .6; }
+
+.time {
+  flex: none;
+  min-width: 96px;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.timeTotal { color: var(--ink-3); }
+
+.skips {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+}
+.skips .btn { padding: 0 var(--space-2); font-variant-numeric: tabular-nums; }

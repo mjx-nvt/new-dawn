@@ -1,6 +1,6 @@
 # New Dawn — Plan v2 (v1 build scope: tenants + the meeting machine)
 
-_2026-10-23. Supersedes `plan v1` (kept in the Project as history). Decisions carried over: Tauri 2 + Rust engine + React cockpit; one SQLite file per tenant; Liquid Glass shell on macOS Golden Gate; Be Vietnam Pro for the app UI; 100 % local AI; bundle id `co.majorisdigital.newdawn`; MacBook Pro M1 Pro 16 GB. Reference docs: `ai-engine.md`, `meetily-teardown.md`, `document-export.md`, `model-family-comparison.md`, `reference-audit.md`. Build prompts: `playbook.md`. Plain language._
+_2026-10-23. Supersedes `plan v1` (kept in the Project as history). Decisions carried over: Tauri 2 + Rust engine + React cockpit; one SQLite file per tenant; Liquid Glass shell on macOS Golden Gate; DM Sans for the app UI (D-033; was Be Vietnam Pro); 100 % local AI; bundle id `co.majorisdigital.newdawn`; MacBook Pro M1 Pro 16 GB. Reference docs: `ai-engine.md`, `meetily-teardown.md`, `document-export.md`, `model-family-comparison.md`, `reference-audit.md`. Build prompts: `playbook.md`. Plain language._
 
 ## 1. What v1 is
 
@@ -59,7 +59,7 @@ One folder and one database per tenant, as before:
   "document_fonts": { "heading": "Playfair Display", "body": "Be Vietnam Pro", "files": ["fonts/…"] },
   "radius": { "preset": "soft" }, "button": { "shape": "rounded", "primary": "filled" } }
 ```
-- `colors`, `logo`, `radius`, `button` skin the **app's content area** (the shell stays native; the UI typeface stays Be Vietnam Pro).
+- ~~`colors`, `logo`, `radius`, `button` skin the **app's content area**~~ — superseded by D-033 (25 Oct 2026): the pack is for exported documents only; the app's palette is Majoris orange on Slate and the UI typeface is DM Sans.
 - `document_fonts` are used **only in exported documents** — the minutes `.docx` keeps the template's own fonts; the fallback PDF renderer (later) uses these.
 - `slogan` appears in document headers (EN line, then VI line, one line each — house style).
 
@@ -87,7 +87,7 @@ One folder and one database per tenant, as before:
 Import of an existing audio file (m4a/mp3/wav) enters the same flow at "Transcript".
 
 ## 5. Design language (unchanged)
-Apple owns the shell (real Liquid Glass via `window-vibrancy`, edge-to-edge sidebar, unified toolbar, one radius, dark mode, accent colour, reduced-transparency honoured). The brand owns the content area through the tokens above. Be Vietnam Pro is the app typeface. Record control in the toolbar and the menu-bar item. Ghost pattern on every detail page.
+Apple owns the shell (real Liquid Glass via `window-vibrancy`, edge-to-edge sidebar, unified toolbar, one radius, dark mode, accent colour, reduced-transparency honoured). ~~The brand owns the content area through the tokens above.~~ D-033: the app's palette is Majoris orange on Slate and the brand pack is for documents only. DM Sans is the app typeface. Record control in the toolbar and the menu-bar item. Ghost pattern on every detail page.
 
 ## 6. Data model (v1)
 
@@ -103,7 +103,7 @@ Apple owns the shell (real Liquid Glass via `window-vibrancy`, edge-to-edge side
 |---|---|---|
 | D22 | **v1 scope** | Tenants + record → transcript → executive summary (email) → branded minutes DOCX/PDF. No live transcription, no tasks/cockpit, no knowledge modules in v1 |
 | D23 | **AI kept simple** | One Whisper model + one Ollama model (`qwen3.5:9b`, thinking on); `transcribe()` and `complete()` only; sequential, never concurrent |
-| D7 amended | **Fonts** | App UI: Be Vietnam Pro, fixed. Tenant `document_fonts` (heading/body) apply only to exported documents |
+| D7 amended | **Fonts** | App UI: DM Sans, fixed (D-033; was Be Vietnam Pro). Tenant `document_fonts` (heading/body) apply only to exported documents |
 | D24 | **Meeting type is the unit of configuration** | Template, summary structure and email format hang off the meeting type; tenants define types in setup |
 | D25 | **Brand import** | DOCX/PDF/logo/fonts dropped in → deterministic DOCX parsing + Qwen reading the guideline → reviewed → saved as tokens + template manifest |
 | D26 | **Email body** | A rendering of the summary, not a separate AI call; copy as text + HTML; `mailto:` optional |

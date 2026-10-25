@@ -15,7 +15,7 @@ export default function ConvertersPanel() {
               <div key={c.converter}>
                 <p className={styles.label}>{c.name}</p>
                 <div className={styles.permission}>
-                  <span className={c.path ? "chip chipBrand" : "chip"}>{c.path ? "Found" : "Not installed"}</span>
+                  <span className={c.path ? "chip chipPrimary" : "chip"}>{c.path ? "Found" : "Not installed"}</span>
                 </div>
                 {c.path ? <p className="fieldHint">{c.path}</p> : <p className="ghostText">No app found in Applications</p>}
               </div>

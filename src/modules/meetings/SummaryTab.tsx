@@ -15,6 +15,7 @@ import {
   type SummaryProgress,
   type SummaryView,
 } from "../../kernel/bridge/summary";
+import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import AttendeesBlock from "./AttendeesBlock";
 import { formatWhen } from "./format";
@@ -63,7 +64,8 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
                   </p>
                 </div>
                 {transcribed && (
-                  <button type="button" className="btn btnPrimary" disabled={!ollamaReady || summarise.isPending} onClick={() => run(false, true)}>
+                  <button type="button" className="btn btnPrimary btnAi" aria-busy={busy || undefined} disabled={!ollamaReady || summarise.isPending} onClick={() => run(false, true)}>
+                    <SparkleIcon />
                     Write summary
                   </button>
                 )}
@@ -164,17 +166,19 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
   return (
     <>
       <div className={styles.sectionsHead}>
-        <p className="fieldHint">
-          {view.model ?? "Qwen"} · {edited ? "edited" : "written"} {formatWhen(view.edited_at ?? view.updated_at)}
+        <p className="fieldHint aiMark">
+          <SparkleIcon />
+          {edited ? `Edited ${formatWhen(view.edited_at ?? view.updated_at)} · written by ${view.model ?? "Qwen"}` : `Written by ${view.model ?? "Qwen"} · ${formatWhen(view.updated_at)}`}
         </p>
         <MenuButton
-          className="btn btnGhost btnCompact"
+          className="btn btnCompact btnAi"
           label="Re-run options"
           items={[
             { label: "Re-run", onSelect: () => rerun(false), disabled: busy || !canRun },
             { label: "Deep re-run (thinks first, slower)", onSelect: () => rerun(true), disabled: busy || !canRun },
           ]}
         >
+          <SparkleIcon />
           Re-run ▾
         </MenuButton>
       </div>
@@ -193,18 +197,20 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
             <button type="button" className="btn btnGhost btnCompact" autoFocus={editedCount === 0} onClick={() => setPendingRun(null)}>
               Cancel
             </button>
-            <button type="button" className={`btn btnCompact ${editedCount > 0 ? "btnDanger" : "btnPrimary"}`} onClick={() => choose(false)}>
+            <button type="button" className={`btn btnCompact ${editedCount > 0 ? "btnDanger" : "btnPrimary btnAi"}`} onClick={() => choose(false)}>
+              {editedCount === 0 && <SparkleIcon />}
               {editedCount > 0 ? "Discard edits" : "Re-run and replace"}
             </button>
             {editedCount > 0 && (
-              <button type="button" className="btn btnPrimary btnCompact" autoFocus onClick={() => choose(true)}>
+              <button type="button" className="btn btnPrimary btnCompact btnAi" autoFocus onClick={() => choose(true)}>
+                <SparkleIcon />
                 Keep my edits
               </button>
             )}
           </div>
         </div>
       )}
-      {view.transcript_changed && !busy && <p className={`fieldHint ${styles.stale}`}>The transcript was corrected after this summary — re-run to use it (your edits are kept).</p>}
+      {view.transcript_changed && !busy && <p className={`fieldHint ${styles.stale}`}>The transcript changed since — re-run to use it; your edits are kept.</p>}
 
       {view.doc.sections.map((section, index) => (
         <SectionBlock

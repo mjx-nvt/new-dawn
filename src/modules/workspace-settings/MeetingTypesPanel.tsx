@@ -101,7 +101,7 @@ function TypeRow({ slug, type, only }: { slug: string; type: MeetingTypeView; on
             ))}
           </select>
           {type.is_default ? (
-            <span className="chip chipBrand">Default</span>
+            <span className="chip chipPrimary">Default</span>
           ) : (
             <button type="button" className="btn btnGhost btnCompact" onClick={() => makeDefault.mutate(type.id)}>
               Make default

@@ -11,7 +11,7 @@
   text-align: left;
 }
 .pack > span:last-child { display: flex; flex-direction: column; gap: 2px; }
-.pack[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--brand); }
+.pack[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--primary); }
 
 .packSwatch {
   flex: none;
@@ -104,16 +104,3 @@
   border-radius: var(--radius-control);
 }
 
-.preview { display: flex; flex-direction: column; }
-
-.previewTitle {
-  font-size: var(--t-lg);
-  font-weight: 700;
-}
-
-.previewRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}

@@ -17,14 +17,6 @@
 
 .filter { display: inline-flex; }
 
-.select {
-  width: auto;
-  height: 28px;
-  padding: 0 var(--space-3);
-  font-size: var(--t-sm);
-  font-weight: 500;
-}
-
 .spacer { flex: 1; }
 
 .summary {
@@ -36,7 +28,7 @@
 }
 
 .clear {
-  color: var(--brand-text);
+  color: var(--primary-text);
   font-size: var(--t-sm);
   font-weight: 600;
 }

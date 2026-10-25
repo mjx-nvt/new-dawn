@@ -20,6 +20,25 @@ function Icon({ children, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Material Symbols "auto_awesome" (Apache-2.0), the AI marker. Filled, so it reads at 14 px. */
+export const SparkleIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z" />
+  </svg>
+);
+
+/** Material Symbols for the player (Apache-2.0): play_arrow, pause, replay (+ its mirror). */
+const Material = ({ d, flip = false, size = 18 }: { d: string; flip?: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d={d} transform={flip ? "matrix(-1 0 0 1 24 0)" : undefined} />
+  </svg>
+);
+export const PlayIcon = () => <Material d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18a1 1 0 0 0 0-1.69L9.54 5.98A.998.998 0 0 0 8 6.82z" />;
+export const PauseIcon = () => <Material d="M8 19c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2v10c0 1.1.9 2 2 2zm6-12v10c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1-.9-2-2-2s-2 .9-2 2z" />;
+const REPLAY = "M12 5V2.21c0-.45-.54-.67-.85-.35l-3.8 3.79c-.2.2-.2.51 0 .71l3.79 3.79c.32.31.86.09.86-.36V7c3.73 0 6.68 3.42 5.86 7.29-.47 2.27-2.31 4.1-4.57 4.57-3.57.75-6.75-1.7-7.23-5.01-.07-.48-.49-.85-.98-.85-.6 0-1.08.53-1 1.13.62 4.39 4.8 7.64 9.53 6.72 3.12-.61 5.63-3.12 6.24-6.24C20.84 9.48 16.94 5 12 5z";
+export const SkipBackIcon = () => <Material d={REPLAY} size={16} />;
+export const SkipForwardIcon = () => <Material d={REPLAY} size={16} flip />;
+
 export const MeetingsIcon = () => (
   <Icon>
     <rect x="2" y="3" width="12" height="11" rx="2" />

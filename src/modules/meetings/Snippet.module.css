@@ -8,7 +8,7 @@
 }
 
 .match {
-  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  background: var(--primary-tint);
   color: var(--ink);
   border-radius: calc(var(--radius-chip) / 3);
   font-weight: 600;

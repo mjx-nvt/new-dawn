@@ -5,7 +5,7 @@
   gap: var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  background: var(--status-warning-tint);
   color: var(--status-warning);
   font-size: var(--t-sm);
   font-weight: 600;

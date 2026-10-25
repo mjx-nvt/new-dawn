@@ -39,7 +39,7 @@ export default function TextModels() {
         <li className={`card ${styles.row}`}>
           <div className={styles.main}>
             <p className={styles.name}>Ollama isn't running</p>
-            <p className="fieldHint">Summaries are written by a model running in Ollama on this Mac. Open it to manage models.</p>
+            <p className="fieldHint">Written by a model in Ollama on this Mac.</p>
           </div>
           <div className={styles.actions}>
             <button type="button" className="btn btnSecondary btnCompact" onClick={() => void openOllamaApp()}>
@@ -67,7 +67,7 @@ export default function TextModels() {
                 <p className={styles.name}>
                   {m.name}
                   {installed && <span className="fieldHint">{formatMb(m.size_mb)}</span>}
-                  {inUse && <span className="chip chipBrand">Writes summaries</span>}
+                  {inUse && <span className="chip chipPrimary">Writes summaries</span>}
                   {!installed && <span className="chip">Not downloaded</span>}
                 </p>
                 {pulling && (
@@ -144,7 +144,7 @@ export default function TextModels() {
         >
           {freed ? "Memory freed" : "Free memory now"}
         </button>
-        <span className="fieldHint">Ollama keeps the model loaded for 5 minutes after a summary; this unloads it now.</span>
+        <span className="fieldHint">Ollama keeps the model loaded for 5 minutes; unload it now.</span>
       </div>
     </>
   );

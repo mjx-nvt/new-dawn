@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { pickAudioFile, useImportAudio, type Language } from "../../kernel/bridge/meetings";
+import { SparkleIcon } from "../../kernel/shell/icons";
 import { useCurrentWorkspace, useSetCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import styles from "./ImportAudioSheet.module.css";
 import MeetingFields, { LanguageField } from "./MeetingFields";
@@ -91,10 +92,11 @@ export default function ImportAudioSheet({ onClose }: { onClose: () => void }) {
           </button>
           <button
             type="button"
-            className="btn btnPrimary"
+            className="btn btnPrimary btnAi"
             disabled={!path || !title.trim() || !slug || importAudio.isPending}
             onClick={submit}
           >
+            <SparkleIcon />
             {importAudio.isPending ? "Importing…" : "Import and transcribe"}
           </button>
         </div>

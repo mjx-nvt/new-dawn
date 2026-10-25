@@ -44,7 +44,7 @@
 .bar > span {
   display: block;
   height: 100%;
-  background: var(--brand);
+  background: var(--primary);
   transition: width 220ms ease-out;
 }
 

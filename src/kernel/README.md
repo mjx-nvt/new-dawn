@@ -1,1 +1,1 @@
-Cockpit kernel: shell/ (sidebar, toolbar, switcher — P1.1, P1.3) · theme/ (applyBrand — P1.4) · glass/ (P1.1) · dossier/ (DossierRenderer, ghosts) · bridge/ (P1.2, typed wrappers over generated bindings.ts — the ONLY place that calls invoke()).
+Cockpit kernel: shell/ (sidebar, toolbar, switcher — P1.1, P1.3) · theme/ (brandLogo — the workspace logo for the badge; the UI palette is fixed, D-033) · glass/ (P1.1) · dossier/ (DossierRenderer, ghosts) · bridge/ (P1.2, typed wrappers over generated bindings.ts — the ONLY place that calls invoke()).

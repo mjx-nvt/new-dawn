@@ -27,15 +27,15 @@
   height: 32px;
   padding: 0 var(--space-4);
   border-radius: var(--button-shape);
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
   transition: background 150ms ease-out;
 }
-.primary { background: var(--brand); color: var(--on-brand); }
-.primary:hover { background: var(--brand-600); }
+.primary { background: var(--primary); color: var(--on-primary); }
+.primary:hover { background: var(--primary-600); }
 .ghost { color: var(--ink-2); }
 .ghost:hover { background: var(--surface-2); }
-.danger { background: var(--status-negative); color: var(--on-brand); }
+.danger { background: var(--status-negative); color: var(--on-primary); }
 .primary:disabled,
 .ghost:disabled,
 .danger:disabled { opacity: .5; }
@@ -88,7 +88,7 @@
   background: var(--surface-2);
   color: var(--ink-2);
   font-size: var(--t-xs);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 20px;
 }
 
@@ -96,17 +96,11 @@
   height: 20px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-chip);
-  background: var(--brand-100);
-  color: var(--brand-700);
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
   font-size: var(--t-xs);
-  font-weight: 600;
+  font-weight: 500;
   line-height: 20px;
-}
-@media (prefers-color-scheme: dark) {
-  .pillBrand {
-    background: color-mix(in srgb, var(--brand-400) 22%, transparent);
-    color: var(--brand-200);
-  }
 }
 
 .path {

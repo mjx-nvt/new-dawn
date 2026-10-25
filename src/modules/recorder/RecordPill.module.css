@@ -70,7 +70,7 @@ button.pill:hover { background: var(--surface); }
   height: 18px;
   border-radius: 50%;
   background: var(--status-negative);
-  color: var(--on-brand);
+  color: var(--on-primary);
   font-size: var(--t-xs);
   font-weight: 700;
 }

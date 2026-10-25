@@ -16,6 +16,6 @@
 }
 
 .warning {
-  background: color-mix(in srgb, var(--status-warning) 14%, var(--canvas));
+  background: var(--status-warning-tint);
   color: var(--status-warning);
 }

@@ -1,3 +1,50 @@
+# Last Build — Majoris design system on the Apple glass shell (parts 1–4) · release 0.3.0
+_2026-10-25_
+
+## Release 0.3.0
+- Version 0.3.0 (package.json, tauri.conf.json, Cargo.toml), tag `v0.3.0`.
+- **Why CI releases failed** (runs for v0.2.1 / v0.2.2): `failed to decode secret key … Missing comment in secret key` — the `TAURI_SIGNING_PRIVATE_KEY` secret on GitHub is not the key file's content. The file `~/.tauri/newdawn.key` is a single base64 line; Tauri wants exactly that. The workflow now checks the secret *first* (fails in seconds with the exact `gh secret set` command instead of after an 11-minute build), accepts the decoded two-line form by re-encoding it, and strips stray whitespace. Actions moved to Node-24 versions (`checkout@v5`, `setup-node@v5`).
+- To make CI releases work: on this Mac run `gh secret set TAURI_SIGNING_PRIVATE_KEY --repo mjx-nvt/new-dawn < ~/.tauri/newdawn.key` and `gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo mjx-nvt/new-dawn --body ""` (the key has no password). If the CI run still fails, `scripts/release-local.sh` publishes the same release from a local signed build.
+
+## What changed — part 4
+- **Fewer words.** The thirteen longest hints across Settings, Storage, Transcript, Summary and Attendees were cut to one plain sentence each (e.g. "After transcription, recordings are compressed to about 20 MB an hour."). Menus were already glass popovers and dialogs native sheets — nothing structural changed.
+- **Never a blank window.** A root error boundary (`kernel/shell/CrashScreen.tsx`) shows the error and a Reload button if rendering throws; uncaught errors and unhandled rejections are logged to the console (the dev server mirrors it). Added after a wedged dev webview showed grey windows for a while — that turned out to be the dev process, not the code, but the safety net is cheap.
+- **Dark-mode fix (real bug, found by screenshot)**: switching the Mac to dark while the app runs left the active sidebar item, the playing transcript row, orange chips and the update banner on their light cream background (WebKit never repaints a background whose value is `color-mix(…, transparent)` when the appearance changes at runtime; a fresh load in dark was fine). The six per-rule overrides are now three tokens flipped at `:root` (`--primary-tint`, `--primary-tint-soft`, `--on-primary-tint`) using rgba literals in dark; verified by sampling the active item's pixels through light → dark → light → dark.
+- Architect review (part 4): no must-fixes; applied — the retention hint says again that the sweep is daily and counted from the summary's date; the search-hit highlight and the three status tints (chips, recording banner/dialog) became tokens too (`--status-*-tint`), so no static background uses `color-mix(…, transparent)` any more (the remaining ones — text selection, the sheet backdrop, the 55 % toolbar search/record pill, the 92 % canvas — either repaint on interaction or were verified to repaint on a flip).
+- Sidebar section labels (APP · AI ON THIS MAC · DEVELOPER) use `--ink-2` at 600 like the other secondary labels. Over a dark desktop the glass sidebar is mid-grey and *all* dark text there is low-contrast (macOS's own vibrancy trade-off); in dark mode the labels read clearly.
+- **Screens checked by screenshot**: Meetings, meeting (Transcript with player, Summary), Workspace (Overview, Brand, Meeting types, People), Welcome, New workspace, Settings (General, Workspaces, Backup, Storage, Models, PDF converters, About); the player, Storage and Meetings in dark mode. **Not checked**: Reduce Transparency (the accessibility default can't be set from a script here — please toggle it in System Settings → Accessibility → Display and look at a meeting page and the Settings window), and anything behind a click (sheets, menus, the switcher popover).
+
+## What changed — part 3
+- **Waveform player** replaces the default `<audio>` control on the Transcript tab: a glass strip with play/pause, the recording's waveform (click or drag to seek, ← → 5 s when focused), `0:00 / 46:05`, ±10 s buttons (Material `replay` and its mirror — Material has 10 s / 30 s glyphs, not 15, so 10 s it is), speed 1× / 1.5× / 2×. Played part in orange, the transcript line being played as a band behind the bars; the row highlight follows as before. Space plays/pauses and ← → skip 10 s anywhere on the tab unless you're typing or on a control.
+- **Peaks from Rust**: `modules/meetings/waveform.rs` — 1200 max-|sample| values (0–255) over the file, decoded through the transcription loader on first open and cached as `waveform.json` beside the recording (the 46-minute import took a few seconds once). Command `get_waveform`; bridge `useWaveform`. A meeting without a recording (retention) shows no player, as before. Test: `peaks` covers the file and keeps the loudest sample.
+- Architect review: no must-fixes; applied — a line under the strip when the recording can't be read or played, Space on the focused waveform, one ResizeObserver (not one per tick), no hex fallbacks in the canvas code, timestamp buttons drop focus after a click so Space pauses. Open: the strip keeps the old player's sticky offset (`top: -32px`); if its top looks clipped when stuck, set `top: 0` in `WaveformPlayer.module.css`.
+- Verified by screenshot: the strip with bars, time, skips and speed on the 46-minute meeting. Not verified by me: actual playback and seeking (I can't click) — please press play, click into the waveform and try Space.
+
+## What changed — part 2
+- **One dropdown look.** Every `<select className="input">` is now the capsule the meeting-type picker had: 28 px, own chevron (two fixed greys as data URIs, light/dark), hover tint, full width only inside a `.field`. No new component — the native element already did the job; the per-page overrides (`MeetingsPage .select`, `MeetingPage .typePicker`) are gone. `<select>` now inherits the app font and colour (it was rendering in SF).
+- **AI marker.** `SparkleIcon` (Material Symbols `auto_awesome`, inline — the only Material icon so far) plus `.btnAi`: the primary AI button is a blue-600 → orange gradient fill, other AI buttons get a 1 px gradient ring; `aria-busy` animates it while pending (the step button gives way to the progress card once the job runs). On: Import and transcribe, Transcribe, Transcribe again, Write summary (both places), Re-run ▾, Re-run and replace / Keep my edits, Re-run with corrected names. The summary head reads "✦ Written by qwen3.5:9b · 25 Oct 2026 at 10:55" (`.aiMark`). Tokens `--ai-from` / `--ai-to` / `--ai-gradient`; nothing else may use a gradient.
+- Architect review: must-fixes applied (gradient survived hover/press; `<select>` font reset; the import sheet's button marked). Verified by screenshot: Meetings list filters, the summarised meeting (ring Re-run, written-by line, capsule type picker), the transcribed meeting (gradient Write summary).
+
+## What changed — part 1
+- **Typeface**: DM Sans (Majoris), bundled via `@fontsource-variable/dm-sans` (variable weight, optical size; `@fontsource/be-vietnam-pro` removed). Weights calmed: body 400, labels / buttons / chips / eyebrows 500, section titles 600, page titles 700.
+- **Orange is the primary — only where navy was.** `tokens.css` now carries the Majoris orange ramp as `--primary` / `--primary-50…950` (the old `--brand*` variables were renamed; nothing new is tinted). Orange appears on: the primary button (500, hover 600, pressed 700), the active sidebar and Settings item (100 / 800), orange chips, eyebrows and links (`--primary-text` = 700 in light, 400 in dark), the progress bar, the playing transcript segment, the update banner. Neutrals moved to Majoris Slate (ink 900 / 600 / 500, surface-2 slate-100); status colours to green-700 / yellow-800 / red-600 (first steps that pass 4.5:1 as text on white; dark: the 400s).
+- **Apple shapes**: buttons, segmented controls and the toolbar search are capsules; buttons press (`scale .97`); **secondary buttons are neutral grey** (Apple), no longer a tint of the primary. Cards, inputs, menus and sheets keep their radii.
+- **The workspace brand is for documents only** (D-033). `applyBrand` is gone — `kernel/theme/brandLogo.ts` keeps only the logo for the workspace badge; `ContentRoot` and the Settings window set nothing from a pack. **Workspace → Brand** shows a paper-white first page (`DocumentPreview`: logo, heading in the heading font and primary colour, body font, slogan) and edits Logo · Colours (primary, secondary, accent, text) · Words and fonts. Corners / button / status / canvas controls were removed (UI concepts). The onboarding Brand step mock follows the same shape.
+- Docs: CLAUDE.md (Stack → Typeface; Design rules rewritten), the `newdawn-ui-patterns` skill (design-system section, tokens, buttons, sidebar, pills), the architect-reviewer agent (DM Sans; no variable from a pack), README, `docs/plan.md` (D7 amended; brand-skins-the-UI line struck), D-033.
+- Architect review: no must-fixes; should-fixes applied (stale README/comment/DECISIONS/plan lines, a commented fixed swatch, the dev mockup's hard-coded sizes, a note that `--primary-text` is for white surfaces only).
+- Checks: tsc clean; localhost-only passes; no Rust change (no migration). Screenshots verified light + dark: Workspace page, Meetings list (orange capsule primary, status chips), Brand tab (VIFC-blue document preview inside an orange app), Settings → Models.
+
+## Known gap (made visible by this change)
+- The DOCX export takes its look from the meeting type's template file, not from `tokens.json`; the pack's colours/fonts/slogan are stored and previewed but not yet read by an exporter. They will be when the app generates documents itself (PDF / PPTX).
+
+## Next (agreed plan)
+
+## Manual steps
+1. `pnpm install` (font package changed).
+2. Run the app, look at Meetings, a meeting, Workspace → Brand, Settings; switch to dark mode; say what still feels "navy".
+
+---
+
 # Last Build — Storage, OTA updates, release 0.2.0
 _2026-10-25_
 

@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useCurrentWorkspace, useSetCurrentWorkspace, useWorkspaces } from "../bridge/workspaces";
-import { useBrandLogo } from "../theme/applyBrand";
+import { useBrandLogo } from "../theme/brandLogo";
 import styles from "./WorkspaceSwitcher.module.css";
 
 interface Props {

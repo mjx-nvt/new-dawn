@@ -1,11 +1,3 @@
-.player {
-  position: sticky;
-  top: calc(-1 * var(--space-6));
-  z-index: 1;
-  width: 100%;
-  margin-bottom: var(--space-4);
-}
-
 .rows {
   display: flex;
   flex-direction: column;
@@ -21,15 +13,12 @@
   transition: background 150ms ease-out;
 }
 
-.playing { background: var(--brand-50); }
-@media (prefers-color-scheme: dark) {
-  .playing { background: color-mix(in srgb, var(--brand-400) 14%, transparent); }
-}
+.playing { background: var(--primary-tint-soft); }
 
 .time {
   align-self: start;
   padding-top: 2px;
-  color: var(--brand-text);
+  color: var(--primary-text);
   font-size: var(--t-sm);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
