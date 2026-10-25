@@ -1,4 +1,29 @@
-# Last Build — One to-do list, meeting format & presenter, a model per agent · release 0.7.0
+# Last Build — All people & attendees, your profile, a brand from logo + slogan + colour, minutes template made from it · release 0.7.1
+_2026-10-26_
+
+## What changed
+- **All people / Attendees** (D-039): the summary's people card lists everyone the meeting involves; only **Attendees** go into the minutes. Remove / Add per person, Add all. Settings → General → **Everyone involved attends** (on by default) decides the starting point for new summaries; your choices survive re-runs. Old summaries: everyone stays an attendee.
+- **Your profile**: Settings → General → **Your name** (app-wide); Workspace → Overview → **Your title** (per workspace). You're the first attendee of every new summary, the minute-taker in the minutes, the sign-off of the email, and Whisper/naming know your name.
+- **Brand from three things** (D-040): the logo (the white version is made exactly — the VIFC white logo is reproduced pixel for pixel), the slogan in English (**Translate** with the new Translation agent; ~2 s), the primary colour (a document palette with contrast checks).
+- **Minutes template made from the brand**: a neutral base learned from the uploaded VIFC template, recoloured, with your fonts and logo; preview drawn by Quick Look on the Brand page and in the wizard; **Update from brand** (Brand page) and **Reset template** (Meeting types). Workspaces with no template now get one automatically (before, export failed everywhere but VIFC).
+- **The workspace wizard is real**: Workspace (name, slug, your title) → Brand → Minutes template → Finish. New workspace… in the switcher / menu opens it.
+- Fixed: a long meeting could fail to summarise when the model echoed a done-flag; an SVG logo can't make the app read other files; the official VIFC white logo is never deleted.
+- Reviews: each of the four parts had a correctness and a rules/UI review plus a fix pass; a final cross-part review (rules, integration, your real data) found 1 must (SVG file access) and 6 should-fixes, all applied. 85 Rust tests; clippy, tsc and the localhost check clean.
+- **Seen in the running app** (dev build on your real data, dark and light): Settings → General (Profile, Meetings), Workspace → Overview (Your title), Brand (logo + white logo, Translate, colour, the Quick Look template preview), Agents (Translation), the meeting's All people card, and the three wizard steps. One layout bug found and fixed there: Remove dropped below a long job title. Translation checked against local Qwen: ~1–2 s per slogan once the model is loaded. Reduce Transparency not checked (a system-wide setting).
+
+## Done on your data (you asked to align everything to the new layout)
+- The registry got migration 0002 (`owner_title`). New Dawn 0.7.0 and older can no longer open this data — install 0.7.1.
+- VIFC's minutes template was replaced with the updated VIFC starter (fills the minute-taker); the old copy, never edited, is in the Trash as "VIFC Weekly meeting template (before 0.7.1).docx".
+
+## Manual steps
+1. Settings → General → **Your name**. Workspace → Overview → **Your title**. (Until then the minutes show "[Full name — Title]".)
+2. VIFC's header slogan is part of its own template ("…and Vietnam fintech"); `tokens.json` says "…Vietnamese fintech". Tell me which is official if it should change.
+3. Word shows a substitute for **Be Vietnam Pro** until it's installed on this Mac (Playfair Display is installed). Install it from Google Fonts for exact minutes.
+4. The two existing summaries: press **Rewrite** on their emails to get your sign-off; add yourself to their attendees (All people → Edit) or re-run them.
+
+---
+
+# One to-do list, meeting format & presenter, a model per agent · release 0.7.0
 _2026-10-25_
 
 ## What changed

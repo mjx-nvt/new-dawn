@@ -211,6 +211,53 @@ pub fn carry_ticks(doc: &mut SummaryDoc, old: &[ActionItem]) {
     }
 }
 
+/// After a re-run: who the owner marked as attending stays so (D-039). The old names are spelled
+/// as the people memory knows them now ("Duke", heard before, is "Đức"). A person in `old` gives
+/// the same person in `doc` their flag and attendance — the same name (folded), else the looser
+/// `same_person` ("Minh" and "Anh Minh"). Old attendees the new summary doesn't name come back
+/// while the transcript or notes still mention them (`mentioned`, the check of D-038): the model
+/// may just not have named them again, but a name heard wrong before stays gone. "Not named" is
+/// `same_person` too, so an old "Tiến" doesn't come back beside the owner's full name.
+// ponytail: nothing says who the owner added or ticked, so someone added by hand and never
+// mentioned doesn't come back, and an attendance the model wrote before wins over the new one;
+// an owner-set flag on the attendee if either bites.
+pub fn carry_attending(
+    doc: &mut SummaryDoc,
+    old: &[Attendee],
+    known: &[people::Person],
+    mentioned: impl Fn(&str) -> bool,
+) {
+    let mut before = SummaryDoc {
+        attendees: old.to_vec(),
+        ..SummaryDoc::default()
+    };
+    people::correct(&mut before, known);
+    let old = before.attendees;
+    let same = |a: &Attendee, b: &Attendee| people::fold(&a.name) == people::fold(&b.name);
+    for a in &mut doc.attendees {
+        let o = old.iter().find(|o| same(o, a)).or_else(|| {
+            old.iter()
+                .find(|o| summarise::same_person(&o.name, &a.name))
+        });
+        if let Some(o) = o {
+            a.attending = o.attending;
+            if !o.attendance.trim().is_empty() {
+                a.attendance.clone_from(&o.attendance);
+            }
+        }
+    }
+    let missing: Vec<Attendee> = old
+        .into_iter()
+        .filter(|o| o.attending && !o.name.trim().is_empty() && mentioned(&o.name))
+        .filter(|o| {
+            !doc.attendees
+                .iter()
+                .any(|a| summarise::same_person(&a.name, &o.name))
+        })
+        .collect();
+    doc.attendees.extend(missing);
+}
+
 /// After a re-run: every section edited in `old` replaces the new one (and so does the list
 /// behind it, so the minutes keep the edit too).
 pub fn keep_edits(new: &mut SummaryDoc, old: &SummaryDoc) {
@@ -233,11 +280,10 @@ pub fn keep_edits(new: &mut SummaryDoc, old: &SummaryDoc) {
     }
 }
 
-/// Saves the attendees as the user corrected them (minutes and email follow) and, with
+/// Saves the people as the user corrected or ticked them (minutes and email follow) and, with
 /// `remember`, teaches the people memory so the next meeting gets them right.
 pub async fn update_attendees(
     pool: &SqlitePool,
-    workspace: &str,
     meeting_id: &str,
     attendees: &[AttendeeEdit],
     remember: bool,
@@ -261,36 +307,49 @@ pub async fn update_attendees(
     }
     // Every spelling the user corrected, and every known spelling of these people, becomes the
     // right name across the summary; the email and the minutes are rebuilt from it (D-032).
-    let people = people::list(pool).await?;
-    // ponytail: a heard_as like "Chair" renamed to a person also rewrites "the Chair decided"
-    // in prose; acceptable until it bites (then: skip pairs whose `from` isn't a name).
-    let mut pairs: Vec<(String, String)> = attendees
-        .iter()
-        .filter(|a| a.changed && !a.name.trim().is_empty())
-        .filter_map(|a| {
-            a.heard_as
-                .as_ref()
-                .map(|h| (people::clean(h, 200), people::clean(&a.name, 200)))
-        })
-        .collect();
-    for a in attendees.iter().filter(|a| !a.name.trim().is_empty()) {
-        if let Some(p) = people::find(&people, &a.name) {
-            pairs.extend(
-                p.aliases
-                    .iter()
-                    .map(|alias| (alias.clone(), p.name.clone())),
-            );
+    // Ticks alone (no name changed) never rewrite the prose or the email.
+    let mut renamed = 0;
+    if attendees.iter().any(|a| a.changed) {
+        let people = people::list(pool).await?;
+        // ponytail: a heard_as like "Chair" renamed to a person also rewrites "the Chair decided"
+        // in prose; acceptable until it bites (then: skip pairs whose `from` isn't a name).
+        let mut pairs: Vec<(String, String)> = attendees
+            .iter()
+            .filter(|a| a.changed && !a.name.trim().is_empty())
+            .filter_map(|a| {
+                a.heard_as
+                    .as_ref()
+                    .map(|h| (people::clean(h, 200), people::clean(&a.name, 200)))
+            })
+            .collect();
+        for a in attendees.iter().filter(|a| !a.name.trim().is_empty()) {
+            if let Some(p) = people::find(&people, &a.name) {
+                pairs.extend(
+                    p.aliases
+                        .iter()
+                        .map(|alias| (alias.clone(), p.name.clone())),
+                );
+            }
+        }
+        renamed = people::rename_in_doc(&mut current.doc, &pairs);
+        if renamed > 0 {
+            tracing::info!("attendee edit renamed {renamed} mention(s) in meeting {meeting_id}");
+        }
+        let mut email = current.email_md.clone();
+        if people::rename_in_text(&mut email, &pairs) > 0 {
+            super::save_email(pool, meeting_id, &current.email_subject, &email).await?;
         }
     }
-    let renamed = people::rename_in_doc(&mut current.doc, &pairs);
-    if renamed > 0 {
-        tracing::info!("attendee edit renamed {renamed} mention(s) in meeting {meeting_id}");
-    }
-    let mut email = current.email_md.clone();
-    if people::rename_in_text(&mut email, &pairs) > 0 {
-        super::save_email(pool, meeting_id, &current.email_subject, &email).await?;
-    }
-    summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
+    // "Edited <time>" moves only when a rename changed the text of an edited summary (as
+    // `save_doc`), never for a tick.
+    let edited = renamed > 0 && current.doc.sections.iter().any(|s| s.edited);
+    super::save_sections(
+        pool,
+        &meeting.id,
+        &serde_json::to_string(&current.doc)?,
+        edited,
+    )
+    .await?;
     summarise::view(pool, meeting_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("summary vanished while saving"))
@@ -591,6 +650,145 @@ mod tests {
         assert!(fresh.action_items[0].done && fresh.sections[3].markdown.starts_with("- [x]"));
 
         assert!(apply_edit(&mut d, 99, "x").is_err());
+    }
+
+    #[test]
+    fn rerun_keeps_who_attends() {
+        let person = |name: &str, attending: bool, attendance: &str| Attendee {
+            name: name.into(),
+            attendance: attendance.into(),
+            attending,
+            ..Attendee::default()
+        };
+        let old = vec![
+            person("Đỗ Minh", false, "Present"),
+            person("Lan", true, "Online"),
+            person("Sam", true, ""),
+            person("Hoa", false, ""),
+            person("Tiến", true, ""), // the owner, as an older summary named them
+        ];
+        let mut new = doc();
+        new.attendees = vec![
+            person("Nguyễn Văn Tiến", true, "Present"),
+            person("Do Minh", true, "Present"),
+            person("Lan", true, "Present"),
+            person("Kim", true, ""),
+        ];
+        carry_attending(&mut new, &old, &[], |_| true);
+        let got: Vec<_> = new
+            .attendees
+            .iter()
+            .map(|a| (a.name.as_str(), a.attending, a.attendance.as_str()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("Nguyễn Văn Tiến", true, "Present"),
+                ("Do Minh", false, "Present"), // unticked before, matched without accents
+                ("Lan", true, "Online"),
+                ("Kim", true, ""), // new: the run's own flag
+                ("Sam", true, ""), // a confirmed attendee nobody named this time
+            ],
+            "Hoa wasn't attending, so isn't brought back"
+        );
+
+        // Spelled differently this time: the flag still follows the person, both ways.
+        let old = vec![person("Lan", true, ""), person("Minh", false, "")];
+        let mut new = doc();
+        new.attendees = vec![person("Dr. Lan", false, ""), person("Anh Minh", true, "")];
+        carry_attending(&mut new, &old, &[], |_| true);
+        let got: Vec<_> = new
+            .attendees
+            .iter()
+            .map(|a| (a.name.as_str(), a.attending))
+            .collect();
+        assert_eq!(got, vec![("Dr. Lan", true), ("Anh Minh", false)]);
+
+        // Transcribed again: "Duke" was Đức heard wrong (the people memory knows it now), and
+        // "Sam" is no longer in the transcript — neither comes back beside the new list.
+        let known = [people::Person {
+            id: "p1".into(),
+            name: "Đức".into(),
+            title: String::new(),
+            organisation: String::new(),
+            aliases: vec!["Duke".into()],
+            updated_at: String::new(),
+        }];
+        let old = vec![person("Duke", true, "Online"), person("Sam", true, "")];
+        let mut new = doc();
+        new.attendees = vec![person("Đức", true, "Present")];
+        carry_attending(&mut new, &old, &known, |name| name != "Sam");
+        let got: Vec<_> = new
+            .attendees
+            .iter()
+            .map(|a| (a.name.as_str(), a.attendance.as_str()))
+            .collect();
+        assert_eq!(got, vec![("Đức", "Online")]);
+    }
+
+    #[test]
+    fn a_tick_rewrites_nothing_a_rename_does() {
+        let root = std::env::temp_dir().join(format!("newdawn-ticks-{}", uuid::Uuid::now_v7()));
+        tauri::async_runtime::block_on(async {
+            let hub = WorkspaceHub::open(root.clone()).await.unwrap();
+            hub.create_workspace("Test", "test").await.unwrap();
+            let pool = hub.pool("test").unwrap();
+            super::super::create(
+                &pool,
+                super::super::NewMeeting {
+                    id: "m1",
+                    meeting_type_id: None,
+                    title: "Call",
+                    held_at_unix: 0,
+                    language: Language::En,
+                    audio_path: "/nowhere.wav",
+                    status: MeetingStatus::Summarised,
+                },
+            )
+            .await
+            .unwrap();
+            let mut d = doc();
+            d.sections[0].markdown = "Duke opened.".into();
+            d.sections[0].edited = true;
+            d.attendees = vec![Attendee {
+                name: "Duke".into(),
+                ..Attendee::default()
+            }];
+            let json = serde_json::to_string(&d).unwrap();
+            super::super::save_summary(&pool, "m1", &json, "S", "Duke opened.", None, false)
+                .await
+                .unwrap();
+            let edit = |name: &str, attending: bool, changed: bool| AttendeeEdit {
+                name: name.into(),
+                title: String::new(),
+                organisation: String::new(),
+                attendance: "Present".into(),
+                heard_as: Some("Duke".into()),
+                changed,
+                attending,
+            };
+
+            let v = update_attendees(&pool, "m1", &[edit("Duke", false, false)], false)
+                .await
+                .unwrap();
+            assert!(!v.doc.attendees[0].attending, "the tick is saved");
+            assert_eq!(v.doc.sections[0].markdown, "Duke opened.");
+            assert_eq!(v.email_md, "Duke opened.");
+            assert_eq!(v.edited_at, None, "a tick isn't an edit");
+
+            let v = update_attendees(&pool, "m1", &[edit("Đức", false, true)], false)
+                .await
+                .unwrap();
+            assert_eq!(v.doc.sections[0].markdown, "Đức opened.");
+            assert_eq!(v.email_md, "Đức opened.");
+            assert!(
+                v.edited_at.is_some(),
+                "the rename changed an edited summary"
+            );
+            assert!(!v.doc.attendees[0].attending);
+            hub.close_all().await;
+        });
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

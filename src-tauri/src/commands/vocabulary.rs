@@ -42,7 +42,7 @@ pub async fn whisper_prompt_preview(
     hub: State<'_, WorkspaceHub>,
     slug: String,
 ) -> Result<String, AppError> {
-    Ok(vocabulary::preview(&hub.pool(&slug)?).await?)
+    Ok(vocabulary::preview(&hub, &slug).await?)
 }
 
 /// Undoes the vocabulary's correction of one transcript line.

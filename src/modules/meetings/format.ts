@@ -15,6 +15,11 @@ export function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/** "Nguyễn Văn Tiến" → "nguyen van tien": case, accents and đ don't matter. */
+export function foldName(name: string): string {
+  return name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
+}
+
 export const LANGUAGE_LABEL: Record<Language, string> = { en: "English", vi: "Tiếng Việt", auto: "Auto-detect" };
 
 export const STATUS_LABEL: Record<MeetingStatus, string> = {

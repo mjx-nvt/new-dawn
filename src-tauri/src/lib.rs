@@ -25,9 +25,11 @@ mod kernel {
         pub mod docx;
         pub mod model;
         pub mod pdf;
+        pub mod rebrand;
     }
     pub mod backup;
     pub mod brand {
+        pub mod logo;
         pub mod tokens;
     }
     pub mod glass;
@@ -35,6 +37,7 @@ mod kernel {
     pub mod menu;
     pub mod notify;
     pub mod permissions;
+    pub mod profile;
     pub mod registry;
     pub mod storage;
     pub mod tray;
@@ -43,6 +46,7 @@ mod kernel {
 
 mod modules {
     pub mod agents;
+    pub mod brand;
     pub mod meetings;
     pub mod people;
     pub mod vocabulary;
@@ -66,6 +70,7 @@ mod commands {
     pub mod models;
     pub mod onboarding;
     pub mod people;
+    pub mod profile;
     pub mod recorder;
     pub mod storage;
     pub mod summary;
@@ -124,11 +129,14 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::templates::reset_type_template,
             commands::templates::open_type_template,
             commands::templates::minutes_template_fields,
+            commands::templates::generate_minutes_template,
+            commands::templates::preview_minutes_template,
             commands::meetings::set_meeting_type,
             commands::brand::get_brand,
             commands::brand::update_brand,
             commands::brand::set_brand_logo,
             commands::brand::reset_brand,
+            commands::brand::translate_slogan,
             commands::storage::get_storage_report,
             commands::storage::set_retention_days,
             commands::storage::compress_recordings,
@@ -152,6 +160,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::backup::backup_now,
             commands::onboarding::get_onboarding_done,
             commands::onboarding::set_onboarding_done,
+            commands::profile::get_profile,
+            commands::profile::set_profile,
             commands::onboarding::test_notification,
             commands::minutes::export_minutes_docx,
             commands::minutes::export_minutes_pdf,

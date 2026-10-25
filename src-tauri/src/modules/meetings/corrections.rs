@@ -212,6 +212,7 @@ pub async fn apply(
                 attendance: String::new(),
                 heard_as: h,
                 changed: true,
+                attending: true, // only teaches the memory, which ignores it
             });
         }
     }

@@ -410,6 +410,7 @@ pub async fn confirm(
             heard_as: Some(people::clean(&d.heard_as, 120))
                 .filter(|h| h != &people::clean(&d.name, 120)),
             changed: true,
+            attending: true, // only teaches the memory, which ignores it
         })
         .collect();
     let pairs: Vec<(String, String)> = decisions

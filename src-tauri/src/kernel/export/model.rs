@@ -1,6 +1,7 @@
 //! The data a minutes template is filled with, from the meeting and its summary (D-024).
 //! Field names are the template contract in docs/document-export.md §2.2. Numbering prefixes
-//! ("3.", "QĐ-", "CV-") belong to the template; every list item carries `n` (1) and `nn` ("01").
+//! ("3.", "QĐ-", "CV-") belong to the template; the numbered lists (agenda, discussion,
+//! decisions, actions, open issues, highlights) carry `n` (1) and `nn` ("01").
 
 use chrono::{DateTime, Duration, FixedOffset, NaiveDate};
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
@@ -18,6 +19,18 @@ pub struct MinutesInput<'a> {
     /// Position of the meeting among those held the same local day (1-based).
     pub day_seq: u32,
     pub transcript: Option<&'a str>,
+    pub sender: &'a Sender<'a>,
+}
+
+/// Who the minutes come from (D-039, D-040): the workspace and its slogans, and the minute-taker
+/// — the app's owner, with the title they hold in this workspace. Empty strings are unknown.
+#[derive(Debug, Clone, Default)]
+pub struct Sender<'a> {
+    pub workspace: &'a str,
+    pub slogan_en: &'a str,
+    pub slogan_vi: &'a str,
+    pub name: &'a str,
+    pub title: &'a str,
 }
 
 const NOT_SET: &str = "Not set";
@@ -37,8 +50,9 @@ pub fn minutes(input: &MinutesInput) -> Value {
         doc.next_focus.clone()
     };
 
+    // Only the attendees: everyone else the meeting involves stays out of the minutes (D-039).
     let mut groups: Vec<(String, Vec<Value>)> = Vec::new();
-    for a in &doc.attendees {
+    for a in doc.attendees.iter().filter(|a| a.attending) {
         let organisation = or(&a.organisation, "Organisation not stated");
         let member = json!({
             "name": a.name,
@@ -51,7 +65,19 @@ pub fn minutes(input: &MinutesInput) -> Value {
         }
     }
 
+    let sender = input.sender;
+    let (name, title) = (sender.name.trim(), sender.title.trim());
+    let minute_taker = match (name.is_empty(), title.is_empty()) {
+        (true, _) => "[Full name — Title]".to_owned(),
+        (false, true) => name.to_owned(),
+        (false, false) => format!("{name} — {title}"),
+    };
     let mut data = json!({
+        "workspace_name": sender.workspace.trim(),
+        "slogan_en": sender.slogan_en.trim(),
+        "slogan_vi": sender.slogan_vi.trim(),
+        "minute_taker": minute_taker,
+        "minute_taker_name": or(name, "[Full name]"),
         "title": input.meeting.title,
         "datetime": datetime(input.start, input.meeting.duration_ms),
         "meeting_type": input.meeting_type.unwrap_or("[Meeting type]"),
@@ -94,6 +120,18 @@ pub fn minutes(input: &MinutesInput) -> Value {
 /// Template data for a made-up meeting (one item in every list, transcript included): used to
 /// check a template and to list the fields it can use.
 pub fn sample() -> Value {
+    sample_for(&Sender {
+        workspace: "Workspace",
+        slogan_en: "Slogan",
+        slogan_vi: "Khẩu hiệu",
+        name: "Your name",
+        title: "Your title",
+    })
+}
+
+/// `sample()` from a real sender: a template preview shows the workspace's own name, slogans
+/// and minute-taker around the made-up meeting.
+pub fn sample_for(sender: &Sender) -> Value {
     use crate::kernel::ai::whisper::Language;
     use crate::modules::meetings::MeetingStatus;
     use crate::modules::meetings::summarise::{
@@ -126,6 +164,7 @@ pub fn sample() -> Value {
             organisation: "Organisation".into(),
             title: "Title".into(),
             attendance: "Present".into(),
+            attending: true,
         }],
         discussion: vec![Topic {
             topic: "Topic".into(),
@@ -157,6 +196,7 @@ pub fn sample() -> Value {
         meeting_type: Some("Partner call"),
         day_seq: 1,
         transcript: Some("Transcript."),
+        sender,
     })
 }
 
@@ -294,6 +334,7 @@ mod tests {
             organisation: org.into(),
             title: title.into(),
             attendance: String::new(),
+            attending: true,
         };
         SummaryDoc {
             sections: vec![
@@ -314,6 +355,10 @@ mod tests {
                 attendee("Tien", "VIFC", "Head of Hub"),
                 attendee("Sarah", "Acme", "Partner"),
                 attendee("Minh", "VIFC", ""),
+                Attendee {
+                    attending: false, // only mentioned: not in the minutes
+                    ..attendee("Minister Hoa", "Ministry", "")
+                },
             ],
             discussion: vec![
                 Topic {
@@ -348,6 +393,14 @@ mod tests {
         }
     }
 
+    const SENDER: Sender<'static> = Sender {
+        workspace: "VIFC Fintech Hub",
+        slogan_en: "Global capital",
+        slogan_vi: "",
+        name: "Tien",
+        title: "Head of Hub",
+    };
+
     fn input<'a>(meeting: &'a Meeting, doc: &'a SummaryDoc) -> MinutesInput<'a> {
         MinutesInput {
             meeting,
@@ -356,6 +409,7 @@ mod tests {
             meeting_type: None,
             day_seq: 2,
             transcript: None,
+            sender: &SENDER,
         }
     }
 
@@ -372,7 +426,23 @@ mod tests {
             "falls back to Next steps"
         );
         let groups = data["attendee_groups"].as_array().unwrap();
-        assert_eq!(groups.len(), 2, "grouped by organisation, first-seen order");
+        assert_eq!(
+            groups.len(),
+            2,
+            "grouped by organisation, first-seen order; the Ministry only mentioned"
+        );
+        assert_eq!(data["minute_taker"], "Tien — Head of Hub");
+        assert_eq!(data["minute_taker_name"], "Tien");
+        assert_eq!(data["slogan_vi"], "");
+        let unknown = minutes(&MinutesInput {
+            sender: &Sender::default(),
+            ..input(&meeting, &doc)
+        });
+        assert_eq!(
+            unknown["minute_taker"], "[Full name — Title]",
+            "the template's hint stays"
+        );
+        assert_eq!(unknown["minute_taker_name"], "[Full name]");
         assert_eq!(groups[0]["members"][1]["name"], "Minh");
         assert_eq!(groups[0]["members"][1]["attendance"], "Present");
         assert_eq!(data["agenda"][1]["n"], 2);

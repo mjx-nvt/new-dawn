@@ -71,7 +71,8 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 ## Key files
 - `src-tauri/src/lib.rs` — app setup, plugins, menu, glass, hub, gateway state (`main.rs` only calls `run()`)
 - `src-tauri/src/kernel/registry.rs`, `hub.rs`, `theme.rs`, `glass.rs`, `menu.rs`, `tray.rs`, `permissions.rs`
-- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log}.rs`, `src-tauri/src/kernel/brand/{tokens,import}.rs`, `src-tauri/src/kernel/export/{model,docx,pdf}.rs`
+- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log}.rs`, `src-tauri/src/kernel/brand/{tokens,logo}.rs`, `src-tauri/src/kernel/export/{model,docx,rebrand,pdf}.rs`, `src-tauri/src/kernel/profile.rs` (owner name + per-workspace title)
+- `src-tauri/templates/minutes-base.docx` (the base every generated minutes template is made from; `scripts/make_minutes_base.py`)
 - `src-tauri/src/recorder/{session,mic,system_tap,mixer,saver}.rs`, `src-tauri/src/modules/meetings/{transcribe,summarise,email}.rs`
 - `src-tauri/src/modules/*.rs`, `src-tauri/src/commands/*.rs`
 - `src/kernel/{shell,theme,glass,dossier,bridge}/`, `src/modules/{meetings,tenant-setup,recorder,models,workspace-settings}/`, `src/styles/{base,tokens}.css`

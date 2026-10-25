@@ -38,6 +38,7 @@
   --canvas: #FFFFFF;
   --glass-tint: rgba(255, 255, 255, 0.55);
   --shell-scrim: transparent;              /* neutral wash behind sidebar + toolbar; dark mode only */
+  --logo-dark-bg: #0F172A;                 /* slate-900, fixed in both appearances: a white logo on a dark document */
 
   /* System accent for selection and focus rings (never the primary) */
   --focus: AccentColor;

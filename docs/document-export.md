@@ -25,14 +25,16 @@ workspaces/<slug>/brand/templates/
     manifest.json      ← name, which fields it uses, bilingual rules, page size
   partner-brief/ …
 ```
-The VIFC starter pack ships with a port of your official **TEMPLATE_Bien_ban_cuoc_hop** (logo + tagline header, Lầu 30 address + page numbers footer, Be Vietnam Pro body). Starter templates live in the repo under `brands/<slug>/templates/` and are copied into a workspace on creation; a workspace can upload more in Settings → Workspaces → Templates.
+The VIFC starter pack ships with a port of your official **TEMPLATE_Bien_ban_cuoc_hop** (logo + tagline header, Lầu 30 address + page numbers footer, Be Vietnam Pro body). Starter templates live in the repo under `brands/<slug>/templates/` and are copied into a workspace when its meeting types are first listed; a workspace can replace any type's template in Workspace → Meeting types.
+
+> **As built in 0.7.1 (D-040):** a workspace with no starter gets a template **made from its brand** — `src-tauri/templates/minutes-base.docx` (derived from the VIFC template by `scripts/make_minutes_base.py`) recoloured from the primary colour, with the brand's fonts and logo (`kernel/export/rebrand.rs`). The wizard, Brand → Update from brand and Meeting types → Reset template make it again. Slogans and the workspace name are placeholders, so they follow the Brand page without regenerating.
 
 **Placeholders** (the only thing the template designer needs to know — as built in P3.2, D-023):
 - Field: `{{name}}` — text, kept in the formatting of the run where it starts; newlines become line breaks. Dotted paths work (`{{a.b}}`). Inside a block, the item's own keys are looked up first, then the outer data (so an item key must not reuse an outer name — attendees use `job_title`, not `title`).
 - Block: `{{#list}} … {{/list}}`. Both markers in one paragraph → the paragraph repeats; in different cells of one row → the row repeats; in different paragraphs/rows → that range repeats. Tables never repeat as a unit. Blocks nest (attendee groups → members, discussion items → points).
 - A block's value decides how often it renders: a list → once per item; `true`, an object, a number or a non-empty string → once; missing, `false`, `null`, `""` or `[]` → removed (a table left with no rows is removed too).
 - Filled parts: `word/document.xml`, headers and footers. Everything the engine doesn't touch is written back byte for byte.
-- The VIFC template fields: `title`, `datetime`, `meeting_type`, `reference`, `agenda[n, topic]`, `summary`, `next_focus`, `attendee_groups[organisation, members[name, job_title, attendance]]`, `discussion[number, topic, points[text]]`, `decisions[id, text, decided_by, condition]`, `actions[id, item, owner, due, status]`, `open_issues[n, issue, who, by]`. Fields the AI can't know stay as the template's `[ ]` hints.
+- The template fields: `title`, `datetime`, `meeting_type`, `reference`, `agenda[n, nn, topic]`, `summary`, `next_focus`, `highlights[n, nn, text]`, `attendee_groups[organisation, members[name, job_title, attendance]]` (attendees only — D-039), `discussion[n, nn, topic, points[text]]`, `decisions[n, nn, text, decided_by, condition]`, `actions[n, nn, item, owner, due, status]`, `open_issues[n, nn, issue, who, by]`, and since 0.7.1 `workspace_name`, `slogan_en`, `slogan_vi`, `minute_taker` ("Name — Title", else the hint), `minute_taker_name`. Fields the AI can't know stay as the template's `[ ]` hints (the chair, the venue).
 - Not built (YAGNI until a template needs it): logo swap by alt text (the template carries its own logo), Markdown-rendered rich fields, header/footer cell widening.
 
 **Bilingual rule (house style):** English first, Vietnamese second; in headers and footers each language sits on its own single line; the engine widens header/footer cells so neither line wraps. The manifest records `bilingual: { order: ["en","vi"], one_line_each: true }` and the template check warns if a header/footer cell is too narrow for the longest value.
@@ -48,7 +50,7 @@ Crates: `zip`, `quick-xml`, `pulldown-cmark`. No `docx-rs` needed for template f
 ### 2.4 PDF generation — a converter chain, detected at runtime
 Converting a Word file to a *faithful* PDF needs a Word-compatible layout engine. The app tries, in order, whatever is installed:
 1. **Microsoft Word** (most likely on your Mac): drive it with AppleScript via `osascript` — open the `.docx`, "save as PDF", close. Pixel-faithful to the template. ~3–5 s.
-2. **LibreOffice** (free): `soffice --headless --convert-to pdf --outdir <exports> <file.docx>`. Very good fidelity; fonts must be installed (Be Vietnam Pro is bundled with the app and registered for the user on first run).
+2. **LibreOffice** (free): `soffice --headless --convert-to pdf --outdir <exports> <file.docx>`. Very good fidelity; the template's fonts must be installed on the Mac (the app doesn't bundle or register document fonts).
 3. **Pages** (free on Macs): AppleScript export to PDF. Acceptable fidelity, weaker on complex tables.
 4. **Built-in fallback (later, v1.5): Typst** — a pure-Rust typesetter embedded in the app; renders the same document model through a Typst twin of the template with the brand tokens. Not pixel-identical to Word, but always available and beautiful. Also the path to "PDF without Word" if New Dawn is ever handed to someone without Office.
 The Settings → General page shows which converters were found; the export dialog shows which one will be used. No converter found → DOCX only, with a one-line explanation.

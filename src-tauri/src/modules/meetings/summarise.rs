@@ -21,6 +21,7 @@ use crate::events::{SummaryFinished, SummaryProgress};
 use crate::kernel::ai::ollama::{self, Message, NUM_CTX, Request, TextSession};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::kernel::profile::{self, Owner};
 use crate::modules::agents::{self, Agent};
 use crate::modules::people::{self, Person};
 
@@ -56,7 +57,9 @@ pub struct ActionItem {
     pub done: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
+/// Someone the meeting involves (D-039). `attending` marks the attendees — the only people the
+/// minutes list; the app records without a bot, so the owner confirms who was there.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(default)]
 pub struct Attendee {
     pub name: String,
@@ -64,6 +67,21 @@ pub struct Attendee {
     /// Job title, as said.
     pub title: String,
     pub attendance: String,
+    /// In the attendees (and the minutes). Summaries saved before D-039 have no flag and read
+    /// as attending, so their minutes don't change.
+    pub attending: bool,
+}
+
+impl Default for Attendee {
+    fn default() -> Self {
+        Attendee {
+            name: String::new(),
+            organisation: String::new(),
+            title: String::new(),
+            attendance: String::new(),
+            attending: true,
+        }
+    }
 }
 
 /// One agenda item / topic and what was said about it.
@@ -216,12 +234,28 @@ pub(super) fn not_discussed(language: Language) -> &'static str {
 const NOTES_HEADING: &str = "[Notes from the meeting owner]";
 
 /// The guide (the workspace's or the bundled default) first; the fixed part — the data fence,
-/// the JSON shape and the section list — follows and can't be edited away.
-fn system_prompt(guide: &str, structure: &[SectionSpec], language: Language) -> String {
+/// the JSON shape and the section list — follows and can't be edited away. The owner is named
+/// here, not in the notes: anything in the notes makes the model write highlights.
+fn system_prompt(
+    guide: &str,
+    structure: &[SectionSpec],
+    language: Language,
+    owner: Option<&Owner>,
+) -> String {
     let sections: String = structure
         .iter()
         .map(|s| format!("- \"{}\": {}\n", s.title, s.instruction))
         .collect();
+    let owner = owner.map_or_else(String::new, |o| {
+        let mut who = o.name.clone();
+        if !o.title.is_empty() {
+            who.push_str(&format!(", {}", o.title));
+        }
+        if !o.organisation.is_empty() {
+            who.push_str(&format!(" at {}", o.organisation));
+        }
+        format!("- The meeting owner, who recorded it, is {who}: spell their name exactly so.\n")
+    });
     format!(
         "{guide}\n\n\
          Rules the app relies on:\n\
@@ -233,8 +267,8 @@ fn system_prompt(guide: &str, structure: &[SectionSpec], language: Language) -> 
          {{\"sections\": [{{\"title\": \"…\", \"markdown\": \"…\"}}], \"attendees\": [{{\"name\": \"…\", \"organisation\": \"…\", \"title\": \"…\", \"attendance\": \"…\"}}], \"discussion\": [{{\"topic\": \"…\", \"points\": [\"…\"]}}], \"decisions\": [{{\"text\": \"…\", \"decided_by\": \"…\", \"condition\": \"…\"}}], \"action_items\": [{{\"owner\": \"…\", \"item\": \"…\", \"due\": \"…\"}}], \"open_issues\": [{{\"issue\": \"…\", \"who\": \"…\", \"by\": \"…\"}}], \"next_focus\": \"…\", \"highlights\": [\"…\"]}}\n\
          - `sections` lists exactly these sections, in this order, with these titles:\n{sections}\
          - Section `markdown` uses short paragraphs and `-` bullets, no headings and no tables. If nothing was said for a section, write \"{none}\".\n\
-         - `attendees`: everyone named as taking part; `organisation` and `title` (job title) only when stated, else \"\"; `attendance` \"Present\", or \"Absent\" when said to be absent.\n\
-         - `discussion`: one entry per agenda item or topic, in the order discussed; `topic` is a short title (2–5 words); `points` are 3–8 full sentences each with the substance — who said what, figures, names, dates, reasons, concerns raised. Prefer more detail over less.\n\
+         - `attendees`: everyone the meeting involves — who speaks, presents, is addressed, decides or is given a task, and anyone discussed by name as a participant or stakeholder; `organisation` and `title` (job title) only when stated, else \"\"; `attendance` \"Present\", or \"Absent\" when said to be absent.\n\
+         {owner}- `discussion`: one entry per agenda item or topic, in the order discussed; `topic` is a short title (2–5 words); `points` are 3–8 full sentences each with the substance — who said what, figures, names, dates, reasons, concerns raised. Prefer more detail over less.\n\
          - `decisions`: only what was actually decided; `decided_by` as said, else \"\"; `condition` any condition or note, else \"\".\n\
          - `action_items`: the to-do list. Go through every person named in the meeting — each attendee, everyone mentioned, the presenter — one by one, and list every task, commitment, request or follow-up that involves them; then the next steps nobody owns yet (meetings to set up, documents to get, decisions to chase) with owner \"Unassigned\". `owner` is a person's name or \"Unassigned\", `item` says concretely what, `due` as said or \"Not set\". Do not repeat the same task twice.\n\
          - `open_issues`: questions raised but not answered; `who` can answer and `by` when, as said, else \"Not set\".\n\
@@ -296,6 +330,20 @@ pub(crate) fn lenient(value: &mut serde_json::Value, text_items: bool) {
         }
         Value::Object(map) => {
             for (key, v) in map.iter_mut() {
+                // Flags stay flags: the merge prompt shows them, so the model may echo them
+                // ("true", "x" and "yes" read as set).
+                if matches!(key.as_str(), "done" | "attending") {
+                    let set = match v {
+                        Value::Bool(b) => *b,
+                        Value::String(s) => {
+                            matches!(s.trim().to_lowercase().as_str(), "true" | "yes" | "x" | "1")
+                        }
+                        Value::Number(n) => n.as_f64().is_some_and(|f| f != 0.0),
+                        _ => false,
+                    };
+                    *v = Value::Bool(set);
+                    continue;
+                }
                 // A list field the model sent as a single string or object: wrap it.
                 let is_list = matches!(
                     key.as_str(),
@@ -454,9 +502,24 @@ fn word_set(folded: &str) -> std::collections::HashSet<&str> {
         .collect()
 }
 
-/// Whether `name` (or one of the person's other spellings) is among `words` (folded): any word
-/// of three letters or more that isn't a title; a name with no such word ("Hà", "Chi") is
-/// matched on the words it has.
+/// The words a name is known by (folded): those of three letters or more that aren't a title;
+/// a name with no such word ("Hà", "Chi") keeps the words it has.
+fn name_words(name: &str) -> Vec<String> {
+    let folded = people::fold(name);
+    let all: Vec<&str> = folded
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let strong: Vec<&str> = all
+        .iter()
+        .copied()
+        .filter(|w| w.chars().count() >= 3 && !HONORIFICS.contains(w))
+        .collect();
+    let words = if strong.is_empty() { all } else { strong };
+    words.into_iter().map(str::to_owned).collect()
+}
+
+/// Whether `name` (or one of the person's other spellings) is among `words` (folded).
 // ponytail: folded Vietnamese names often equal common words ("Thị" = "thì"), so such names
 // usually pass — lenient on purpose; a real check needs names tagged in the transcript.
 fn mentioned(name: &str, people: &[Person], words: &std::collections::HashSet<&str>) -> bool {
@@ -465,48 +528,108 @@ fn mentioned(name: &str, people: &[Person], words: &std::collections::HashSet<&s
         spellings.push(p.name.clone());
         spellings.extend(p.aliases.iter().cloned());
     }
-    spellings.iter().any(|s| {
-        let folded = people::fold(s);
-        let all: Vec<&str> = folded
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|w| !w.is_empty())
-            .collect();
-        let strong: Vec<&str> = all
-            .iter()
-            .copied()
-            .filter(|w| w.chars().count() >= 3 && !HONORIFICS.contains(w))
-            .collect();
-        let check = if strong.is_empty() { all } else { strong };
-        check.iter().any(|w| words.contains(w))
-    })
+    spellings
+        .iter()
+        .any(|s| name_words(s).iter().any(|w| words.contains(w.as_str())))
 }
 
-/// Whether `name` is the presenter (shares a name word: "Lan" and "Dr. Lan").
-fn is_presenter(name: &str, presenter: Option<&str>) -> bool {
-    presenter.is_some_and(|p| {
-        let folded = people::fold(p);
-        mentioned(name, &[], &word_set(&folded))
-    })
+/// Common Vietnamese family names and the middle names "Văn" / "Thị" (folded): shared by too
+/// many people to tell anyone apart on their own.
+const FAMILY_NAMES: &[&str] = &[
+    "nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do",
+    "ho", "ngo", "duong", "ly", "van", "thi",
+];
+
+/// Whether two names are the same person: the same name (folded), or every name word of one is
+/// in the other ("Lan" and "Dr. Lan"; "Tien Nguyen" and "Nguyễn Văn Tiến"). A shared surname
+/// isn't enough — "Nguyễn Thị Lan" is someone else, and so is "Mr. Nguyen", who has nothing
+/// but a family name.
+pub(super) fn same_person(a: &str, b: &str) -> bool {
+    let (words_a, words_b) = (name_words(a), name_words(b));
+    let within = |x: &[String], y: &[String]| {
+        x.iter().any(|w| !FAMILY_NAMES.contains(&w.as_str())) && x.iter().all(|w| y.contains(w))
+    };
+    !words_a.is_empty()
+        && !words_b.is_empty()
+        && (people::fold(a) == people::fold(b)
+            || within(&words_a, &words_b)
+            || within(&words_b, &words_a))
 }
 
 /// The harness check on people (D-038): the model is shown the people memory for spelling and
 /// sometimes lists them as attendees of a meeting they weren't in. Keep only attendees the
 /// transcript, the owner's notes or the presenter field mention; tasks owned by someone never
-/// mentioned become "Unassigned".
-fn keep_mentioned(doc: &mut SummaryDoc, people: &[Person], corpus: &str, presenter: Option<&str>) {
+/// mentioned become "Unassigned". The presenter and the owner (who recorded it, `owner`) are in
+/// the meeting even when nobody says their name.
+fn keep_mentioned(
+    doc: &mut SummaryDoc,
+    people: &[Person],
+    corpus: &str,
+    presenter: Option<&str>,
+    owner: Option<&str>,
+) {
     let words = word_set(corpus);
+    let is_there = |name: &str| {
+        [presenter, owner]
+            .into_iter()
+            .flatten()
+            .any(|p| same_person(name, p))
+    };
     doc.attendees
-        .retain(|a| is_presenter(&a.name, presenter) || mentioned(&a.name, people, &words));
+        .retain(|a| is_there(&a.name) || mentioned(&a.name, people, &words));
     for item in &mut doc.action_items {
-        let owner = item.owner.trim();
-        if !owner.is_empty()
-            && owner != "Unassigned"
-            && !is_presenter(owner, presenter)
-            && !mentioned(owner, people, &words)
+        let who = item.owner.trim();
+        if !who.is_empty()
+            && who != "Unassigned"
+            && !is_there(who)
+            && !mentioned(who, people, &words)
         {
             item.owner = "Unassigned".to_owned();
         }
     }
+}
+
+/// Who attends (D-039): everyone the meeting involves when `everyone_attends`, else only the
+/// presenter. Then the owner — they recorded it — attends, first, with their title in this
+/// workspace: run after `apply_people`, so the people memory can't overwrite it.
+fn settle_attendees(
+    doc: &mut SummaryDoc,
+    everyone_attends: bool,
+    presenter: Option<&str>,
+    owner: Option<&Owner>,
+) {
+    for a in &mut doc.attendees {
+        a.attending = everyone_attends || presenter.is_some_and(|p| same_person(&a.name, p));
+    }
+    let Some(owner) = owner else {
+        return;
+    };
+    let me = match doc
+        .attendees
+        .iter()
+        .position(|a| same_person(&a.name, &owner.name))
+    {
+        Some(i) => {
+            let mut a = doc.attendees.remove(i);
+            a.name.clone_from(&owner.name);
+            if a.title.trim().is_empty() {
+                a.title.clone_from(&owner.title);
+            }
+            if a.organisation.trim().is_empty() {
+                a.organisation.clone_from(&owner.organisation);
+            }
+            a.attending = true;
+            a
+        }
+        None => Attendee {
+            name: owner.name.clone(),
+            title: owner.title.clone(),
+            organisation: owner.organisation.clone(),
+            attendance: "Present".to_owned(),
+            attending: true,
+        },
+    };
+    doc.attendees.insert(0, me);
 }
 
 /// Maps the model's JSON onto the structure (by position, then title), fills gaps with "Not
@@ -654,20 +777,22 @@ fn with_notes(text: &str, notes: &str) -> String {
 }
 
 /// Summary of `text` (+ the owner's `notes`, given to every part); chunks and merges when it
-/// doesn't fit (or when Ollama reports overflow).
+/// doesn't fit (or when Ollama reports overflow). `owner`: who recorded it, when known.
 #[allow(clippy::too_many_arguments)]
 async fn summarise_text(
     session: &TextSession<'_>,
     guide: &str,
     structure: &[SectionSpec],
     language: Language,
+    owner: Option<&Owner>,
     text: &str,
     notes: &str,
     deep: bool,
     cancel: &AtomicBool,
     report: Report<'_>,
 ) -> Result<SummaryDoc> {
-    let system = system_prompt(guide, structure, language);
+    // Every part and the merge share it, so the owner is named in each call.
+    let system = system_prompt(guide, structure, language, owner);
     let budget = input_budget(deep).saturating_sub(estimate_tokens(notes));
     if estimate_tokens(text) <= budget {
         match ask(
@@ -923,7 +1048,11 @@ async fn run(
     super::set_status(&pool, &meeting.id, MeetingStatus::Summarising).await?;
 
     let outcome: Result<usize> = async {
-        let workspace = app.state::<WorkspaceHub>().workspace(slug).await?;
+        let hub = app.state::<WorkspaceHub>();
+        let workspace = hub.workspace(slug).await?;
+        // Who attends by default, and the owner (who recorded it) — read once for the run.
+        let settings = profile::get(&hub).await?;
+        let owner = profile::owner(&hub, slug).await?;
         // Before reading the transcript: a correction made during the run still shows as newer.
         let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         // Fresh: notes saved just before Re-run, a rename during the run.
@@ -968,6 +1097,7 @@ async fn run(
             &guide,
             &structure,
             meeting.language,
+            owner.as_ref(),
             &transcript_text(&segments),
             notes,
             deep,
@@ -978,19 +1108,26 @@ async fn run(
         let model_name = session.model().to_owned();
         doc.generated_at = generated_at;
         let corpus = people::fold(&format!("{}\n{}", transcript_text(&segments), meeting.notes_md.as_deref().unwrap_or_default()));
-        keep_mentioned(&mut doc, &people, &corpus, meeting.presenter.as_deref());
+        keep_mentioned(&mut doc, &people, &corpus, meeting.presenter.as_deref(), owner.as_ref().map(|o| o.name.as_str()));
         // Before apply_people, so the people memory fills the presenter's title and organisation.
         if let Some(presenter) = meeting.presenter.as_deref().filter(|p| !p.trim().is_empty()) {
-            if !doc.attendees.iter().any(|a| is_presenter(&a.name, Some(presenter))) {
-                doc.attendees.insert(0, Attendee { name: presenter.to_owned(), title: String::new(), organisation: String::new(), attendance: "Present".to_owned() });
+            if !doc.attendees.iter().any(|a| same_person(&a.name, presenter)) {
+                doc.attendees.insert(0, Attendee { name: presenter.to_owned(), attendance: "Present".to_owned(), ..Attendee::default() });
             }
         }
         apply_people(&mut doc, &people, meeting.language);
+        settle_attendees(&mut doc, settings.everyone_attends, meeting.presenter.as_deref(), owner.as_ref());
         if let Some(previous) = &previous {
             if keep_edits {
                 review::keep_edits(&mut doc, previous);
             }
             review::carry_ticks(&mut doc, &previous.action_items);
+            // Who the owner ticked as attending stays so across re-runs; only people the
+            // transcript or notes still mention come back.
+            let words = word_set(&corpus);
+            review::carry_attending(&mut doc, &previous.attendees, &people, |name| {
+                mentioned(name, &people, &words)
+            });
         }
         let meeting = super::get(&pool, &meeting.id).await?; // renamed while writing?
         let ctx = EmailContext {
@@ -998,6 +1135,7 @@ async fn run(
             title: &meeting.title,
             held_on: &meeting.held_on,
             language: meeting.language,
+            owner: owner.as_ref(),
         };
         let (subject, body) = email::render(&doc, &ctx);
         super::save_summary(
@@ -1015,7 +1153,9 @@ async fn run(
         let folder = std::path::Path::new(&workspace.folder_path);
         report(SummaryStage::Naming, 0, 0, 0);
         session.for_agent("naming");
-        let naming = super::naming::review(&session, folder, &meeting, &doc, &people, &segments, &cancel).await;
+        // The owner counts as known: never a name to confirm.
+        let known = people::with_owner(people, owner.as_ref());
+        let naming = super::naming::review(&session, folder, &meeting, &doc, &known, &segments, &cancel).await;
         let count = naming.suspects.len();
         let json = if count == 0 { None } else { serde_json::to_string(&naming).ok() };
         if let Err(err) = super::set_naming(&pool, &meeting.id, json.as_deref()).await {
@@ -1089,6 +1229,20 @@ mod tests {
         assert!(point.contains("Approved") && point.contains("1.2"));
         assert_eq!(doc.highlights, vec!["Single highlight".to_owned()]);
         assert_eq!(doc.next_focus, "42");
+
+        // Flags the merge prompt showed and the model echoed, as bools or as text (D-039).
+        let doc = parse_doc(
+            r#"{"sections":[],"action_items":[{"owner":"A","item":"x","due":"","done":false},
+            {"owner":"B","item":"y","due":"","done":"true"}],
+            "attendees":[{"name":"Lan","attending":false},{"name":"Minh"}]}"#,
+        )
+        .unwrap();
+        assert!(!doc.action_items[0].done && doc.action_items[1].done);
+        assert!(!doc.attendees[0].attending);
+        assert!(
+            doc.attendees[1].attending,
+            "no flag reads as attending (old summaries)"
+        );
     }
 
     #[test]
@@ -1115,6 +1269,11 @@ mod tests {
                     name: "Dr. Lan".into(),
                     ..Attendee::default()
                 },
+                Attendee {
+                    name: "Tien".into(),
+                    title: "Director".into(),
+                    ..Attendee::default()
+                },
             ],
             action_items: vec![
                 ActionItem {
@@ -1129,19 +1288,33 @@ mod tests {
                     due: String::new(),
                     done: false,
                 },
+                ActionItem {
+                    owner: "Nguyễn Văn Tiến".into(),
+                    item: "send the deck".into(),
+                    due: String::new(),
+                    done: false,
+                },
             ],
             ..SummaryDoc::default()
         };
-        let corpus = people::fold("[00:01] Duke will send the agenda");
-        keep_mentioned(&mut doc, &known, &corpus, Some("Dr. Lan"));
+        let corpus = people::fold("[00:01] Duke will send the agenda. I'll send the deck.");
+        keep_mentioned(
+            &mut doc,
+            &known,
+            &corpus,
+            Some("Dr. Lan"),
+            Some("Nguyễn Văn Tiến"),
+        );
         let names: Vec<_> = doc.attendees.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(
             names,
-            vec!["Đức", "Dr. Lan"],
-            "heard as Duke; the presenter stays; Ms. Chi was never mentioned"
+            vec!["Đức", "Dr. Lan", "Tien"],
+            "heard as Duke; the presenter and the owner stay unnamed; Ms. Chi was never mentioned"
         );
+        assert_eq!(doc.attendees[2].title, "Director", "the title said is kept");
         assert_eq!(doc.action_items[0].owner, "Unassigned");
         assert_eq!(doc.action_items[1].owner, "Duke");
+        assert_eq!(doc.action_items[2].owner, "Nguyễn Văn Tiến");
 
         // Short names and names that are also titles stay when said (here only in the notes).
         let mut doc = SummaryDoc {
@@ -1162,13 +1335,115 @@ mod tests {
             ..SummaryDoc::default()
         };
         let corpus = people::fold("[00:01] Chi will send it\nNotes: ask Ha about the budget");
-        keep_mentioned(&mut doc, &[], &corpus, Some("Dr. Lan"));
+        keep_mentioned(&mut doc, &[], &corpus, Some("Dr. Lan"), None);
         let names: Vec<_> = doc.attendees.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(
             names,
             vec!["Ms. Chi", "Hà", "Lan"],
             "Lan is the presenter (Dr. Lan)"
         );
+    }
+
+    #[test]
+    fn the_owner_attends_first_and_the_rest_follow_the_setting() {
+        let owner = Owner {
+            name: "Nguyễn Văn Tiến".into(),
+            title: "Head of Hub".into(),
+            organisation: "VIFC".into(),
+        };
+        let doc_with = |names: &[&str]| SummaryDoc {
+            attendees: names
+                .iter()
+                .map(|n| Attendee {
+                    name: (*n).into(),
+                    ..Attendee::default()
+                })
+                .collect(),
+            ..SummaryDoc::default()
+        };
+        let row = |a: &Attendee| {
+            (
+                a.name.clone(),
+                a.title.clone(),
+                a.organisation.clone(),
+                a.attending,
+            )
+        };
+
+        // Off: only the presenter and the owner attend; a shared surname isn't the owner.
+        let mut doc = doc_with(&["Nguyễn Thị Lan", "Dr. Minh"]);
+        settle_attendees(&mut doc, false, Some("Minh"), Some(&owner));
+        let got: Vec<_> = doc.attendees.iter().map(row).collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "Nguyễn Văn Tiến".into(),
+                    "Head of Hub".into(),
+                    "VIFC".into(),
+                    true
+                ),
+                ("Nguyễn Thị Lan".into(), String::new(), String::new(), false),
+                ("Dr. Minh".into(), String::new(), String::new(), true),
+            ]
+        );
+        assert_eq!(doc.attendees[0].attendance, "Present");
+
+        // On: everyone attends; the model's "Tien" is the owner — their spelling, moved first,
+        // the title the meeting stated kept, the organisation filled.
+        let mut doc = doc_with(&["Lan", "Tien"]);
+        doc.attendees[1].title = "Director".into();
+        settle_attendees(&mut doc, true, None, Some(&owner));
+        let got: Vec<_> = doc.attendees.iter().map(row).collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "Nguyễn Văn Tiến".into(),
+                    "Director".into(),
+                    "VIFC".into(),
+                    true
+                ),
+                ("Lan".into(), String::new(), String::new(), true),
+            ]
+        );
+
+        // No name in the profile yet: the flags only.
+        let mut doc = doc_with(&["Lan"]);
+        settle_attendees(&mut doc, false, None, None);
+        assert_eq!(doc.attendees.len(), 1);
+        assert!(!doc.attendees[0].attending);
+
+        assert!(same_person("Mr. Tien Nguyen", "Nguyễn Văn Tiến"));
+        assert!(!same_person("", "Lan"));
+        // A family name alone is nobody in particular: "Ms. Nguyen" isn't the owner.
+        assert!(!same_person("Mr. Nguyen", "Nguyễn Văn Tiến"));
+        assert!(!same_person("Nguyễn Văn Tiến", "Nguyễn"));
+        assert!(same_person("Nguyễn", "Nguyen"));
+        let mut doc = doc_with(&["Ms. Nguyen"]);
+        doc.attendees[0].title = "Director".into();
+        settle_attendees(&mut doc, true, None, Some(&owner));
+        let got: Vec<_> = doc.attendees.iter().map(row).collect();
+        assert_eq!(
+            got,
+            vec![
+                (
+                    "Nguyễn Văn Tiến".into(),
+                    "Head of Hub".into(),
+                    "VIFC".into(),
+                    true
+                ),
+                ("Ms. Nguyen".into(), "Director".into(), String::new(), true),
+            ],
+            "the owner is added, not swapped in for her"
+        );
+
+        // The owner is named in the fixed rules, never in the notes.
+        let rules = system_prompt("Guide", &[], Language::En, Some(&owner));
+        assert!(rules.contains(
+            "- The meeting owner, who recorded it, is Nguyễn Văn Tiến, Head of Hub at VIFC: spell their name exactly so.\n- `discussion`"
+        ));
+        assert!(!system_prompt("Guide", &[], Language::En, None).contains("who recorded it"));
     }
 
     #[test]
@@ -1327,11 +1602,13 @@ pub async fn rewrite_email(app: &AppHandle, slug: &str, meeting_id: &str) -> Res
     let current = view(&pool, meeting_id)
         .await?
         .ok_or_else(|| AppError::not_found("This meeting has no summary yet"))?;
+    let owner = profile::owner(&hub, slug).await?;
     let ctx = EmailContext {
         workspace: &workspace.name,
         title: &meeting.title,
         held_on: &meeting.held_on,
         language: meeting.language,
+        owner: owner.as_ref(),
     };
     let cancel = AtomicBool::new(false);
     let model = agents::model_for(&pool, Agent::Email).await;
@@ -1467,6 +1744,7 @@ mod live_tests {
                 Agent::Summary.default_guide(),
                 &structure,
                 Language::En,
+                None,
                 &transcript_text(&segments),
                 "",
                 false,
@@ -1481,6 +1759,7 @@ mod live_tests {
                 title: "Quarterly partner review",
                 held_on: "2026-10-24T03:00:00.000Z",
                 language: Language::En,
+                owner: None,
             };
             let (subject, body) = email::render(&doc, &ctx);
             eprintln!("SUBJECT: {subject}\n{body}");

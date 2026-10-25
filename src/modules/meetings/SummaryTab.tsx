@@ -22,9 +22,10 @@ import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import AiProgress, { SummaryBar, useNow } from "./AiProgress";
 import { useAgents } from "../../kernel/bridge/agents";
+import { useProfile } from "../../kernel/bridge/profile";
 import AttendeesBlock from "./AttendeesBlock";
 import NamesSheet from "./NamesSheet";
-import { formatWhen } from "./format";
+import { foldName, formatWhen } from "./format";
 import styles from "./SummaryTab.module.css";
 
 // Until meeting types drive the structure (P1.4), the same sections the backend uses by default.
@@ -41,6 +42,7 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
   const writing = !!progress || meeting.status === "summarising";
   const transcribed = ["transcribed", "summarising", "summarised"].includes(meeting.status);
   const agents = useAgents(slug);
+  const profile = useProfile();
   // The Summary agent's own model, or the app's (the backend falls back to it when the agent's is gone).
   const agentModel = agents.data?.find((g) => g.agent === "summary")?.model;
   const ollamaReady = !!ollama.data?.running && (ollama.data.model_installed || ollama.data.installed.some((m) => m.name === agentModel));
@@ -96,7 +98,7 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
       <aside className={styles.aside}>
         <EmailCard slug={slug} meeting={meeting} view={view ?? undefined} busy={busy} />
         <div className={`card ${styles.asideCard}`}>
-          <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />
+          <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} you={profile.data?.name ?? ""} locked={busy || !view} />
         </div>
         <div className={`card ${styles.asideCard}`}>
           <CorrectionsCard slug={slug} meetingId={meeting.id} canRun={transcribed && ollamaReady && !busy} />
@@ -435,13 +437,13 @@ interface Task {
   text: string;
 }
 
-/** Present attendees who own no task: the coverage check under the to-do list (D-038). */
+/** Present attendees who own no task: the coverage check under the to-do list (D-038). Only
+ *  the attendees — the others the meeting involves needn't have one. */
 function peopleWithoutTasks(view: SummaryView): string[] {
-  const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
-  const owners = view.doc.action_items.map((a) => fold(a.owner)).filter((o) => o && o !== "unassigned");
+  const owners = view.doc.action_items.map((a) => foldName(a.owner)).filter((o) => o && o !== "unassigned");
   return view.doc.attendees
-    .filter((a) => a.name.trim() && a.attendance !== "Absent")
-    .filter((a) => !owners.some((o) => o === fold(a.name) || o.includes(fold(a.name)) || fold(a.name).includes(o)))
+    .filter((a) => a.attending && a.name.trim() && a.attendance !== "Absent")
+    .filter((a) => !owners.some((o) => o === foldName(a.name) || o.includes(foldName(a.name)) || foldName(a.name).includes(o)))
     .map((a) => a.name);
 }
 

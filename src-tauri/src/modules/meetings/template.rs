@@ -2,10 +2,13 @@
 //! template: `<workspace>/brand/templates/meeting-minutes/<type id>.docx`. Minutes use the
 //! meeting's type template, else the default type's, else the workspace's older single
 //! `template.docx` (D-027), else the bundled starter pack with the workspace's slug. A workspace
-//! with no types gets a "Weekly meeting" type made from its template on first use.
+//! with no types gets a "Weekly meeting" type on first use, its template that older file, the
+//! starter pack, or else one made from the workspace's brand (`kernel/export/rebrand.rs`).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::{Duration, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
@@ -17,13 +20,18 @@ use tauri::{AppHandle, Manager};
 
 use crate::error::AppError;
 use crate::kernel::ai::whisper::Language;
+use crate::kernel::brand::{logo, tokens};
+use crate::kernel::export::rebrand::{self, DocBrand, LogoPng};
 use crate::kernel::export::{docx, model};
 use crate::kernel::hub::WorkspaceHub;
+use crate::kernel::profile;
 
 const DIR: &str = "templates/meeting-minutes";
 /// The single per-workspace template of D-027 (and the starter pack's file name).
 pub const TEMPLATE: &str = "templates/meeting-minutes/template.docx";
 const FIRST_TYPE: &str = "Weekly meeting";
+/// The neutral template a brand is applied to (`scripts/make_minutes_base.py`).
+const BASE: &[u8] = include_bytes!("../../../templates/minutes-base.docx");
 
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct TemplateCheck {
@@ -43,9 +51,16 @@ pub struct TemplateInfo {
     pub path: Option<String>,
     /// Last change of the file (ISO-8601 UTC).
     pub modified_at: Option<String>,
-    /// A starter pack for this workspace ships with the app (Reset is possible).
-    pub has_starter: bool,
     pub check: Option<TemplateCheck>,
+}
+
+/// A picture of the default type's template filled with a made-up meeting.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct TemplatePreview {
+    /// The first page as a PNG (Quick Look).
+    pub path: String,
+    /// Changes with every drawing (the PNG's modified time, ms): cache-busting.
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -129,7 +144,7 @@ pub async fn path_for(app: &AppHandle, slug: &str, type_id: Option<&str>) -> Res
     }
     starter_path(app, slug).ok_or_else(|| {
         AppError::not_found(
-            "This workspace has no minutes template yet — add one in Settings → Workspaces → Meeting types",
+            "This workspace has no minutes template yet — make one in Workspace → Brand (Update from brand)",
         )
         .into()
     })
@@ -139,7 +154,7 @@ pub async fn path_for(app: &AppHandle, slug: &str, type_id: Option<&str>) -> Res
 static SEEDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// A workspace without meeting types gets "Weekly meeting" (default), made from its own
-/// template.docx (moved) or the starter pack (copied). Nothing happens without either.
+/// template.docx (moved), the starter pack (copied) or, without either, its brand.
 pub async fn ensure_types(app: &AppHandle, slug: &str) -> Result<()> {
     let _one = SEEDING.lock().await;
     let hub = app.state::<WorkspaceHub>();
@@ -152,40 +167,109 @@ pub async fn ensure_types(app: &AppHandle, slug: &str) -> Result<()> {
     }
     let folder = folder_of(&hub, slug).await?;
     let legacy = legacy_file(&folder);
-    let source = if legacy.is_file() {
-        Some(legacy.clone())
-    } else {
-        starter_path(app, slug)
-    };
-    let Some(source) = source else { return Ok(()) };
+    let from_legacy = legacy.is_file();
     let id = super::new_id();
     let file = type_file(&folder, &id)?;
-    let tmp = copy_beside(&source, &file)?;
-    std::fs::rename(&tmp, &file).with_context(|| format!("saving {}", file.display()))?;
-    let inserted = sqlx::query(
-        "INSERT INTO meeting_type (id, name, language, is_default) VALUES (?, ?, 'auto', 1)",
-    )
-    .bind(&id)
-    .bind(FIRST_TYPE)
-    .execute(&pool)
-    .await;
-    if let Err(err) = inserted {
-        let _ = std::fs::remove_file(&file);
-        return Err(err.into());
-    }
-    if source == legacy {
+    let tmp = if from_legacy {
+        copy_beside(&legacy, &file)?
+    } else if let Some(starter) = starter_path(app, slug) {
+        copy_beside(&starter, &file)?
+    } else {
+        from_brand(app, slug, &file).await?
+    };
+    add_first_type(&pool, &id, &tmp, &file).await?;
+    if from_legacy {
         // The old single template now lives on as this type's: keep a copy in the Trash.
         super::review::to_trash(legacy).await.ok();
     }
     Ok(())
 }
 
-async fn template_info(
-    app: &AppHandle,
-    slug: &str,
-    folder: &Path,
-    type_id: &str,
-) -> Result<TemplateInfo> {
+/// Puts `tmp` in place as `file` and adds the default type it belongs to.
+async fn add_first_type(pool: &SqlitePool, id: &str, tmp: &Path, file: &Path) -> Result<()> {
+    std::fs::rename(tmp, file).with_context(|| format!("saving {}", file.display()))?;
+    let inserted = sqlx::query(
+        "INSERT INTO meeting_type (id, name, language, is_default) VALUES (?, ?, 'auto', 1)",
+    )
+    .bind(id)
+    .bind(FIRST_TYPE)
+    .execute(pool)
+    .await;
+    if let Err(err) = inserted {
+        let _ = std::fs::remove_file(file);
+        return Err(err.into());
+    }
+    Ok(())
+}
+
+/// Makes the minutes template from the workspace's brand (its colours, fonts, logo and name on
+/// the neutral base) as a temp file beside `target`; the caller puts it in place.
+async fn from_brand(app: &AppHandle, slug: &str, target: &Path) -> Result<PathBuf> {
+    let brand = tokens::get(app, slug).await?;
+    let name = app.state::<WorkspaceHub>().workspace(slug).await?.name;
+    let tmp = target.with_extension("docx.tmp");
+    let out = tmp.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<()> {
+        let logo = brand.logo_primary.as_deref().and_then(|path| {
+            match logo::header_png(Path::new(path)) {
+                Ok((bytes, width, height)) => Some(LogoPng {
+                    bytes,
+                    width,
+                    height,
+                }),
+                Err(err) => {
+                    tracing::warn!("the minutes template goes without the logo {path}: {err:#}");
+                    None
+                }
+            }
+        });
+        let dir = out.parent().context("template folder")?;
+        std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+        rebrand::brand_template(
+            BASE,
+            &DocBrand {
+                workspace: &name,
+                palette: &tokens::document_palette(&brand.primary),
+                heading_font: &brand.document_fonts.heading,
+                body_font: &brand.document_fonts.body,
+                logo,
+            },
+            &out,
+        )
+    })
+    .await??;
+    Ok(tmp)
+}
+
+/// The minutes template made again from the brand: it becomes the default type's (the old file
+/// goes to the Trash), or the first type's when there are none.
+pub async fn generate(app: &AppHandle, slug: &str) -> Result<Vec<MeetingTypeView>> {
+    {
+        let _one = SEEDING.lock().await;
+        let hub = app.state::<WorkspaceHub>();
+        let pool = hub.pool(slug)?;
+        let folder = folder_of(&hub, slug).await?;
+        let default: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM meeting_type ORDER BY is_default DESC LIMIT 1")
+                .fetch_optional(&pool)
+                .await?;
+        match default {
+            Some((id,)) => {
+                let file = type_file(&folder, &id)?;
+                put_in_place(from_brand(app, slug, &file).await?, &file).await?;
+            }
+            None => {
+                let id = super::new_id();
+                let file = type_file(&folder, &id)?;
+                let tmp = from_brand(app, slug, &file).await?;
+                add_first_type(&pool, &id, &tmp, &file).await?;
+            }
+        }
+    }
+    list(app, slug).await
+}
+
+async fn template_info(folder: &Path, type_id: &str) -> Result<TemplateInfo> {
     let file = type_file(folder, type_id)?;
     let own = file.is_file();
     let modified_at = own
@@ -201,7 +285,6 @@ async fn template_info(
     Ok(TemplateInfo {
         path: own.then(|| file.display().to_string()),
         modified_at,
-        has_starter: starter_path(app, slug).is_some(),
         check,
     })
 }
@@ -224,7 +307,7 @@ pub async fn list(app: &AppHandle, slug: &str) -> Result<Vec<MeetingTypeView>> {
     .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
-        let template = template_info(app, slug, &folder, &r.id).await?;
+        let template = template_info(&folder, &r.id).await?;
         out.push(MeetingTypeView {
             id: r.id,
             name: r.name,
@@ -447,7 +530,12 @@ fn copy_beside(source: &Path, own: &Path) -> Result<PathBuf> {
 /// Copies `source` into place as `target` once the copy passes the check; a file it replaces
 /// goes to the Trash.
 async fn install(source: &Path, target: &Path) -> Result<()> {
-    let tmp = copy_beside(source, target)?;
+    put_in_place(copy_beside(source, target)?, target).await
+}
+
+/// Renames `tmp` (beside `target`) over `target` once it passes the check; a file it replaces
+/// goes to the Trash.
+async fn put_in_place(tmp: PathBuf, target: &Path) -> Result<()> {
     // Check the copy itself: what passes is exactly what gets installed.
     let checked = {
         let t = tmp.clone();
@@ -488,19 +576,83 @@ pub async fn replace(
     list(app, slug).await
 }
 
-/// The starter pack becomes the type's template again (the current one goes to the Trash).
+/// The type's template starts again: the starter pack when the app ships one for this
+/// workspace, else one made from its brand (the current file goes to the Trash).
 pub async fn reset(app: &AppHandle, slug: &str, type_id: &str) -> Result<Vec<MeetingTypeView>> {
     let hub = app.state::<WorkspaceHub>();
     type_row(&hub.pool(slug)?, type_id).await?;
-    let starter = starter_path(app, slug).ok_or_else(|| {
-        AppError::invalid("There is no starter template for this workspace — replace it instead")
-    })?;
-    install(
-        &starter,
-        &type_file(&folder_of(&hub, slug).await?, type_id)?,
-    )
-    .await?;
+    let file = type_file(&folder_of(&hub, slug).await?, type_id)?;
+    let tmp = match starter_path(app, slug) {
+        Some(starter) => copy_beside(&starter, &file)?,
+        None => from_brand(app, slug, &file).await?,
+    };
+    put_in_place(tmp, &file).await?;
     list(app, slug).await
+}
+
+/// Previews share one file: one drawing at a time.
+static DRAWING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The default type's template filled with a made-up meeting around this workspace's own name,
+/// slogans and minute-taker, drawn by Quick Look into
+/// `brand/templates/meeting-minutes/preview/sample.docx.png`.
+pub async fn preview(app: &AppHandle, slug: &str) -> Result<TemplatePreview> {
+    ensure_types(app, slug).await?;
+    let template = path_for(app, slug, None).await?;
+    let hub = app.state::<WorkspaceHub>();
+    let workspace = hub.workspace(slug).await?;
+    let owner = profile::owner(&hub, slug).await?.unwrap_or_default();
+    let slogan = tokens::get(app, slug).await?.slogan;
+    let data = model::sample_for(&model::Sender {
+        workspace: &workspace.name,
+        slogan_en: &slogan.en,
+        slogan_vi: &slogan.vi,
+        name: &owner.name,
+        title: &owner.title,
+    });
+    let dir = Path::new(&workspace.folder_path)
+        .join("brand")
+        .join(DIR)
+        .join("preview");
+    draw(template, data, &dir).await.map_err(|err| {
+        tracing::warn!("could not draw the minutes preview: {err:#}");
+        AppError::new(
+            "preview_failed",
+            "Couldn't draw a preview — open the template in Word instead.",
+        )
+        .into()
+    })
+}
+
+async fn draw(template: PathBuf, data: Value, dir: &Path) -> Result<TemplatePreview> {
+    let _one = DRAWING.lock().await;
+    std::fs::create_dir_all(dir)?;
+    let sample = dir.join("sample.docx");
+    let png = dir.join("sample.docx.png");
+    let _ = std::fs::remove_file(&png); // an older drawing never stands in for this one
+    let out = sample.clone();
+    tauri::async_runtime::spawn_blocking(move || docx::render(&template, &data, &out)).await??;
+    let status = tokio::time::timeout(
+        Duration::from_secs(20),
+        tokio::process::Command::new("/usr/bin/qlmanage")
+            .args(["-t", "-s", "1400", "-o"])
+            .arg(dir)
+            .arg(&sample)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .status(),
+    )
+    .await
+    .context("Quick Look took more than 20 s")??;
+    if !png.is_file() {
+        bail!("Quick Look made no picture ({status})");
+    }
+    let drawn = std::fs::metadata(&png)?.modified()?;
+    Ok(TemplatePreview {
+        path: png.display().to_string(),
+        version: drawn.duration_since(UNIX_EPOCH)?.as_millis().to_string(),
+    })
 }
 
 /// Opens the type's template in Word (made from the template it uses now if it has none of its
@@ -545,6 +697,11 @@ mod tests {
         assert_eq!(vifc.error, None);
         assert!(vifc.unknown.is_empty(), "unknown: {:?}", vifc.unknown);
         assert!(vifc.fields.contains(&"decisions".to_owned()));
+        assert!(vifc.fields.contains(&"minute_taker".to_owned()));
+        let base = check(&root.join("src-tauri/templates/minutes-base.docx"));
+        assert_eq!(base.error, None);
+        assert!(base.unknown.is_empty(), "unknown: {:?}", base.unknown);
+        assert!(base.fields.contains(&"slogan_vi".to_owned()));
 
         let junk = std::env::temp_dir().join(format!("newdawn-junk-{}.docx", uuid::Uuid::now_v7()));
         std::fs::write(&junk, "not a zip").unwrap();

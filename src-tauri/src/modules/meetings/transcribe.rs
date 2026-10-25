@@ -216,8 +216,13 @@ async fn run(
     super::set_status(&pool, &meeting.id, MeetingStatus::Transcribing).await?;
 
     let outcome: Result<()> = async {
-        // The workspace vocabulary guides Whisper and corrects the result (D-036).
-        let people = crate::modules::people::list(&pool).await?;
+        // The workspace vocabulary guides Whisper and corrects the result (D-036); the owner's
+        // name leads the people.
+        let owner = crate::kernel::profile::owner(&app.state::<WorkspaceHub>(), slug).await?;
+        let people = crate::modules::people::with_owner(
+            crate::modules::people::list(&pool).await?,
+            owner.as_ref(),
+        );
         let terms = vocabulary::list(&pool).await?;
         let job = TranscribeJob {
             meeting_id: &meeting.id,

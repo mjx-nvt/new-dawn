@@ -3,9 +3,10 @@
 
 Edits only text inside word/document.xml (formatting untouched): bracket hints that New Dawn fills
 become {{fields}} / {{#blocks}}, worked examples ("e.g.") and the two "delete before issue"
-instruction boxes are removed, one example row/paragraph is kept as the pattern to clone. Hints the
-app can't know (venue, chair, minute-taker, classification, register, circulation) stay as [ ] for
-the user to complete in Word (D-023). Usage: vifc_template_placeholders.py ORIGINAL.docx OUT.docx
+instruction boxes are removed, one example row/paragraph is kept as the pattern to clone. The
+minute-taker is the app's owner ({{minute_taker}}, {{minute_taker_name}}); hints the app can't know
+(venue, chair, classification, register, circulation) stay as [ ] for the user to complete in Word
+(D-023). Usage: vifc_template_placeholders.py ORIGINAL.docx OUT.docx
 """
 import sys
 import zipfile
@@ -117,6 +118,7 @@ set_runs(agenda_paras[0], ["{{#agenda}}Session {{n}}: ", "{{topic}}{{/agenda}}"]
 for p in agenda_paras[1:]:
     remove(p)
 set_text(cells(row(details, "Reference no."))[1], "{{reference}}")
+set_text(cells(row(details, "Minute-taker"))[1], "{{minute_taker}}")  # "Name — Title"
 
 # Section 1.
 set_text(para("[Summary of context"), "{{summary}}")
@@ -176,6 +178,9 @@ set_text(c[4], "{{status}}{{/actions}}")
 set_runs(para("1.  [Open issue]"), ["{{#open_issues}}{{n}}.  ", "{{issue}} — ", "who can answer: ", "{{who}} — ", "by: ", "{{by}}{{/open_issues}}"])
 remove(para("2.  [Open issue]"))
 remove(para("3.  e.g."))
+
+# Signatures: the minute-taker's name (left cell); the chair's stays a hint.
+replace(cells(rows(table("Thư ký cuộc họp"))[0])[0], "[Full name]", "{{minute_taker_name}}")
 
 xml = doc.toxml(encoding="UTF-8")
 with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:

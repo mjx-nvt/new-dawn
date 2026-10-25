@@ -25,12 +25,16 @@ pub struct Workspace {
     pub last_opened_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    /// The owner's job title in this workspace ("" = not set); the name is app-wide (D-039).
+    pub owner_title: String,
 }
 
 #[derive(Debug, Deserialize, Type)]
 pub struct WorkspacePatch {
     pub name: Option<String>,
     pub archived: Option<bool>,
+    /// "" clears it.
+    pub owner_title: Option<String>,
 }
 
 /// `registry.db`: the workspace list and app-wide settings.
@@ -108,12 +112,18 @@ impl Registry {
         if name == Some("") {
             bail!(AppError::invalid("Name is required"));
         }
+        let owner_title = patch
+            .owner_title
+            .as_deref()
+            .map(|t| crate::kernel::profile::clean(t, 100));
         let done = sqlx::query(
             "UPDATE workspace SET name = coalesce(?, name), archived = coalesce(?, archived), \
+             owner_title = coalesce(?, owner_title), \
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE slug = ?",
         )
         .bind(name)
         .bind(patch.archived)
+        .bind(owner_title)
         .bind(slug)
         .execute(&self.pool)
         .await?;

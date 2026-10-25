@@ -3,7 +3,7 @@ use tauri::AppHandle;
 use crate::error::AppError;
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::export::model::{self, TemplateField};
-use crate::modules::meetings::template::{self, MeetingTypeView, TemplateCheck};
+use crate::modules::meetings::template::{self, MeetingTypeView, TemplateCheck, TemplatePreview};
 
 /// The workspace's meeting types with their templates (a first one is made if there are none).
 #[tauri::command]
@@ -105,4 +105,25 @@ pub async fn open_type_template(
 #[specta::specta]
 pub fn minutes_template_fields() -> Result<Vec<TemplateField>, AppError> {
     Ok(model::fields())
+}
+
+/// Makes the minutes template from the brand again: the default type's (the old file goes to
+/// the Trash), or the first type's.
+#[tauri::command]
+#[specta::specta]
+pub async fn generate_minutes_template(
+    app: AppHandle,
+    slug: String,
+) -> Result<Vec<MeetingTypeView>, AppError> {
+    Ok(template::generate(&app, &slug).await?)
+}
+
+/// A picture of the default type's template filled with a made-up meeting.
+#[tauri::command]
+#[specta::specta]
+pub async fn preview_minutes_template(
+    app: AppHandle,
+    slug: String,
+) -> Result<TemplatePreview, AppError> {
+    Ok(template::preview(&app, &slug).await?)
 }

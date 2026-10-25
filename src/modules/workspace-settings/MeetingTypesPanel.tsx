@@ -139,11 +139,9 @@ function TypeRow({ slug, type, only }: { slug: string; type: MeetingTypeView; on
               Reveal in Finder
             </button>
           )}
-          {t.has_starter && (
-            <DangerButton confirm="Current one to the Trash?" onConfirm={() => reset.mutate(type.id)} disabled={reset.isPending}>
-              Reset to starter
-            </DangerButton>
-          )}
+          <DangerButton confirm="Back to the starter template, or one made from your brand? The current file goes to the Trash." onConfirm={() => reset.mutate(type.id)} disabled={reset.isPending}>
+            Reset template
+          </DangerButton>
         </div>
       </div>
 
@@ -242,7 +240,8 @@ function AddType({ slug }: { slug: string }) {
   );
 }
 
-function CheckSummary({ check }: { check: TemplateCheck }) {
+/** What the template check found: its fields, and any it doesn't know or can't use. */
+export function CheckSummary({ check }: { check: TemplateCheck }) {
   if (check.error) return <p className={styles.error}>Can't be used: {check.error}</p>;
   return (
     <>

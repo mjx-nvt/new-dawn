@@ -9,20 +9,9 @@ import {
   type Workspace,
 } from "../../kernel/bridge/workspaces";
 import DangerButton from "../../kernel/shell/DangerButton";
+import { suggestSlug } from "./slug";
 import settings from "./Settings.module.css";
 import styles from "./WorkspacesPanel.module.css";
-
-/** "VIFC Fintech Hub" → "vifc-fintech-hub"; strips Vietnamese diacritics. */
-function suggestSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
 
 /** Settings → Workspaces: create, switch, archive and trash workspaces. */
 export default function WorkspacesPanel() {

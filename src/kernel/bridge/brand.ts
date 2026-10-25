@@ -50,3 +50,9 @@ export function useSetBrandLogo(slug: string) {
 export function useResetBrand(slug: string) {
   return useBrandMutation(slug, () => unwrap(commands.resetBrand(slug)));
 }
+
+/** The English slogan in Vietnamese, by the Translation agent (Ollama). Resolves to the text;
+ *  the caller saves it with `useUpdateBrand`. */
+export function useTranslateSlogan(slug: string) {
+  return useMutation({ mutationFn: (english: string) => unwrap(commands.translateSlogan(slug, english)) });
+}

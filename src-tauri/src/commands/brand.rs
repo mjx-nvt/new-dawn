@@ -36,3 +36,14 @@ pub async fn set_brand_logo(
 pub async fn reset_brand(app: AppHandle, slug: String) -> Result<BrandView, AppError> {
     Ok(tokens::reset(&app, &slug).await?)
 }
+
+/// The English slogan in Vietnamese, by the Translation agent (the UI saves it).
+#[tauri::command]
+#[specta::specta]
+pub async fn translate_slogan(
+    app: AppHandle,
+    slug: String,
+    text: String,
+) -> Result<String, AppError> {
+    Ok(crate::modules::brand::translate_slogan(&app, &slug, &text).await?)
+}

@@ -1,152 +1,110 @@
-import { useState } from "react";
-import DocumentPreview from "../workspace-settings/DocumentPreview";
+import { useRef, type RefObject } from "react";
+import { useBrand, useSetBrandLogo, useUpdateBrand, type BrandPatch } from "../../kernel/bridge/brand";
+import { useGenerateTemplate, useRedrawTemplatePreview } from "../../kernel/bridge/templates";
+import { logoUrl } from "../../kernel/theme/brandLogo";
+import { ColourRow, SloganRows } from "../workspace-settings/BrandPanel";
 import styles from "./BrandStep.module.css";
+import type { StepFrame } from "./TenantSetupPage";
 
-// SEE (stage A): mock proposal. Stage B fills it from a starter pack, stage C from the .docx, stage D from the PDF.
-const PACKS = [
-  { id: "vifc", name: "VIFC Fintech Hub", primary: "#0132AD", note: "Blue, Playfair Display headings" },
-  { id: "default", name: "Default", primary: "#3B5BDB", note: "Neutral, DM Sans throughout" },
-];
+/** Step 2: the logo, slogan and primary colour — all a document needs. Each saves as you go;
+ *  Continue makes the minutes template from them. `madeFor`: the workspace whose template this
+ *  step last made — it's made again only after the logo or colour changed, so a look back keeps
+ *  edits made in Word. */
+export default function BrandStep({ slug, madeFor, frame, onDone }: { slug: string; madeFor: RefObject<string | null>; frame: StepFrame; onDone: () => void }) {
+  const brand = useBrand(slug);
+  const update = useUpdateBrand(slug);
+  const setLogo = useSetBrandLogo(slug);
+  const generate = useGenerateTemplate(slug);
+  const redraw = useRedrawTemplatePreview(slug);
+  const b = brand.data;
+  // A field saves when you leave it — that is, as you click Continue: the template waits for it.
+  // The preview shows the slogans, so it's drawn again once a save lands (the translation's can
+  // land after you've moved on).
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
+  const save = (patch: BrandPatch) => {
+    saving.current = update.mutateAsync(patch).then(redraw, () => undefined); // errors shown from update.error
+  };
+  const changed = () => (madeFor.current = null); // the logo and colour are in the template file
+  const run = () =>
+    void saving.current.then(() =>
+      madeFor.current === slug
+        ? onDone()
+        : generate.mutate(undefined, {
+            onSuccess: () => {
+              madeFor.current = slug;
+              onDone();
+            },
+          }),
+    );
 
-const COLOURS = [
-  { key: "primary", label: "Primary", value: "#0132AD", source: "Template theme" },
-  { key: "secondary", label: "Secondary", value: "", source: "" },
-  { key: "accent", label: "Accent", value: "", source: "" },
-  { key: "text", label: "Text", value: "#0B1220", source: "Template styles" },
-];
-
-const FILES = [{ name: "TEMPLATE_Bien_ban_cuoc_hop.docx", role: "Minutes template" }];
-
-export default function BrandStep() {
-  const [pack, setPack] = useState("vifc");
-  const [primary, setPrimary] = useState("#0132AD");
-
-  return (
+  return frame(
     <>
-      <section className="section">
-        <h2 className="sectionTitle">Start from</h2>
-        <p className="sectionSubtitle">A starter pack fills the form below; anything can be edited</p>
-        <div className={styles.packs}>
-          {PACKS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              aria-pressed={pack === p.id}
-              className={`card ${styles.pack}`}
-              onClick={() => {
-                setPack(p.id);
-                setPrimary(p.primary);
-              }}
-            >
-              <span className={styles.packSwatch} style={{ background: p.primary }} />
-              <span>
-                <span className={styles.packName}>{p.name}</span>
-                <span className="fieldHint">{p.note}</span>
-              </span>
+      <p className="fieldHint">For documents only — your minutes carry this brand; the app keeps its own look.</p>
+
+      <p className="groupTitle">Logo</p>
+      <div className="group">
+        <div className="groupRow">
+          <div className="rowText">
+            <p className="rowLabel">Logo</p>
+            <p className="rowHint">SVG or PNG. We make the white version for dark backgrounds.</p>
+          </div>
+          <div className="rowControl">
+            <button type="button" className="btn btnSecondary btnCompact" disabled={!b || setLogo.isPending} onClick={() => setLogo.mutate({ onDark: false }, { onSuccess: changed })}>
+              Choose logo…
             </button>
-          ))}
+          </div>
         </div>
-      </section>
-
-      <section className="section">
-        <h2 className="sectionTitle">Import from files</h2>
-        <p className="sectionSubtitle">The minutes template is read for fonts, colours, logo, slogan and section headings</p>
-        <div className={styles.drop}>
-          <p>Drop the minutes template (.docx), brand guideline (PDF), logos and fonts</p>
-          <button type="button" className="btn btnSecondary btnCompact">Choose files…</button>
+        <div className={`groupRow ${styles.tiles}`}>
+          {b?.logo_primary ? (
+            <span className={`${styles.tile} ${styles.paper}`}>
+              <img src={logoUrl(b.logo_primary, b.logo_version)} alt="Your logo" />
+            </span>
+          ) : (
+            <span className={`${styles.tile} ghostCard`} />
+          )}
+          {b?.logo_on_dark ? (
+            <span className={styles.tile} style={{ background: b.primary }}>
+              <img src={logoUrl(b.logo_on_dark, b.logo_version)} alt="The white logo, on your colour" />
+            </span>
+          ) : (
+            <span className={`${styles.tile} ghostCard`} />
+          )}
         </div>
-        <ul className={styles.files}>
-          {FILES.map((f) => (
-            <li key={f.name} className={styles.file}>
-              <span className={styles.fileName}>{f.name}</span>
-              <span className="chip">{f.role}</span>
-            </li>
-          ))}
-          <li className={`${styles.fileGhost} ghostCard`} />
-        </ul>
-      </section>
+      </div>
 
-      <section className="section">
-        <h2 className="sectionTitle">Colours</h2>
-        <p className="sectionSubtitle">Primary colours headings and rules in documents; the rest of the ramp is derived</p>
-        <div className={styles.swatches}>
-          {COLOURS.map((c) => {
-            const value = c.key === "primary" ? primary : c.value;
-            return (
-              <label key={c.key} className={styles.swatch}>
-                <span className="fieldLabel">{c.label}</span>
-                <span className={styles.swatchRow}>
-                  {value ? (
-                    <input
-                      type="color"
-                      className={styles.colour}
-                      value={value}
-                      onChange={(e) => c.key === "primary" && setPrimary(e.target.value.toUpperCase())}
-                    />
-                  ) : (
-                    <span className={`${styles.colour} ghostAvatar`} />
-                  )}
-                  <span className={value ? "fieldValue" : "ghostText"}>{value || "Not set"}</span>
-                </span>
-                {c.source ? <span className="chip">{c.source}</span> : <span className="ghostPill chip">No source</span>}
-              </label>
-            );
-          })}
+      <p className="groupTitle">Slogan</p>
+      <div className="group">
+        <SloganRows slug={slug} brand={b} autoTranslate onSave={save} />
+      </div>
+
+      <p className="groupTitle">Colour</p>
+      <div className="group">
+        <ColourRow
+          label="Primary"
+          hint="Headings, rules and accents."
+          value={b?.primary ?? ""}
+          onSave={(v) => {
+            changed();
+            save({ primary: v });
+          }}
+        />
+        <div className="groupRow">
+          <div className="rowText">
+            <p className="rowLabel">Shades</p>
+            <p className="rowHint">Made from your colour.</p>
+          </div>
+          <div className={`rowControl ${styles.ramp}`}>
+            {b?.ramp.map((hex, i) => <span key={i} className={styles.swatch} style={{ background: hex }} title={hex} />)}
+          </div>
         </div>
-      </section>
-
-      <section className="section">
-        <h2 className="sectionTitle">Logo</h2>
-        <p className="sectionSubtitle">Candidates come from the template header and dropped logo files</p>
-        <div className="fields">
-          {["Primary", "On dark"].map((label) => (
-            <div key={label} className="field">
-              <span className="fieldLabel">{label}</span>
-              <div className={styles.logos}>
-                {[0, 1, 2].map((i) => (
-                  <span key={i} className={`${styles.logo} ghostAvatar`} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="section">
-        <h2 className="sectionTitle">Slogan</h2>
-        <p className="sectionSubtitle">Document headers show English first, then Vietnamese, one line each</p>
-        <div className="fields">
-          <label className="field">
-            <span className="fieldLabel">English</span>
-            <input className="input" defaultValue="The convergence of global capital and Vietnamese fintech" />
-          </label>
-          <label className="field">
-            <span className="fieldLabel">Vietnamese</span>
-            <input className="input" defaultValue="Nơi hội tụ dòng vốn toàn cầu và fintech Việt Nam" />
-          </label>
-        </div>
-      </section>
-
-      <section className="section">
-        <h2 className="sectionTitle">Document fonts</h2>
-        <p className="sectionSubtitle">Used only in exported documents; the app itself always uses DM Sans</p>
-        <div className="fields">
-          <label className="field">
-            <span className="fieldLabel">Heading</span>
-            <input className="input" defaultValue="Playfair Display" />
-          </label>
-          <label className="field">
-            <span className="fieldLabel">Body</span>
-            <input className="input" defaultValue="DM Sans" />
-          </label>
-        </div>
-      </section>
-
-      <section className="section">
-        <h2 className="sectionTitle">Preview</h2>
-        <p className="sectionSubtitle">The first page of the minutes in this brand</p>
-        <DocumentPreview name="VIFC Fintech Hub" primary={primary} headingFont="Playfair Display" slogan="The convergence of global capital and Vietnamese fintech" />
-      </section>
-    </>
+      </div>
+    </>,
+    {
+      label: generate.isPending ? "Making the template…" : "Continue",
+      run,
+      pending: generate.isPending,
+      disabled: !b || setLogo.isPending,
+      error: generate.error ?? setLogo.error ?? update.error ?? brand.error,
+    },
   );
 }

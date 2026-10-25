@@ -8,7 +8,7 @@ import { SORTS, STATUS_FILTERS, WHEN_FILTERS } from "./modules/meetings/listing"
 import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboarding/WelcomePage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
-import TenantSetupPage, { SETUP_STEPS, type SetupStep } from "./modules/tenant-setup/TenantSetupPage";
+import TenantSetupPage, { SETUP_STEPS, type SetupSearch } from "./modules/tenant-setup/TenantSetupPage";
 import SettingsPage, { SETTINGS_TABS } from "./modules/workspace-settings/SettingsPage";
 
 // Code-based route tree (D-010). Each route names its toolbar title in staticData.
@@ -66,9 +66,11 @@ const workspaceRoute = createRoute({
 const setupRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/setup",
-  validateSearch: (search: Record<string, unknown>): { step: SetupStep } => ({
-    step: SETUP_STEPS.find((s) => s.id === search.step)?.id ?? "identity",
-  }),
+  // The steps after the first need the workspace it made; without one, start there.
+  validateSearch: (search: Record<string, unknown>): SetupSearch => {
+    const slug = typeof search.slug === "string" && search.slug ? search.slug : undefined;
+    return { step: (slug && SETUP_STEPS.find((s) => s.id === search.step)?.id) || "identity", slug };
+  },
   component: TenantSetupPage,
   staticData: { title: "Tenant setup" },
 });

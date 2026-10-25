@@ -13,6 +13,7 @@ use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
+use super::logo;
 use crate::error::AppError;
 use crate::events::BrandChanged;
 use crate::kernel::hub::WorkspaceHub;
@@ -240,7 +241,11 @@ fn hex(value: &str) -> Result<String> {
 }
 
 fn rgb(hex: &str) -> (f64, f64, f64) {
-    let n = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0) as f64;
+    let n = |i: usize| {
+        hex.get(i..i + 2)
+            .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+            .unwrap_or(0) as f64
+    };
     (n(1), n(3), n(5))
 }
 
@@ -262,6 +267,72 @@ pub fn ramp(primary: &str) -> Vec<String> {
                 .map(|a| mix(primary, 0.0, *a)),
         )
         .collect()
+}
+
+/// The colours of a document made from the brand, by the roles they play in the minutes
+/// template it was learned from (`RRGGBB`, uppercase, no `#`).
+#[derive(Debug, Clone)]
+pub struct DocPalette {
+    /// Eyebrows, numbers, bullets: the primary, darker when needed to read on white (4.5:1).
+    pub accent: String,
+    /// Titles, labels, table header fills: a deep shade, at least 7:1 on white.
+    pub deep: String,
+    /// Label cells and table rows.
+    pub tint97: String,
+    /// Callouts and group rows.
+    pub tint93: String,
+    /// Hairlines.
+    pub tint88: String,
+    /// Vietnamese labels on the deep header fill (at least 4.5:1 there).
+    pub tint78: String,
+}
+
+/// WCAG contrast ratio of two `#RRGGBB` colours.
+fn contrast(a: &str, b: &str) -> f64 {
+    let luminance = |hex: &str| {
+        let (r, g, b) = rgb(hex);
+        let linear = |c: f64| {
+            let c = c / 255.0;
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+    };
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// The document palette for a `#RRGGBB` primary.
+pub fn document_palette(primary: &str) -> DocPalette {
+    // `primary` mixed towards `with` from `amount` on, a `step` at a time, until `ok` (all the
+    // way to black or white, which always passes).
+    let until = |with: f64, amount: f64, step: f64, ok: &dyn Fn(&str) -> bool| {
+        let mut steps = 0.0;
+        loop {
+            let a = (amount + step * steps).min(1.0);
+            let colour = mix(primary, with, a);
+            if ok(&colour) || a >= 1.0 {
+                return colour;
+            }
+            steps += 1.0;
+        }
+    };
+    let white = "#FFFFFF";
+    let accent = until(0.0, 0.0, 0.04, &|c| contrast(c, white) >= 4.5);
+    let deep = until(0.0, 0.42, 0.04, &|c| contrast(c, white) >= 7.0);
+    let tint78 = until(255.0, 0.78, 0.02, &|c| contrast(c, &deep) >= 4.5);
+    let bare = |hex: String| hex.trim_start_matches('#').to_owned();
+    DocPalette {
+        accent: bare(accent),
+        tint97: bare(mix(primary, 255.0, 0.97)),
+        tint93: bare(mix(primary, 255.0, 0.93)),
+        tint88: bare(mix(primary, 255.0, 0.88)),
+        tint78: bare(tint78),
+        deep: bare(deep),
+    }
 }
 
 const STEPS: [&str; 11] = [
@@ -472,6 +543,9 @@ pub async fn update(app: &AppHandle, slug: &str, patch: BrandPatch) -> Result<Br
 }
 
 /// Copies a picked SVG/PNG into `brand/logo/` as the primary or on-dark logo; `None` clears it.
+/// A new primary logo brings its white version (`logo::white_svg` / `white_png`), which becomes
+/// the on-dark logo (and goes with it when it's removed); an on-dark logo picked afterwards
+/// replaces it.
 pub async fn set_logo(
     app: &AppHandle,
     slug: &str,
@@ -480,8 +554,10 @@ pub async fn set_logo(
 ) -> Result<BrandView> {
     let folder = folder(app, slug).await?;
     ensure(app, &folder, slug)?;
-    let mut pack = read(&folder)?;
-    let rel = match source {
+    // The files first (making the white logo takes a while), so nothing is awaited between
+    // reading and writing the pack and a brand edit saved meanwhile isn't lost.
+    // `(primary, on_dark)`: the new paths; the primary is kept when only the on-dark is picked.
+    let picked: Option<(Option<String>, String)> = match source {
         None => None,
         Some(source) => {
             let path = Path::new(source);
@@ -493,34 +569,83 @@ pub async fn set_logo(
             if !path.is_file() || !matches!(ext.as_str(), "svg" | "png") {
                 bail!(AppError::invalid("Choose an SVG or PNG file"));
             }
+            let bytes =
+                std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
             // A new name each time, so the webview never shows a cached older logo.
             let stamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            let name = format!(
-                "{}-{stamp}.{ext}",
-                if on_dark { "logo-dark" } else { "logo" }
-            );
-            let target = folder.join("brand/logo").join(&name);
-            std::fs::create_dir_all(target.parent().context("logo folder")?)?;
-            let tmp = target.with_extension(format!("{ext}.tmp"));
-            std::fs::copy(path, &tmp).with_context(|| format!("copying {}", path.display()))?;
-            std::fs::rename(&tmp, &target)?;
-            Some(format!("logo/{name}"))
+            let save = |name: String, bytes: &[u8]| -> Result<String> {
+                let target = folder.join("brand/logo").join(&name);
+                std::fs::create_dir_all(target.parent().context("logo folder")?)?;
+                let tmp = target.with_extension(format!("{ext}.tmp"));
+                std::fs::write(&tmp, bytes)?;
+                std::fs::rename(&tmp, &target)?;
+                Ok(format!("logo/{name}"))
+            };
+            Some(if on_dark {
+                (None, save(format!("logo-dark-{stamp}.{ext}"), &bytes)?)
+            } else {
+                let (picked, svg) = (bytes.clone(), ext == "svg");
+                let white = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<u8>> {
+                    Ok(if svg {
+                        logo::white_svg(std::str::from_utf8(&picked)?)?.into_bytes()
+                    } else {
+                        logo::white_png(&logo::raster(&picked, false, 0)?)?
+                    })
+                })
+                .await?
+                .map_err(|err| {
+                    tracing::warn!("could not read the logo {}: {err:#}", path.display());
+                    AppError::invalid("This logo couldn't be read — choose another SVG or PNG")
+                })?;
+                (
+                    Some(save(format!("logo-{stamp}.{ext}"), &bytes)?),
+                    save(format!("logo-white-{stamp}.{ext}"), &white)?,
+                )
+            })
         }
     };
-    let previous = std::mem::replace(
-        if on_dark {
-            &mut pack.logo.on_dark
-        } else {
-            &mut pack.logo.primary
-        },
-        rel,
-    );
+    let mut pack = read(&folder)?;
+    // What this replaces is removed below. A new main logo replaces the white logo too, but
+    // removes the old one only when it was made from a main logo: an official one (the
+    // starter's, or one picked as the white logo) stays on disk.
+    let previous = [
+        pack.logo.primary.clone(),
+        pack.logo
+            .on_dark
+            .clone()
+            .filter(|p| on_dark || p.starts_with("logo/logo-white-")),
+    ];
+    match picked {
+        Some((primary, dark)) => {
+            if primary.is_some() {
+                pack.logo.primary = primary;
+            }
+            pack.logo.on_dark = Some(dark);
+        }
+        None if on_dark => pack.logo.on_dark = None,
+        None => {
+            pack.logo.primary = None;
+            // The white logo made from it goes too; one picked as the white logo stays.
+            if pack
+                .logo
+                .on_dark
+                .as_deref()
+                .is_some_and(|p| p.starts_with("logo/logo-white-"))
+            {
+                pack.logo.on_dark = None;
+            }
+        }
+    }
     write(&folder, &pack)?;
-    // The file it replaced is only removed when it was one we made (inside brand/logo).
-    if let Some(old) = previous.filter(|p| p.starts_with("logo/") && !p.contains("..")) {
+    // Files it replaced are only removed when they were ones we made (inside brand/logo).
+    for old in previous
+        .into_iter()
+        .flatten()
+        .filter(|p| p.starts_with("logo/") && !p.contains(".."))
+    {
         let still_used = pack.logo.primary.as_deref() == Some(&old)
             || pack.logo.on_dark.as_deref() == Some(&old);
         if !still_used {
@@ -566,6 +691,49 @@ mod tests {
         assert!(hex("blue").is_err());
         assert_eq!(Radius::preset("round").chip, 999);
         assert_eq!(Radius::preset("nope").preset, "soft");
+    }
+
+    #[test]
+    fn the_document_palette_matches_the_template_and_stays_readable() {
+        let vifc = document_palette("#0132AD");
+        assert_eq!(vifc.accent, "0132AD");
+        let channels = |hex: &str| -> Vec<i64> {
+            (0..3)
+                .map(|i| i64::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap())
+                .collect()
+        };
+        for (got, want) in [
+            (&vifc.deep, "011B65"),
+            (&vifc.tint97, "F6F9FF"),
+            (&vifc.tint93, "EBF1FF"),
+            (&vifc.tint88, "DFE7F6"),
+            (&vifc.tint78, "C9D3EA"),
+        ] {
+            let near = channels(got)
+                .iter()
+                .zip(channels(want))
+                .all(|(g, w)| (g - w).abs() <= 12);
+            assert!(near, "{got} is not near {want}");
+        }
+        for primary in ["#0132AD", "#FACC15", "#E8590C"] {
+            let p = document_palette(primary);
+            let hash = |c: &str| format!("#{c}");
+            assert!(
+                contrast(&hash(&p.accent), "#FFFFFF") >= 4.5,
+                "{primary}: {p:?}"
+            );
+            assert!(
+                contrast(&hash(&p.deep), "#FFFFFF") >= 7.0,
+                "{primary}: {p:?}"
+            );
+            assert!(
+                contrast(&hash(&p.tint78), &hash(&p.deep)) >= 4.5,
+                "{primary}: {p:?}"
+            );
+            assert!(
+                p.tint97.len() == 6 && p.tint97.chars().all(|c| matches!(c, '0'..='9' | 'A'..='F'))
+            );
+        }
     }
 
     #[test]

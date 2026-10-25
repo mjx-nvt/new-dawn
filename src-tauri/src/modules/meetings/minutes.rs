@@ -87,6 +87,10 @@ pub async fn export_docx(
     } else {
         None
     };
+    let owner = crate::kernel::profile::owner(&hub, slug)
+        .await?
+        .unwrap_or_default();
+    let slogan = crate::kernel::brand::tokens::get(app, slug).await?.slogan;
     let data = model::minutes(&MinutesInput {
         meeting: &meeting,
         doc: &summary.doc,
@@ -94,6 +98,13 @@ pub async fn export_docx(
         meeting_type: meeting_type.as_ref().map(|(name,)| name.as_str()),
         day_seq: day_seq(&pool, &meeting.id, &meeting.held_on, start).await?,
         transcript: transcript.as_deref(),
+        sender: &model::Sender {
+            workspace: &workspace.name,
+            slogan_en: &slogan.en,
+            slogan_vi: &slogan.vi,
+            name: &owner.name,
+            title: &owner.title,
+        },
     });
 
     let folder = Path::new(&workspace.folder_path);

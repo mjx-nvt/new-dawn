@@ -347,6 +347,7 @@ mod tests {
                 crate::kernel::registry::WorkspacePatch {
                     name: None,
                     archived: Some(true),
+                    owner_title: None,
                 },
             )
             .await

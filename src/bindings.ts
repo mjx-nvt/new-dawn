@@ -77,6 +77,13 @@ export const commands = {
 	openTypeTemplate: (slug: string, id: string, reveal: boolean) => typedError<null, AppError>(__TAURI_INVOKE("open_type_template", { slug, id, reveal })),
 	/**  Every field a minutes template can use. */
 	minutesTemplateFields: () => typedError<TemplateField[], AppError>(__TAURI_INVOKE("minutes_template_fields")),
+	/**
+	 *  Makes the minutes template from the brand again: the default type's (the old file goes to
+	 *  the Trash), or the first type's.
+	 */
+	generateMinutesTemplate: (slug: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("generate_minutes_template", { slug })),
+	/**  A picture of the default type's template filled with a made-up meeting. */
+	previewMinutesTemplate: (slug: string) => typedError<TemplatePreview, AppError>(__TAURI_INVOKE("preview_minutes_template", { slug })),
 	/**  Changes (or clears) a meeting's type. */
 	setMeetingType: (slug: string, meetingId: string, typeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("set_meeting_type", { slug, meetingId, typeId })),
 	getBrand: (slug: string) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("get_brand", { slug })),
@@ -84,6 +91,8 @@ export const commands = {
 	/**  A picked SVG/PNG becomes the logo (`on_dark`: the variant for dark backgrounds); `None` clears. */
 	setBrandLogo: (slug: string, path: string | null, onDark: boolean) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("set_brand_logo", { slug, path, onDark })),
 	resetBrand: (slug: string) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("reset_brand", { slug })),
+	/**  The English slogan in Vietnamese, by the Translation agent (the UI saves it). */
+	translateSlogan: (slug: string, text: string) => typedError<string, AppError>(__TAURI_INVOKE("translate_slogan", { slug, text })),
 	getStorageReport: () => typedError<StorageReport, AppError>(__TAURI_INVOKE("get_storage_report")),
 	/**  0 keeps recordings forever. */
 	setRetentionDays: (days: number) => typedError<null, AppError>(__TAURI_INVOKE("set_retention_days", { days })),
@@ -119,6 +128,12 @@ export const commands = {
 	backupNow: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("backup_now")),
 	getOnboardingDone: () => typedError<boolean, AppError>(__TAURI_INVOKE("get_onboarding_done")),
 	setOnboardingDone: (done: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_onboarding_done", { done })),
+	getProfile: () => typedError<Profile, AppError>(__TAURI_INVOKE("get_profile")),
+	/**
+	 *  Saves the profile; the main window refreshes through `WorkspacesChanged` (the owner shows
+	 *  in every workspace).
+	 */
+	setProfile: (patch: ProfilePatch_Deserialize) => typedError<Profile, AppError>(__TAURI_INVOKE("set_profile", { patch })),
 	/**  Shows a sample notification; the first one makes macOS ask whether New Dawn may notify. */
 	testNotification: () => typedError<null, AppError>(__TAURI_INVOKE("test_notification")),
 	exportMinutesDocx: (slug: string, meetingId: string, options: ExportOptions_Deserialize) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_docx", { slug, meetingId, options })),
@@ -201,7 +216,7 @@ export type ActionItem_Serialize = {
 	done: boolean,
 };
 
-export type Agent = "summary" | "naming" | "email" | "minutes" | "corrections";
+export type Agent = "summary" | "naming" | "email" | "minutes" | "corrections" | "translate";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -264,6 +279,10 @@ export type AppError = {
 	message: string,
 };
 
+/**
+ *  Someone the meeting involves (D-039). `attending` marks the attendees — the only people the
+ *  minutes list; the app records without a bot, so the owner confirms who was there.
+ */
 export type Attendee = Attendee_Serialize | Attendee_Deserialize;
 
 /**
@@ -284,6 +303,8 @@ export type AttendeeEdit_Deserialize = {
 	heard_as?: string | null,
 	/**  Added or changed in this edit: only these teach the memory. */
 	changed?: boolean,
+	/**  In the attendees (the minutes); never taught to the memory. */
+	attending: boolean,
 };
 
 /**
@@ -298,22 +319,42 @@ export type AttendeeEdit_Serialize = {
 	heard_as: string | null,
 	/**  Added or changed in this edit: only these teach the memory. */
 	changed: boolean,
+	/**  In the attendees (the minutes); never taught to the memory. */
+	attending: boolean,
 };
 
+/**
+ *  Someone the meeting involves (D-039). `attending` marks the attendees — the only people the
+ *  minutes list; the app records without a bot, so the owner confirms who was there.
+ */
 export type Attendee_Deserialize = {
 	name?: string,
 	organisation?: string,
 	/**  Job title, as said. */
 	title?: string,
 	attendance?: string,
+	/**
+	 *  In the attendees (and the minutes). Summaries saved before D-039 have no flag and read
+	 *  as attending, so their minutes don't change.
+	 */
+	attending?: boolean,
 };
 
+/**
+ *  Someone the meeting involves (D-039). `attending` marks the attendees — the only people the
+ *  minutes list; the app records without a bot, so the owner confirms who was there.
+ */
 export type Attendee_Serialize = {
 	name: string,
 	organisation: string,
 	/**  Job title, as said. */
 	title: string,
 	attendance: string,
+	/**
+	 *  In the attendees (and the minutes). Summaries saved before D-039 have no flag and read
+	 *  as attending, so their minutes don't change.
+	 */
+	attending: boolean,
 };
 
 export type BackupStatus = BackupStatus_Serialize | BackupStatus_Deserialize;
@@ -842,6 +883,28 @@ export type PersonInput_Serialize = {
 	aliases: string[],
 };
 
+export type Profile = {
+	/**  "" until the owner sets it. */
+	name: string,
+	/**
+	 *  New summaries put everyone the meeting involves in the attendees (the minutes); off,
+	 *  only the owner and the presenter are, and the owner ticks the rest.
+	 */
+	everyone_attends: boolean,
+};
+
+export type ProfilePatch = ProfilePatch_Serialize | ProfilePatch_Deserialize;
+
+export type ProfilePatch_Deserialize = {
+	name?: string | null,
+	everyone_attends?: boolean | null,
+};
+
+export type ProfilePatch_Serialize = {
+	name: string | null,
+	everyone_attends: boolean | null,
+};
+
 export type Radius = Radius_Serialize | Radius_Deserialize;
 
 export type Radius_Deserialize = {
@@ -1116,8 +1179,6 @@ export type TemplateInfo_Deserialize = {
 	path?: string | null,
 	/**  Last change of the file (ISO-8601 UTC). */
 	modified_at?: string | null,
-	/**  A starter pack for this workspace ships with the app (Reset is possible). */
-	has_starter: boolean,
 	check?: TemplateCheck_Deserialize | null,
 };
 
@@ -1126,9 +1187,15 @@ export type TemplateInfo_Serialize = {
 	path: string | null,
 	/**  Last change of the file (ISO-8601 UTC). */
 	modified_at: string | null,
-	/**  A starter pack for this workspace ships with the app (Reset is possible). */
-	has_starter: boolean,
 	check: TemplateCheck_Serialize | null,
+};
+
+/**  A picture of the default type's template filled with a made-up meeting. */
+export type TemplatePreview = {
+	/**  The first page as a PNG (Quick Look). */
+	path: string,
+	/**  Changes with every drawing (the PNG's modified time, ms): cache-busting. */
+	version: string,
 };
 
 export type Term = {
@@ -1227,11 +1294,15 @@ export type WorkspacePatch = WorkspacePatch_Serialize | WorkspacePatch_Deseriali
 export type WorkspacePatch_Deserialize = {
 	name?: string | null,
 	archived?: boolean | null,
+	/**  "" clears it. */
+	owner_title?: string | null,
 };
 
 export type WorkspacePatch_Serialize = {
 	name: string | null,
 	archived: boolean | null,
+	/**  "" clears it. */
+	owner_title: string | null,
 };
 
 /**  Sizes are bytes as f64: the bindings export refuses u64. */
@@ -1254,6 +1325,8 @@ export type Workspace_Deserialize = {
 	last_opened_at?: string | null,
 	created_at: string,
 	updated_at: string,
+	/**  The owner's job title in this workspace ("" = not set); the name is app-wide (D-039). */
+	owner_title: string,
 };
 
 export type Workspace_Serialize = {
@@ -1265,6 +1338,8 @@ export type Workspace_Serialize = {
 	last_opened_at: string | null,
 	created_at: string,
 	updated_at: string,
+	/**  The owner's job title in this workspace ("" = not set); the name is app-wide (D-039). */
+	owner_title: string,
 };
 
 /**  Any workspace was created, changed, archived, deleted or chosen. Every window refreshes. */

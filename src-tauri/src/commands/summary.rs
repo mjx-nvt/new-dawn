@@ -195,7 +195,5 @@ pub async fn update_attendees(
     attendees: Vec<AttendeeEdit>,
     remember: bool,
 ) -> Result<SummaryView, AppError> {
-    let workspace = hub.workspace(&slug).await?;
-    let pool = hub.pool(&slug)?;
-    Ok(review::update_attendees(&pool, &workspace.name, &meeting_id, &attendees, remember).await?)
+    Ok(review::update_attendees(&hub.pool(&slug)?, &meeting_id, &attendees, remember).await?)
 }

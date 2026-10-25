@@ -27,6 +27,9 @@
   border-radius: var(--radius-card);
 }
 
+/* A text field in a grouped row's control slot. */
+.rowInput { width: 260px; }
+
 .permission {
   display: flex;
   flex-wrap: wrap;

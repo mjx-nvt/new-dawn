@@ -22,4 +22,6 @@ who needs to act on it without having been there.
 
 ## People
 - Use the known people's spelling, title and organisation when the transcript clearly refers to them.
-- List someone as an attendee only when the meeting text shows them taking part.
+- List everyone the meeting involves as an attendee: who speaks, presents, is addressed, decides
+  or is given a task, and anyone discussed by name as a participant or stakeholder. The owner
+  then ticks who was actually there.

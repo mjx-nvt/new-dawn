@@ -10,6 +10,7 @@ use sqlx::SqlitePool;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::kernel::hub::WorkspaceHub;
 use crate::modules::people::{self, Person};
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -173,9 +174,11 @@ pub async fn learn(pool: &SqlitePool, pairs: &[(String, String)]) -> Result<usiz
 }
 
 /// What Whisper is told before the next transcription (the title is a placeholder).
-pub async fn preview(pool: &SqlitePool) -> Result<String> {
-    let people = people::list(pool).await?;
-    let terms = list(pool).await?;
+pub async fn preview(hub: &WorkspaceHub, slug: &str) -> Result<String> {
+    let pool = hub.pool(slug)?;
+    let owner = crate::kernel::profile::owner(hub, slug).await?;
+    let people = people::with_owner(people::list(&pool).await?, owner.as_ref());
+    let terms = list(&pool).await?;
     Ok(whisper_prompt(
         "<the meeting's title>",
         None,
@@ -459,5 +462,17 @@ mod tests {
             prompt,
             "Meeting: Weekly meeting. People: Đức. Terms: WiredScore."
         );
+        // The owner leads the people (their spelling), whatever the memory holds.
+        let owner = crate::kernel::profile::Owner {
+            name: "Nguyễn Văn Tiến".into(),
+            title: "Head of Hub".into(),
+            organisation: "VIFC".into(),
+        };
+        let with_me = people::with_owner(people.clone(), Some(&owner));
+        assert_eq!(
+            whisper_prompt("x", None, &with_me, &[]),
+            "Meeting: x. People: Nguyễn Văn Tiến, Đức."
+        );
+        assert_eq!(people::with_owner(people, None).len(), 1);
     }
 }

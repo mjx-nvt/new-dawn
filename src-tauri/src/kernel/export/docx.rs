@@ -147,8 +147,9 @@ fn unescape(raw: &str) -> String {
     out
 }
 
-/// XML-escapes text and drops characters XML 1.0 forbids (Word rejects the file otherwise).
-fn escape(text: &str) -> String {
+/// XML-escapes text (attribute values too) and drops characters XML 1.0 forbids (Word rejects
+/// the file otherwise).
+pub(super) fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         match c {
@@ -564,7 +565,8 @@ fn fill_part(xml: &str, data: &Value) -> Result<String> {
     Ok(out)
 }
 
-fn is_fillable(name: &str) -> bool {
+/// The parts with text: the body, headers and footers.
+pub(super) fn is_fillable(name: &str) -> bool {
     name == "word/document.xml"
         || (name.starts_with("word/header") && name.ends_with(".xml"))
         || (name.starts_with("word/footer") && name.ends_with(".xml"))

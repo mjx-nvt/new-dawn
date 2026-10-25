@@ -1,5 +1,7 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useProfile } from "../../kernel/bridge/profile";
+import { openSettings } from "../../kernel/bridge/settings";
 import { useCurrentWorkspace, useUpdateWorkspace } from "../../kernel/bridge/workspaces";
 import AgentsPanel from "../workspace-settings/AgentsPanel";
 import BrandPanel from "../workspace-settings/BrandPanel";
@@ -48,9 +50,9 @@ export default function WorkspacePage() {
         {!workspace ? (
           <div className={`${styles.slot} ghostCard`} />
         ) : tab === "overview" ? (
-          <Overview slug={slug} name={workspace.name} folder={workspace.folder_path} archived={workspace.archived} />
+          <Overview slug={slug} name={workspace.name} ownerTitle={workspace.owner_title} folder={workspace.folder_path} archived={workspace.archived} />
         ) : tab === "brand" ? (
-          <BrandPanel slug={slug} />
+          <BrandPanel key={slug} slug={slug} />
         ) : tab === "types" ? (
           <MeetingTypesPanel slug={slug} />
         ) : tab === "agents" ? (
@@ -65,10 +67,14 @@ export default function WorkspacePage() {
   );
 }
 
-function Overview({ slug, name, folder, archived }: { slug: string; name: string; folder: string; archived: boolean }) {
+function Overview({ slug, name, ownerTitle, folder, archived }: { slug: string; name: string; ownerTitle: string; folder: string; archived: boolean }) {
   const update = useUpdateWorkspace();
   const [draft, setDraft] = useState(name);
   useEffect(() => setDraft(name), [name]);
+  const [title, setTitle] = useState(ownerTitle);
+  useEffect(() => setTitle(ownerTitle), [ownerTitle]);
+  const profile = useProfile().data;
+  const you = profile?.name ?? "";
   return (
     <>
       <div className="group">
@@ -85,6 +91,29 @@ function Overview({ slug, name, folder, archived }: { slug: string; name: string
               aria-label="Workspace name"
               onChange={(e) => setDraft(e.target.value)}
               onBlur={() => draft.trim() && draft.trim() !== name && update.mutate({ slug, patch: { name: draft.trim() } })}
+              onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+            />
+          </div>
+        </div>
+        <div className="groupRow">
+          <div className="rowText">
+            <p className="rowLabel">Your title</p>
+            <p className="rowHint">{you ? `Your name, ${you}, comes from Settings → General.` : "Set your name in Settings → General."}</p>
+          </div>
+          <div className="rowControl">
+            {profile && !you && (
+              <button type="button" className="btn btnGhost btnCompact" onClick={() => void openSettings("general")}>
+                Open Settings
+              </button>
+            )}
+            <input
+              className={`input ${styles.name}`}
+              value={title}
+              maxLength={100}
+              placeholder="Not yet captured"
+              aria-label="Your title"
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => title.trim() !== ownerTitle && update.mutate({ slug, patch: { owner_title: title.trim() } })}
               onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
             />
           </div>

@@ -1,10 +1,10 @@
 [package]
 name = "new-dawn"
-version = "0.7.0"
+version = "0.7.1"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.87"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -47,6 +47,8 @@ tauri-plugin-clipboard-manager = "2"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.42"
+# Logos: SVG → PNG and the white version (re-exports usvg and tiny_skia, which reads/writes PNG).
+resvg = "0.47"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 tokio = { version = "1", features = ["fs", "io-util", "time", "sync", "process"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "json"] }

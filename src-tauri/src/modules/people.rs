@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::error::AppError;
+use crate::kernel::profile::Owner;
 use crate::modules::meetings::summarise::{Attendee, SummaryDoc};
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -98,20 +99,7 @@ fn clean_aliases(name: &str, aliases: &[String]) -> Vec<String> {
 
 /// Text that ends up in the model's prompt: no control characters or newlines, no `<`/`>`,
 /// single spaces, at most `max` characters.
-pub(crate) fn clean(text: &str, max: usize) -> String {
-    let plain: String = text
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .filter(|c| !matches!(c, '<' | '>'))
-        .collect();
-    plain
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .chars()
-        .take(max)
-        .collect()
-}
+pub(crate) use crate::kernel::profile::clean;
 
 /// A validated person, ready to write: (name, title, organisation, aliases JSON). Refuses a
 /// name or spelling another person already has (`ignore`: an id that is about to go).
@@ -246,6 +234,23 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .await?;
     tx.commit().await?;
     get(pool, &k.id).await
+}
+
+/// The memory with the app's owner first (their name, their title here and the workspace):
+/// Whisper and the naming check get their spelling, so the owner is never flagged as unknown.
+pub fn with_owner(mut people: Vec<Person>, owner: Option<&Owner>) -> Vec<Person> {
+    if let Some(o) = owner {
+        let me = Person {
+            id: "owner".into(),
+            name: o.name.clone(),
+            title: o.title.clone(),
+            organisation: o.organisation.clone(),
+            aliases: Vec::new(),
+            updated_at: "9999-12-31T00:00:00Z".into(), // newest: first in the prompts
+        };
+        people.insert(0, me);
+    }
+    people
 }
 
 /// The person `name` refers to (by name or another spelling), if any.
@@ -453,6 +458,8 @@ pub struct AttendeeEdit {
     /// Added or changed in this edit: only these teach the memory.
     #[serde(default)]
     pub changed: bool,
+    /// In the attendees (the minutes); never taught to the memory.
+    pub attending: bool,
 }
 
 impl From<&AttendeeEdit> for Attendee {
@@ -462,6 +469,7 @@ impl From<&AttendeeEdit> for Attendee {
             title: clean(&e.title, 100),
             organisation: clean(&e.organisation, 100),
             attendance: clean(&e.attendance, 40),
+            attending: e.attending,
         }
     }
 }
@@ -606,6 +614,7 @@ mod tests {
                 attendance: "Present".into(),
                 heard_as: heard.map(Into::into),
                 changed: true,
+                attending: true,
             };
             // The model wrote "Tien Nguyen"; the user corrected it.
             remember(
