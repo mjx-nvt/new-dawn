@@ -98,7 +98,7 @@ fn clean_aliases(name: &str, aliases: &[String]) -> Vec<String> {
 
 /// Text that ends up in the model's prompt: no control characters or newlines, no `<`/`>`,
 /// single spaces, at most `max` characters.
-fn clean(text: &str, max: usize) -> String {
+pub(crate) fn clean(text: &str, max: usize) -> String {
     let plain: String = text
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
@@ -312,6 +312,100 @@ pub fn prompt_block(people: &[Person]) -> String {
         .join("\n")
 }
 
+/// Replaces every spelling in `pairs` (old → right name) across the whole summary: section
+/// texts, topics, decisions, action owners, open issues, attendees. Whole words, any case, in
+/// one pass with the longest spelling winning, and every right name protected (so "Minh" →
+/// "Đỗ Minh" leaves an existing "Đỗ Minh" alone, run after run). Returns how many replacements.
+pub fn rename_in_doc(doc: &mut SummaryDoc, pairs: &[(String, String)]) -> usize {
+    // Longest first; a spelling seen twice keeps its first (longest) target; targets map to
+    // themselves so they're never rewritten.
+    let mut rules: Vec<(String, String)> = pairs
+        .iter()
+        .flat_map(|(from, to)| {
+            [
+                (from.trim().to_owned(), to.trim().to_owned()),
+                (to.trim().to_owned(), to.trim().to_owned()),
+            ]
+        })
+        .filter(|(from, _)| !from.is_empty())
+        .collect();
+    rules.sort_by_key(|(from, _)| std::cmp::Reverse(from.chars().count()));
+    let mut seen = Vec::new();
+    rules.retain(|(from, _)| {
+        let key = fold(from);
+        if seen.contains(&key) {
+            false
+        } else {
+            seen.push(key);
+            true
+        }
+    });
+    if rules.iter().all(|(from, to)| from == to) {
+        return 0;
+    }
+    let alternation = rules
+        .iter()
+        .map(|(from, _)| format!("({})", regex::escape(from)))
+        .collect::<Vec<_>>()
+        .join("|");
+    let Ok(re) = regex::Regex::new(&format!("(?iu){alternation}")) else {
+        return 0;
+    };
+    // The regex crate has no look-around: whole-word is checked by hand on the neighbours.
+    let edge = |c: char| !c.is_alphanumeric() && !unicode_normalization::char::is_combining_mark(c);
+    let mut count = 0;
+    let mut fix = |text: &mut String| {
+        let mut out = String::with_capacity(text.len());
+        let mut last = 0;
+        for caps in re.captures_iter(text) {
+            let m = caps.get(0).expect("whole match");
+            let before = text[..m.start()].chars().next_back().is_none_or(edge);
+            let after = text[m.end()..].chars().next().is_none_or(edge);
+            if !before || !after {
+                continue;
+            }
+            let which = (1..=rules.len())
+                .find(|i| caps.get(*i).is_some())
+                .expect("one group matched");
+            let to = &rules[which - 1].1;
+            out.push_str(&text[last..m.start()]);
+            out.push_str(to);
+            last = m.end();
+            if m.as_str() != to {
+                count += 1;
+            }
+        }
+        if last > 0 {
+            out.push_str(&text[last..]);
+            *text = out;
+        }
+    };
+    for s in &mut doc.sections {
+        fix(&mut s.markdown);
+    }
+    for t in &mut doc.discussion {
+        fix(&mut t.topic);
+        t.points.iter_mut().for_each(&mut fix);
+    }
+    for d in &mut doc.decisions {
+        fix(&mut d.text);
+        fix(&mut d.decided_by);
+    }
+    for a in &mut doc.action_items {
+        fix(&mut a.owner);
+        fix(&mut a.item);
+    }
+    for q in &mut doc.open_issues {
+        fix(&mut q.issue);
+        fix(&mut q.who);
+    }
+    for a in &mut doc.attendees {
+        fix(&mut a.name);
+    }
+    fix(&mut doc.next_focus);
+    count
+}
+
 /// One attendee as the user saved it; `heard_as` is the spelling it had before (from the
 /// model), kept as another spelling when the user changed the name.
 #[derive(Debug, Clone, Deserialize, Type)]
@@ -329,10 +423,10 @@ pub struct AttendeeEdit {
 impl From<&AttendeeEdit> for Attendee {
     fn from(e: &AttendeeEdit) -> Self {
         Attendee {
-            name: e.name.trim().to_owned(),
-            title: e.title.trim().to_owned(),
-            organisation: e.organisation.trim().to_owned(),
-            attendance: e.attendance.trim().to_owned(),
+            name: clean(&e.name, 200),
+            title: clean(&e.title, 100),
+            organisation: clean(&e.organisation, 100),
+            attendance: clean(&e.attendance, 40),
         }
     }
 }
@@ -394,6 +488,72 @@ mod tests {
         assert_eq!(fold("  Nguyễn  Văn Tiến "), "nguyen van tien");
         assert_eq!(fold("ĐỖ Minh"), "do minh");
         assert_eq!(fold(""), "");
+    }
+
+    #[test]
+    fn renames_whole_words_everywhere() {
+        let mut doc = SummaryDoc {
+            sections: vec![crate::modules::meetings::summarise::Section {
+                kind: crate::modules::meetings::summarise::SectionKind::Overview,
+                title: "Overview".into(),
+                markdown: "Tien Nguyen opened; tien nguyen closed. Tien Nguyenx stays.".into(),
+                edited: false,
+            }],
+            action_items: vec![ActionItem {
+                owner: "Tien Nguyen".into(),
+                item: "Brief Tien Nguyen's team".into(),
+                due: String::new(),
+            }],
+            ..SummaryDoc::default()
+        };
+        let n = rename_in_doc(
+            &mut doc,
+            &[
+                ("Tien Nguyen".into(), "Nguyễn Văn Tiến".into()),
+                ("x".into(), "x".into()),
+            ],
+        );
+        assert_eq!(n, 4);
+        assert_eq!(
+            doc.sections[0].markdown,
+            "Nguyễn Văn Tiến opened; Nguyễn Văn Tiến closed. Tien Nguyenx stays."
+        );
+        assert_eq!(doc.action_items[0].owner, "Nguyễn Văn Tiến");
+        assert_eq!(doc.action_items[0].item, "Brief Nguyễn Văn Tiến's team");
+
+        // A first name as alias: applying it twice must not double the surname.
+        doc.sections[0].markdown = "Minh and Đỗ Minh agreed; minh left.".into();
+        let pairs = [("Minh".to_string(), "Đỗ Minh".to_string())];
+        assert_eq!(rename_in_doc(&mut doc, &pairs), 2);
+        assert_eq!(
+            doc.sections[0].markdown,
+            "Đỗ Minh and Đỗ Minh agreed; Đỗ Minh left."
+        );
+        assert_eq!(rename_in_doc(&mut doc, &pairs), 0, "idempotent");
+        assert_eq!(
+            doc.sections[0].markdown,
+            "Đỗ Minh and Đỗ Minh agreed; Đỗ Minh left."
+        );
+        // The longer spelling wins over its prefix.
+        doc.sections[0].markdown = "Nguyen Minh spoke; Nguyen nodded.".into();
+        rename_in_doc(
+            &mut doc,
+            &[
+                ("Nguyen".into(), "A".into()),
+                ("Nguyen Minh".into(), "B".into()),
+            ],
+        );
+        assert_eq!(doc.sections[0].markdown, "B spoke; A nodded.");
+        // Accents-only and case-only corrections still apply.
+        doc.sections[0].markdown = "nguyen van tien spoke.".into();
+        assert_eq!(
+            rename_in_doc(
+                &mut doc,
+                &[("Nguyen Van Tien".into(), "Nguyễn Văn Tiến".into())]
+            ),
+            1
+        );
+        assert_eq!(doc.sections[0].markdown, "Nguyễn Văn Tiến spoke.");
     }
 
     #[test]

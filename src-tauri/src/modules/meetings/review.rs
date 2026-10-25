@@ -200,10 +200,37 @@ pub async fn update_attendees(
         .filter(|a| !a.name.trim().is_empty())
         .map(Attendee::from)
         .collect();
-    summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
     if remember {
         people::remember(pool, attendees).await?;
     }
+    // Every spelling the user corrected, and every known spelling of these people, becomes the
+    // right name across the summary; the email and the minutes are rebuilt from it (D-032).
+    let people = people::list(pool).await?;
+    // ponytail: a heard_as like "Chair" renamed to a person also rewrites "the Chair decided"
+    // in prose; acceptable until it bites (then: skip pairs whose `from` isn't a name).
+    let mut pairs: Vec<(String, String)> = attendees
+        .iter()
+        .filter(|a| a.changed && !a.name.trim().is_empty())
+        .filter_map(|a| {
+            a.heard_as
+                .as_ref()
+                .map(|h| (people::clean(h, 200), people::clean(&a.name, 200)))
+        })
+        .collect();
+    for a in attendees.iter().filter(|a| !a.name.trim().is_empty()) {
+        if let Some(p) = people::find(&people, &a.name) {
+            pairs.extend(
+                p.aliases
+                    .iter()
+                    .map(|alias| (alias.clone(), p.name.clone())),
+            );
+        }
+    }
+    let renamed = people::rename_in_doc(&mut current.doc, &pairs);
+    if renamed > 0 {
+        tracing::info!("attendee edit renamed {renamed} mention(s) in meeting {meeting_id}");
+    }
+    summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
     summarise::view(pool, meeting_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("summary vanished while saving"))

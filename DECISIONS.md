@@ -2,6 +2,16 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-032 — Attendee corrections fix names everywhere, deterministically
+_2026-10-25_
+
+**Decision** (user: "after editing, fix the naming in the summary and the docs and update the workspace people"):
+- Saving the Attendees sheet renames every spelling the user corrected (`heard_as` → new name) and every known spelling of the people involved across the whole summary document — section texts, topics, decisions, action owners, open issues, attendees, next focus — as whole words, any case (`people::rename_in_doc`, regex without look-around: boundaries checked by hand so Vietnamese letters count as word characters). The email and the minutes are rebuilt from that document, so they follow. The people memory is updated as before.
+- Chosen over an automatic AI re-run: instant, deterministic, and it never rewords what the user liked. **Re-run with corrected names** (keeps edited sections) is offered right after a save for when the wording should change too.
+- The Attendees editor is a modal sheet (860 pt table) rather than a form crammed into the 340 pt side column. The workspace badge shows the logo alone when the pack has one (name = tooltip and the switcher popover).
+
+---
+
 ## D-031 — Storage that stays flat; OTA updates; a shippable app
 _2026-10-25_
 

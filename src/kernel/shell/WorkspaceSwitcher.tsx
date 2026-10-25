@@ -5,7 +5,7 @@ import { useBrandLogo } from "../theme/applyBrand";
 import styles from "./WorkspaceSwitcher.module.css";
 
 interface Props {
-  /** In the icon rail: just the logo mark (the name is the tooltip). */
+  /** In the icon rail: just the letter mark (a wide logo wouldn't fit); the name is the tooltip. */
   compact?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,11 +41,11 @@ export default function WorkspaceSwitcher({ compact = false, open, onOpenChange 
     <div className={styles.root} ref={root}>
       <button
         type="button"
-        className={compact ? `${styles.badge} ${styles.compact}` : styles.badge}
+        className={compact || logo ? `${styles.badge} ${styles.compact}` : styles.badge}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label={compact ? `Workspace: ${current?.name ?? "none"}` : undefined}
-        title={compact ? current?.name : undefined}
+        aria-label={`Workspace: ${current?.name ?? "none"}. Switch…`}
+        title={current ? `${current.name} — click to switch workspace` : "Choose a workspace"}
         onClick={() => onOpenChange(!open)}
       >
         {logo && !compact ? (
@@ -55,7 +55,7 @@ export default function WorkspaceSwitcher({ compact = false, open, onOpenChange 
             {current ? current.name.charAt(0).toUpperCase() : ""}
           </span>
         )}
-        {!compact && (
+        {!compact && !logo && (
           <>
             <span className={current ? styles.badgeName : `${styles.badgeName} ghostText`}>
               {current ? current.name : "No workspace"}

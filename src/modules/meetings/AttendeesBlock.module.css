@@ -5,65 +5,60 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-2);
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding-left: var(--space-4);
+  gap: var(--space-2);
+  list-style: none;
   font-size: var(--t-md);
-  line-height: 1.6;
-  color: var(--ink-2);
-  user-select: text;
+  line-height: 1.5;
 }
-.list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
 
-.name {
-  font-weight: 600;
-  color: var(--ink);
-}
+.name { font-weight: 600; }
+.role { color: var(--ink-2); }
 
 .slot {
-  min-height: 56px;
-  margin-top: var(--space-2);
+  min-height: 44px;
   border-radius: var(--radius-card);
 }
 
-.editor {
+.afterSave {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 0.5px solid var(--hair);
 }
 
-.grid {
+/* The sheet is wider than the default: a five-column table lives in it. */
+.sheet { width: min(860px, calc(100vw - 2 * var(--space-5))); }
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tableHead,
+.tableRow {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr auto auto;
+  grid-template-columns: 1.4fr 1fr 1fr 130px auto;
   align-items: center;
   gap: var(--space-2);
 }
 
-/* Wide: headings and each person's inputs sit directly in the table grid. */
-.headings,
-.person { display: contents; }
+.tableHead { padding: 0 var(--space-1); }
 
-/* Narrow: one card per person, name across the top; no column headings. */
-@container content (max-width: 640px) {
-  .grid { grid-template-columns: 1fr; }
-  .headings { display: none; }
-  .person {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-2);
-    padding: var(--space-3);
-    border: 0.5px solid var(--hair);
-    border-radius: var(--radius-card);
-  }
-  .person > :first-child { grid-column: 1 / -1; }
-}
-
-.actions {
+.sheetFooter {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -73,14 +68,21 @@
 .remember {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
   font-size: var(--t-sm);
   color: var(--ink-2);
 }
 
 .grow { flex: 1; }
 
-.error {
-  font-size: var(--t-sm);
-  color: var(--status-negative);
+/* Narrow window: one card per person, name across the top. */
+@media (max-width: 760px) {
+  .tableHead { display: none; }
+  .tableRow {
+    grid-template-columns: 1fr 1fr;
+    padding: var(--space-3);
+    border: 0.5px solid var(--hair);
+    border-radius: var(--radius-card);
+  }
+  .tableRow > :first-child { grid-column: 1 / -1; }
 }

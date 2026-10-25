@@ -2875,6 +2875,7 @@ dependencies = [
  "futures-util",
  "pulldown-cmark",
  "quick-xml 0.42.0",
+ "regex",
  "reqwest",
  "rubato",
  "serde",
