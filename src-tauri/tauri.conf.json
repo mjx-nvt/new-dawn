@@ -70,7 +70,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/mjx-nvt/new-dawn-releases/releases/latest/download/latest.json"
+        "https://github.com/mjx-nvt/new-dawn/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU3QTQ5OUNBQThFM0U2RjIKUldUeTV1T295cG1rNXp5bUx2QUovL0s2YVhKYVhpWjR0YVhNVE55WUNZNFE5WUZhTUlCWHVLYk0K"
     }

@@ -12,11 +12,10 @@ _2026-10-25_
 - Architect review — must-fixes applied: one compression at a time (the post-transcript one and "Compress now" could have written the same file); retention refuses to run when the recordings folder isn't reachable and only clears a meeting's audio pointer after the file was trashed or is confirmed gone. Should-fixes: the compressed file is synced to disk before the original goes; the update check times out after 15 s with a plain message; "Trash old recordings now" uses your retention setting (hidden when Forever); the date search no longer reads "Market" as March or "decision" as December; the release workflow runs on tags only and refuses a tag that doesn't match the app version; one bad file no longer stops Compress now; the launch check repeats daily while the app stays open in the tray.
 - Meetings list filters/sort/date groups/date search (from the previous build) are part of this release.
 
-## What you need to do once (I couldn't: creating a public repo and writing secrets are blocked for me)
-1. **Create the public releases repo**: `gh repo create mjx-nvt/new-dawn-releases --public --description "New Dawn releases"` (or on github.com). The app reads `https://github.com/mjx-nvt/new-dawn-releases/releases/latest/download/latest.json`.
-2. **Store the signing key** in the private repo's secrets: `gh secret set TAURI_SIGNING_PRIVATE_KEY --repo mjx-nvt/new-dawn < ~/.tauri/newdawn.key` and `gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo mjx-nvt/new-dawn --body ""` (the key has no password). **Back up `~/.tauri/newdawn.key`**: without it no future update can be signed.
-3. **A token for the releases repo**: github.com → Settings → Developer settings → Fine-grained tokens → repository `new-dawn-releases`, permission *Contents: Read and write* → then `gh secret set RELEASES_TOKEN --repo mjx-nvt/new-dawn --body <token>`.
-4. **Ship**: `git tag v0.2.0 && git push origin v0.2.0` → the workflow builds (~15 min) and publishes. Install that `.dmg` (right-click → Open the first time). To prove OTA: bump to 0.2.1, tag `v0.2.1`, then Settings → About → Check for updates → Install and restart.
+## Releasing
+- The source repo `mjx-nvt/new-dawn` is public (25 Oct); releases live there and the app reads `https://github.com/mjx-nvt/new-dawn/releases/latest/download/latest.json`.
+- **Local** (what I do): `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/newdawn.key)" pnpm tauri build`, then `RELEASE_NOTES="…" scripts/release-local.sh` → a GitHub release with the .dmg, the update bundle, its signature and latest.json.
+- **CI** (optional): set the two secrets once — `gh secret set TAURI_SIGNING_PRIVATE_KEY --repo mjx-nvt/new-dawn < ~/.tauri/newdawn.key` and `gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo mjx-nvt/new-dawn --body ""` — then pushing a tag `vX.Y.Z` that matches `tauri.conf.json` builds and publishes on GitHub's runner. **Back up `~/.tauri/newdawn.key`**: without it no future update can be signed.
 
 ## Manual steps (local)
 1. Install `src-tauri/target/release/bundle/dmg/New Dawn_0.2.0_aarch64.dmg` (built here) → right-click → Open.

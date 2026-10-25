@@ -1,5 +1,5 @@
 # Builds New Dawn for Apple Silicon and publishes the .dmg plus the signed update bundle and
-# latest.json to the public releases repo (the app's updater reads it from there).
+# latest.json as a GitHub release of this (public) repo; the app's updater reads latest.json.
 # Trigger: push a tag like v0.2.0.
 name: Release
 
@@ -8,7 +8,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -43,14 +43,10 @@ jobs:
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          # The release lives in the public repo; RELEASES_TOKEN is a fine-grained token with
-          # "Contents: read and write" on mjx-nvt/new-dawn-releases.
-          owner: mjx-nvt
-          repo: new-dawn-releases
           tagName: ${{ github.ref_name }}
           releaseName: "New Dawn ${{ github.ref_name }}"
           releaseBody: "See the commit history for what changed."
