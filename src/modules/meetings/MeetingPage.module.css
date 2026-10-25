@@ -99,3 +99,11 @@
   font-size: var(--t-xl);
   font-weight: 700;
 }
+
+/* The presenter's name, inline in the facts row. */
+.presenter {
+  width: 200px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  font-size: var(--t-sm);
+}

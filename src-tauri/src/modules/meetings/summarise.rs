@@ -51,6 +51,9 @@ pub struct ActionItem {
     pub owner: String,
     pub item: String,
     pub due: String,
+    /// Ticked off in the to-do list (D-038).
+    #[serde(default)]
+    pub done: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
@@ -182,13 +185,7 @@ pub fn default_structure(language: Language) -> Vec<SectionSpec> {
             SectionKind::ActionItems,
             "Action items",
             "Việc cần làm",
-            "Leave markdown empty; list each task in `action_items`.",
-        ),
-        spec(
-            SectionKind::NextSteps,
-            "Next steps",
-            "Bước tiếp theo",
-            "A to-do list: one \"- [ ] \" line per next step — what, who (if said), by when (if said) — e.g. \"- [ ] Send the WiredScore kickoff agenda — Harry — by Monday\". Follow-ups, meetings to set up, documents to get, decisions to chase.",
+            "Leave markdown empty; list every task and next step in `action_items`.",
         ),
         spec(
             SectionKind::OpenQuestions,
@@ -239,7 +236,7 @@ fn system_prompt(guide: &str, structure: &[SectionSpec], language: Language) -> 
          - `attendees`: everyone named as taking part; `organisation` and `title` (job title) only when stated, else \"\"; `attendance` \"Present\", or \"Absent\" when said to be absent.\n\
          - `discussion`: one entry per agenda item or topic, in the order discussed; `topic` is a short title (2–5 words); `points` are 3–8 full sentences each with the substance — who said what, figures, names, dates, reasons, concerns raised. Prefer more detail over less.\n\
          - `decisions`: only what was actually decided; `decided_by` as said, else \"\"; `condition` any condition or note, else \"\".\n\
-         - `action_items`: one entry per task with `owner` (a person's name, or \"Unassigned\"), `item`, and `due` (as said, or \"Not set\").\n\
+         - `action_items`: the to-do list. Go through every person named in the meeting — each attendee, everyone mentioned, the presenter — one by one, and list every task, commitment, request or follow-up that involves them; then the next steps nobody owns yet (meetings to set up, documents to get, decisions to chase) with owner \"Unassigned\". `owner` is a person's name or \"Unassigned\", `item` says concretely what, `due` as said or \"Not set\". Do not repeat the same task twice.\n\
          - `open_issues`: questions raised but not answered; `who` can answer and `by` when, as said, else \"Not set\".\n\
          - `next_focus`: one sentence, the most important thing that happens next.\n\
          - `highlights`: when the owner wrote notes, 3–6 short sentences — the points the notes flag, each with what the meeting said about it (figures, names, outcome); otherwise an empty list.",
@@ -408,14 +405,19 @@ struct RawSection {
     markdown: String,
 }
 
-/// Maps the model's JSON onto the structure (by position, then title), fills gaps with "Not
-/// discussed", and writes the Key points / Decisions / Action items / Open questions sections
-/// from the structured lists (Key points and Open questions fall back to the model's markdown).
-/// "- **Owner** — task — *due*" lines (the format review.rs reads back).
-fn action_items_markdown(items: &[ActionItem]) -> String {
+/// "- [ ] **Owner** — task — *due*" lines, a to-do list (the format review.rs reads back).
+pub(super) fn action_items_markdown(items: &[ActionItem]) -> String {
     items
         .iter()
-        .map(|a| format!("- **{}** — {} — *{}*", a.owner, a.item, a.due))
+        .map(|a| {
+            format!(
+                "- [{}] **{}** — {} — *{}*",
+                if a.done { "x" } else { " " },
+                a.owner,
+                a.item,
+                a.due
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -438,6 +440,78 @@ fn apply_people(doc: &mut SummaryDoc, people: &[Person], language: Language) {
     }
 }
 
+/// Words that are titles, not names ("Mr. Tom" is found by "tom").
+const HONORIFICS: &[&str] = &[
+    "mr", "mrs", "ms", "miss", "dr", "madame", "madam", "sir", "anh", "chi", "em", "ong", "ba",
+    "co", "chu",
+];
+
+/// The whole words of folded text.
+fn word_set(folded: &str) -> std::collections::HashSet<&str> {
+    folded
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect()
+}
+
+/// Whether `name` (or one of the person's other spellings) is among `words` (folded): any word
+/// of three letters or more that isn't a title; a name with no such word ("Hà", "Chi") is
+/// matched on the words it has.
+// ponytail: folded Vietnamese names often equal common words ("Thị" = "thì"), so such names
+// usually pass — lenient on purpose; a real check needs names tagged in the transcript.
+fn mentioned(name: &str, people: &[Person], words: &std::collections::HashSet<&str>) -> bool {
+    let mut spellings = vec![name.to_owned()];
+    if let Some(p) = people::find(people, name) {
+        spellings.push(p.name.clone());
+        spellings.extend(p.aliases.iter().cloned());
+    }
+    spellings.iter().any(|s| {
+        let folded = people::fold(s);
+        let all: Vec<&str> = folded
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect();
+        let strong: Vec<&str> = all
+            .iter()
+            .copied()
+            .filter(|w| w.chars().count() >= 3 && !HONORIFICS.contains(w))
+            .collect();
+        let check = if strong.is_empty() { all } else { strong };
+        check.iter().any(|w| words.contains(w))
+    })
+}
+
+/// Whether `name` is the presenter (shares a name word: "Lan" and "Dr. Lan").
+fn is_presenter(name: &str, presenter: Option<&str>) -> bool {
+    presenter.is_some_and(|p| {
+        let folded = people::fold(p);
+        mentioned(name, &[], &word_set(&folded))
+    })
+}
+
+/// The harness check on people (D-038): the model is shown the people memory for spelling and
+/// sometimes lists them as attendees of a meeting they weren't in. Keep only attendees the
+/// transcript, the owner's notes or the presenter field mention; tasks owned by someone never
+/// mentioned become "Unassigned".
+fn keep_mentioned(doc: &mut SummaryDoc, people: &[Person], corpus: &str, presenter: Option<&str>) {
+    let words = word_set(corpus);
+    doc.attendees
+        .retain(|a| is_presenter(&a.name, presenter) || mentioned(&a.name, people, &words));
+    for item in &mut doc.action_items {
+        let owner = item.owner.trim();
+        if !owner.is_empty()
+            && owner != "Unassigned"
+            && !is_presenter(owner, presenter)
+            && !mentioned(owner, people, &words)
+        {
+            item.owner = "Unassigned".to_owned();
+        }
+    }
+}
+
+/// Maps the model's JSON onto the structure (by position, then title), fills gaps with "Not
+/// discussed", and writes the Key points / Decisions / Action items / Open questions sections
+/// from the structured lists (Key points and Open questions fall back to the model's markdown).
 fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryDoc {
     let by_title: HashMap<String, &RawSection> = raw
         .sections
@@ -809,10 +883,13 @@ async fn run(
 ) -> Result<usize> {
     let previous = meeting.status;
     // What each stage usually takes, for the time-left estimate in the UI.
+    let model = agents::model_for(&pool, Agent::Summary)
+        .await
+        .unwrap_or_else(ollama::model);
     let typical = [
-        agents::typical(&pool, "summary").await,
-        agents::typical(&pool, "naming").await,
-        agents::typical(&pool, "email").await,
+        agents::typical(&pool, "summary", &model).await,
+        agents::typical(&pool, "naming", &model).await,
+        agents::typical(&pool, "email", &model).await,
     ];
     let report = {
         let (app, slug, meeting_id) = (app.clone(), slug.to_owned(), meeting.id.clone());
@@ -855,11 +932,8 @@ async fn run(
         if segments.is_empty() {
             bail!(AppError::invalid("The transcript is empty"));
         }
-        let previous = if keep_edits {
-            view(&pool, &meeting.id).await?.map(|v| v.doc)
-        } else {
-            None
-        };
+        // Read either way: ticked tasks carry over even when hand edits are discarded.
+        let previous = view(&pool, &meeting.id).await?.map(|v| v.doc);
         // The people memory goes in with the owner's notes: correct spellings and roles.
         let people = people::list(&pool).await?;
         let mut notes = meeting
@@ -876,10 +950,15 @@ async fn run(
                 people::prompt_block(&people)
             ));
         }
+        if let Some(note) = super::format_note(&meeting) {
+            notes.push_str(&format!("\n\n{note}"));
+        }
         let notes = notes.trim();
         let structure = default_structure(meeting.language);
         let guide = agents::guide(std::path::Path::new(&workspace.folder_path), Agent::Summary);
-        let mut session = ollama::session(app, pool.clone(), Some(&meeting.id)).await?;
+        // The whole run (summary → names check → cover note) stays on the Summary agent's model.
+        let model = agents::model_for(&pool, Agent::Summary).await;
+        let mut session = ollama::session(app, pool.clone(), Some(&meeting.id), model).await?;
         session.for_agent("summary");
         if cancel.load(Ordering::Relaxed) {
             bail!(AppError::new("cancelled", "Summary cancelled")); // cancelled while queued
@@ -898,9 +977,20 @@ async fn run(
         .await?;
         let model_name = session.model().to_owned();
         doc.generated_at = generated_at;
+        let corpus = people::fold(&format!("{}\n{}", transcript_text(&segments), meeting.notes_md.as_deref().unwrap_or_default()));
+        keep_mentioned(&mut doc, &people, &corpus, meeting.presenter.as_deref());
+        // Before apply_people, so the people memory fills the presenter's title and organisation.
+        if let Some(presenter) = meeting.presenter.as_deref().filter(|p| !p.trim().is_empty()) {
+            if !doc.attendees.iter().any(|a| is_presenter(&a.name, Some(presenter))) {
+                doc.attendees.insert(0, Attendee { name: presenter.to_owned(), title: String::new(), organisation: String::new(), attendance: "Present".to_owned() });
+            }
+        }
         apply_people(&mut doc, &people, meeting.language);
         if let Some(previous) = &previous {
-            review::keep_edits(&mut doc, previous);
+            if keep_edits {
+                review::keep_edits(&mut doc, previous);
+            }
+            review::carry_ticks(&mut doc, &previous.action_items);
         }
         let meeting = super::get(&pool, &meeting.id).await?; // renamed while writing?
         let ctx = EmailContext {
@@ -1002,6 +1092,86 @@ mod tests {
     }
 
     #[test]
+    fn people_the_meeting_never_mentions_are_dropped() {
+        let known = vec![Person {
+            id: "1".into(),
+            name: "Đức".into(),
+            title: String::new(),
+            organisation: String::new(),
+            aliases: vec!["Duke".into()],
+            updated_at: String::new(),
+        }];
+        let mut doc = SummaryDoc {
+            attendees: vec![
+                Attendee {
+                    name: "Đức".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Ms. Chi".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Dr. Lan".into(),
+                    ..Attendee::default()
+                },
+            ],
+            action_items: vec![
+                ActionItem {
+                    owner: "Legal teams".into(),
+                    item: "review".into(),
+                    due: String::new(),
+                    done: false,
+                },
+                ActionItem {
+                    owner: "Duke".into(),
+                    item: "send".into(),
+                    due: String::new(),
+                    done: false,
+                },
+            ],
+            ..SummaryDoc::default()
+        };
+        let corpus = people::fold("[00:01] Duke will send the agenda");
+        keep_mentioned(&mut doc, &known, &corpus, Some("Dr. Lan"));
+        let names: Vec<_> = doc.attendees.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Đức", "Dr. Lan"],
+            "heard as Duke; the presenter stays; Ms. Chi was never mentioned"
+        );
+        assert_eq!(doc.action_items[0].owner, "Unassigned");
+        assert_eq!(doc.action_items[1].owner, "Duke");
+
+        // Short names and names that are also titles stay when said (here only in the notes).
+        let mut doc = SummaryDoc {
+            attendees: vec![
+                Attendee {
+                    name: "Ms. Chi".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Hà".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Lan".into(),
+                    ..Attendee::default()
+                },
+            ],
+            ..SummaryDoc::default()
+        };
+        let corpus = people::fold("[00:01] Chi will send it\nNotes: ask Ha about the budget");
+        keep_mentioned(&mut doc, &[], &corpus, Some("Dr. Lan"));
+        let names: Vec<_> = doc.attendees.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["Ms. Chi", "Hà", "Lan"],
+            "Lan is the presenter (Dr. Lan)"
+        );
+    }
+
+    #[test]
     fn parses_fenced_or_wrapped_json() {
         let doc =
             parse_doc("```json\n{\"sections\":[],\"decisions\":[\"x\"],\"action_items\":[]}\n```")
@@ -1021,7 +1191,11 @@ mod tests {
         )
         .unwrap();
         let doc = shape(raw, &default_structure(Language::En), Language::En);
-        assert_eq!(doc.sections.len(), 6);
+        assert_eq!(
+            doc.sections.len(),
+            5,
+            "Next steps are part of the action items (D-038)"
+        );
         assert_eq!(doc.sections[0].markdown, "We met.");
         assert_eq!(
             doc.sections[1].markdown,
@@ -1030,13 +1204,12 @@ mod tests {
         assert_eq!(doc.sections[2].markdown, "- Go ahead");
         assert_eq!(doc.decisions[0].decided_by, "Chair");
         assert_eq!(doc.decisions[0].condition, "");
-        assert_eq!(doc.sections[4].markdown, "Not discussed.");
         assert_eq!(
             doc.sections[3].markdown,
-            "- **Minh** — send agenda — *Friday*"
+            "- [ ] **Minh** — send agenda — *Friday*"
         );
-        assert_eq!(doc.sections[5].kind, SectionKind::OpenQuestions);
-        assert_eq!(doc.sections[5].markdown, "- Invite the observer?");
+        assert_eq!(doc.sections[4].kind, SectionKind::OpenQuestions);
+        assert_eq!(doc.sections[4].markdown, "- Invite the observer?");
         assert_eq!(doc.open_issues[0].by, "");
     }
 }
@@ -1101,7 +1274,7 @@ pub async fn view(pool: &SqlitePool, meeting_id: &str) -> Result<Option<SummaryV
 /// the email from the edited summary.
 pub async fn update_section(
     pool: &SqlitePool,
-    workspace: &str,
+    _workspace: &str,
     meeting_id: &str,
     index: u32,
     markdown: &str,
@@ -1115,8 +1288,15 @@ pub async fn update_section(
     let mut current = view(pool, meeting_id)
         .await?
         .ok_or_else(|| AppError::not_found("This meeting has no summary yet"))?;
-    review::apply_edit(&mut current.doc, index as usize, markdown)?;
-    save_doc(pool, workspace, &meeting, &current.doc).await?;
+    // A tick isn't an edit: the email isn't flagged as older than the summary.
+    let edited = review::apply_edit(&mut current.doc, index as usize, markdown)?;
+    super::save_sections(
+        pool,
+        &meeting.id,
+        &serde_json::to_string(&current.doc)?,
+        edited,
+    )
+    .await?;
     view(pool, meeting_id)
         .await?
         .context("summary vanished while saving")
@@ -1154,7 +1334,8 @@ pub async fn rewrite_email(app: &AppHandle, slug: &str, meeting_id: &str) -> Res
         language: meeting.language,
     };
     let cancel = AtomicBool::new(false);
-    let mut session = ollama::session(app, pool.clone(), Some(meeting_id)).await?;
+    let model = agents::model_for(&pool, Agent::Email).await;
+    let mut session = ollama::session(app, pool.clone(), Some(meeting_id), model).await?;
     session.for_agent("email");
     let (subject, body) = email::compose(
         &session,

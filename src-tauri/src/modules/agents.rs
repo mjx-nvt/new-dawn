@@ -92,6 +92,14 @@ pub struct AgentRun {
     pub created_at: String,
 }
 
+/// How one model has done for an agent (successful runs).
+#[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
+pub struct ModelStats {
+    pub model: String,
+    pub runs: u32,
+    pub avg_ms: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct AgentGuide {
     pub agent: Agent,
@@ -101,6 +109,9 @@ pub struct AgentGuide {
     /// The workspace has its own text (else the bundled default is shown).
     pub customised: bool,
     pub last_run: Option<AgentRun>,
+    /// The model this agent uses (None = the app's selected model).
+    pub model: Option<String>,
+    pub by_model: Vec<ModelStats>,
 }
 
 fn file(folder: &Path, agent: Agent) -> PathBuf {
@@ -110,14 +121,18 @@ fn file(folder: &Path, agent: Agent) -> PathBuf {
         .join(format!("{}.md", agent.id()))
 }
 
-/// How long a call of `agent` usually takes and how many tokens it writes (mean of the last ten
-/// successful runs; 0 when there is no history). Feeds the progress estimate (D-036).
-pub async fn typical(pool: &SqlitePool, agent: &str) -> (u32, u32) {
+/// How long a call of `agent` on `model` usually takes and how many tokens it writes (mean of the
+/// last ten successful runs on that model, or on any model before its first; 0 with no history).
+/// Feeds the progress estimate (D-036).
+pub async fn typical(pool: &SqlitePool, agent: &str, model: &str) -> (u32, u32) {
     let row: Result<(Option<f64>, Option<f64>), _> = sqlx::query_as(
         "SELECT avg(duration_ms), avg(output_tokens) FROM (SELECT duration_ms, output_tokens FROM ai_log \
-         WHERE agent = ? AND status = 'ok' ORDER BY created_at DESC LIMIT 10)",
+         WHERE agent = ?1 AND status = 'ok' AND (model = ?2 OR NOT EXISTS \
+           (SELECT 1 FROM ai_log WHERE agent = ?1 AND status = 'ok' AND model = ?2)) \
+         ORDER BY created_at DESC LIMIT 10)",
     )
     .bind(agent)
+    .bind(model)
     .fetch_one(pool)
     .await;
     match row {
@@ -127,6 +142,47 @@ pub async fn typical(pool: &SqlitePool, agent: &str) -> (u32, u32) {
             (0, 0)
         }
     }
+}
+
+fn model_key(agent: Agent) -> String {
+    format!("agent_model.{}", agent.id())
+}
+
+/// The model `agent` runs on in this workspace (None = the app's selected model).
+pub async fn model_for(pool: &SqlitePool, agent: Agent) -> Option<String> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM setting WHERE key = ?")
+        .bind(model_key(agent))
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+    row.map(|(v,)| v).filter(|v| !v.is_empty())
+}
+
+/// Chooses the model for `agent` (None = follow the app's selected model).
+pub async fn set_model(pool: &SqlitePool, agent: Agent, model: Option<&str>) -> Result<()> {
+    match model.map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => {
+            if !crate::kernel::ai::ollama::valid_name(m) {
+                anyhow::bail!(AppError::invalid("That isn't a model name"));
+            }
+            sqlx::query(
+                "INSERT INTO setting (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value, \
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+            )
+            .bind(model_key(agent))
+            .bind(m)
+            .execute(pool)
+            .await?;
+        }
+        None => {
+            sqlx::query("DELETE FROM setting WHERE key = ?")
+                .bind(model_key(agent))
+                .execute(pool)
+                .await?;
+        }
+    }
+    Ok(())
 }
 
 /// The guide in force: the workspace's file, else the default.
@@ -149,6 +205,13 @@ pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
         .bind(agent.id())
         .fetch_optional(pool)
         .await?;
+        let by_model: Vec<ModelStats> = sqlx::query_as(
+            "SELECT model, count(*) AS runs, avg(duration_ms) AS avg_ms FROM ai_log \
+             WHERE agent = ? AND status = 'ok' GROUP BY model ORDER BY runs DESC",
+        )
+        .bind(agent.id())
+        .fetch_all(pool)
+        .await?;
         out.push(AgentGuide {
             agent,
             label: agent.label().to_owned(),
@@ -161,6 +224,8 @@ pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
                 .to_owned(),
             customised: custom.is_some(),
             last_run: last,
+            model: model_for(pool, agent).await,
+            by_model,
         });
     }
     Ok(out)

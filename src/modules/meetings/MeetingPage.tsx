@@ -11,6 +11,7 @@ import {
   useTranscriptionError,
   useTranscriptionProgress,
   type Meeting,
+  useSetMeetingFormat,
 } from "../../kernel/bridge/meetings";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
@@ -116,6 +117,7 @@ export default function MeetingPage() {
               <span className={styles.fact}>{LANGUAGE_LABEL[m.language]}</span>
               <StatusChip status={m.status} />
               {workspace && <TypePicker slug={slug} meeting={m} />}
+              {workspace && <FormatPicker slug={slug} meeting={m} />}
             </div>
           )}
         </div>
@@ -247,6 +249,40 @@ function TitleEditor({ slug, meetingId, title, onDone }: { slug: string; meeting
         </p>
       )}
     </div>
+  );
+}
+
+/** Discussion, or one presenter (named when the recording may not say it) — read by the next
+ *  transcription (Whisper hears the name) and summary (who said what), D-038. */
+function FormatPicker({ slug, meeting }: { slug: string; meeting: Meeting }) {
+  const set = useSetMeetingFormat(slug, meeting.id);
+  const presentation = meeting.format === "presentation";
+  const [name, setName] = useState(meeting.presenter ?? "");
+  useEffect(() => setName(meeting.presenter ?? ""), [meeting.presenter]);
+  const save = (p: boolean, presenter: string) => set.mutate({ presentation: p, presenter: presenter.trim() || null });
+  return (
+    <>
+      <select className="input" aria-label="Meeting format" value={presentation ? "presentation" : "discussion"} disabled={set.isPending} onChange={(e) => save(e.target.value === "presentation", name)}>
+        <option value="discussion">Discussion</option>
+        <option value="presentation">One presenter</option>
+      </select>
+      {presentation && (
+        <input
+          className={`input ${styles.presenter}`}
+          aria-label="Presenter"
+          placeholder="Presenter's name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => name.trim() !== (meeting.presenter ?? "") && save(true, name)}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && e.currentTarget.blur()}
+        />
+      )}
+      {set.error && (
+        <span className={styles.error} role="alert">
+          {set.error.message}
+        </span>
+      )}
+    </>
   );
 }
 

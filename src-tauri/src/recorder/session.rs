@@ -67,6 +67,9 @@ pub struct StartRequest {
     pub title: String,
     pub language: Language,
     pub meeting_type_id: Option<String>,
+    /// A presentation by one main presenter (else a discussion), D-038.
+    pub presenter: Option<String>,
+    pub presentation: bool,
 }
 
 struct Active {
@@ -193,7 +196,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
-    let meeting = meetings::create(
+    let mut meeting = meetings::create(
         &pool,
         NewMeeting {
             id: &id,
@@ -206,6 +209,15 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
         },
     )
     .await?;
+    if request.presentation {
+        meeting = meetings::set_format(
+            &pool,
+            &id,
+            meetings::MeetingFormat::Presentation,
+            request.presenter.as_deref(),
+        )
+        .await?;
+    }
 
     let shared = Arc::new(Shared::default());
     let (stop_tx, stop_rx) = mpsc::channel::<()>();

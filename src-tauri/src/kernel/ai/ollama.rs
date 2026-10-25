@@ -28,6 +28,9 @@ pub const MODEL_SETTING: &str = "ollama_model";
 /// The picked model ("" = default); loaded at launch, changed by `select`.
 static SELECTED: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
 
+/// The model the last text session ran on — the one Ollama may still hold in memory (D-038).
+static LOADED: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
 /// The text model every call uses.
 pub fn model() -> String {
     let picked = SELECTED
@@ -298,9 +301,23 @@ pub async fn remove(app: &AppHandle, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Asks Ollama to drop the text model from memory now (before Whisper loads). Best effort.
+/// Asks Ollama to drop the text models from memory now (before Whisper loads): the app's and the
+/// one the last session used, which may be an agent's own. Best effort.
 pub async fn unload() {
-    let body = serde_json::json!({ "model": model(), "keep_alive": 0 });
+    let last = std::mem::take(
+        &mut *LOADED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+    let app = model();
+    if !last.is_empty() && last != app {
+        unload_one(&last).await;
+    }
+    unload_one(&app).await;
+}
+
+async fn unload_one(name: &str) {
+    let body = serde_json::json!({ "model": name, "keep_alive": 0 });
     if let Ok(client) = client(Duration::from_secs(10)) {
         let _ = client
             .post(format!("{BASE}/api/generate"))
@@ -342,10 +359,12 @@ pub struct TextSession<'a> {
 }
 
 /// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
+/// `model`: an agent's own model (D-038); None = the app's selected one.
 pub async fn session<'a>(
     app: &'a AppHandle,
     pool: SqlitePool,
     meeting_id: Option<&str>,
+    model: Option<String>,
 ) -> Result<TextSession<'a>> {
     let turn = app.state::<AiQueue>().inner().acquire().await;
     let ollama = status().await;
@@ -355,22 +374,39 @@ pub async fn session<'a>(
             "Ollama isn't running — open the Ollama app and try again"
         ));
     }
-    if !ollama.model_installed {
+    let has = |name: &str| ollama.installed.iter().any(|m| m.name == name);
+    // An agent's model that was removed falls back to the app's, rather than failing the run.
+    let chosen = match model.filter(|m| !m.is_empty()) {
+        Some(m) if has(&m) => m,
+        Some(m) => {
+            tracing::warn!("agent model {m} isn't installed; using {}", ollama.model);
+            ollama.model.clone()
+        }
+        None => ollama.model.clone(),
+    };
+    if !has(&chosen) {
         bail!(AppError::new(
             "ollama_model_missing",
-            format!(
-                "Ollama doesn't have {} yet — download it in Settings → Models",
-                ollama.model
-            )
+            format!("Ollama doesn't have {chosen} yet — download it in Settings → Models")
         ));
     }
     app.state::<WhisperEngine>().unload_now();
+    // Never two text models at once: drop the previous one when an agent uses another.
+    let previous = std::mem::replace(
+        &mut *LOADED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        chosen.clone(),
+    );
+    if !previous.is_empty() && previous != chosen {
+        unload_one(&previous).await;
+    }
     Ok(TextSession {
         _turn: turn,
         pool,
         meeting_id: meeting_id.map(str::to_owned),
         agent: None,
-        model: ollama.model,
+        model: chosen,
     })
 }
 

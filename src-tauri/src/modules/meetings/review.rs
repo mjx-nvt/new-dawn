@@ -80,6 +80,19 @@ fn same(old: &str, new: &str) -> bool {
 /// "Owner — item — due" (the Action items format); with fewer parts the due date, then the
 /// owner, are "Not set" / "Unassigned".
 fn action(text: &str) -> ActionItem {
+    // "[x] Minh — send — Friday": the tick, then the line (D-038).
+    let trimmed = text.trim_start();
+    let (done, rest) = match trimmed.get(..3) {
+        Some("[x]" | "[X]") => (true, &trimmed[3..]),
+        Some("[ ]") => (false, &trimmed[3..]),
+        _ => (false, trimmed),
+    };
+    let mut item = action_line(rest);
+    item.done = done;
+    item
+}
+
+fn action_line(text: &str) -> ActionItem {
     let text = text.replace(" – ", " — ");
     let mut parts: Vec<&str> = text.split(" — ").map(str::trim).collect();
     if parts.len() == 1 {
@@ -94,6 +107,7 @@ fn action(text: &str) -> ActionItem {
         owner: owner.to_owned(),
         item: item.to_owned(),
         due: due.to_owned(),
+        done: false,
     };
     match parts.as_slice() {
         [owner, item] => make(owner, item, "Not set"),
@@ -105,12 +119,15 @@ fn action(text: &str) -> ActionItem {
 /// Saves a hand edit to section `index`; for the sections built from lists (Key points,
 /// Decisions, Action items, Open questions) the list is rebuilt from the edited bullets, keeping
 /// details the bullets don't show (who decided, conditions, who/by) when the text still matches.
-pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<()> {
+/// Returns whether it was an edit: ticking or unticking tasks only isn't (the section stays
+/// unedited, so a re-run still writes it fresh; the ticks carry over by `carry_ticks`).
+pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<bool> {
     let section = doc
         .sections
         .get_mut(index)
         .ok_or_else(|| AppError::invalid("No such section"))?;
     section.markdown = markdown.trim().to_owned();
+    let was_edited = section.edited;
     section.edited = true;
     let items = entries(markdown);
     match section.kind {
@@ -137,7 +154,17 @@ pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<
                 .collect();
         }
         SectionKind::ActionItems => {
-            doc.action_items = items.iter().map(|e| action(&e.text)).collect();
+            let tasks: Vec<ActionItem> = items.iter().map(|e| action(&e.text)).collect();
+            let ticks_only = tasks.len() == doc.action_items.len()
+                && tasks
+                    .iter()
+                    .zip(&doc.action_items)
+                    .all(|(a, b)| same_task(a, b) && a.due.trim() == b.due.trim());
+            doc.action_items = tasks;
+            if ticks_only {
+                section.edited = was_edited;
+                return Ok(false);
+            }
         }
         SectionKind::OpenQuestions => {
             doc.open_issues = items
@@ -154,7 +181,34 @@ pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<
         }
         _ => {}
     }
-    Ok(())
+    Ok(true)
+}
+
+fn same_task(a: &ActionItem, b: &ActionItem) -> bool {
+    people::fold(&a.owner) == people::fold(&b.owner)
+        && people::fold(&a.item) == people::fold(&b.item)
+}
+
+/// Ticks the tasks of `doc` that were done in `old` (same owner and task) — after a re-run or a
+/// correction that rewrote the list.
+pub fn carry_ticks(doc: &mut SummaryDoc, old: &[ActionItem]) {
+    let mut changed = false;
+    for task in doc.action_items.iter_mut().filter(|t| !t.done) {
+        if old.iter().any(|o| o.done && same_task(o, task)) {
+            task.done = true;
+            changed = true;
+        }
+    }
+    if changed {
+        let markdown = super::summarise::action_items_markdown(&doc.action_items);
+        for section in doc
+            .sections
+            .iter_mut()
+            .filter(|s| s.kind == SectionKind::ActionItems)
+        {
+            section.markdown = markdown.clone();
+        }
+    }
 }
 
 /// After a re-run: every section edited in `old` replaces the new one (and so does the list
@@ -164,6 +218,8 @@ pub fn keep_edits(new: &mut SummaryDoc, old: &SummaryDoc) {
         let Some(section) = new.sections.iter_mut().find(|s| {
             s.kind == kept.kind && (s.kind != SectionKind::Other || s.title == kept.title)
         }) else {
+            // A section the new structure no longer has (an old Next steps): keep it at the end.
+            new.sections.push(kept.clone());
             continue;
         };
         *section = kept.clone();
@@ -497,9 +553,42 @@ mod tests {
             "matched despite the old Markdown"
         );
 
-        apply_edit(&mut d, 5, "- Invite the observer?\n- New question").unwrap();
+        apply_edit(&mut d, 4, "- Invite the observer?\n- New question").unwrap();
         assert_eq!(d.open_issues[0].who, "Management");
         assert_eq!(d.open_issues.len(), 2);
+
+        apply_edit(
+            &mut d,
+            3,
+            "- [x] **Minh** — send agenda — *Friday*\n- [ ] Book the room",
+        )
+        .unwrap();
+        assert!(
+            d.action_items[0].done && !d.action_items[1].done,
+            "ticks survive an edit"
+        );
+        assert_eq!(d.action_items[0].item, "send agenda");
+
+        // Ticking alone isn't an edit; the tick survives a fresh list that has the same task.
+        let task = || {
+            vec![ActionItem {
+                owner: "Minh".into(),
+                item: "send agenda".into(),
+                due: "Friday".into(),
+                done: false,
+            }]
+        };
+        let mut t = doc();
+        t.action_items = task();
+        assert!(
+            !apply_edit(&mut t, 3, "- [x] **Minh** — send agenda — *Friday*").unwrap(),
+            "a tick isn't an edit"
+        );
+        assert!(!t.sections[3].edited && t.action_items[0].done);
+        let mut fresh = doc();
+        fresh.action_items = task();
+        carry_ticks(&mut fresh, &t.action_items);
+        assert!(fresh.action_items[0].done && fresh.sections[3].markdown.starts_with("- [x]"));
 
         assert!(apply_edit(&mut d, 99, "x").is_err());
     }

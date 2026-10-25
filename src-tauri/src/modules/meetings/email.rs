@@ -259,6 +259,7 @@ mod tests {
                 owner: "Minh".into(),
                 item: "circulate the agenda".into(),
                 due: "Friday".into(),
+                done: false,
             }],
             ..SummaryDoc::default()
         }

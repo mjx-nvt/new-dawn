@@ -49,13 +49,15 @@ export interface StartRecordingInput {
   title: string;
   language: Language;
   meetingTypeId: string | null;
+  presentation: boolean;
+  presenter: string | null;
 }
 
 export function useStartRecording() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: StartRecordingInput) =>
-      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId)),
+      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter)),
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: MIC_KEY }),

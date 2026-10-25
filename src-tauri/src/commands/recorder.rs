@@ -20,6 +20,8 @@ pub async fn start_recording(
     title: String,
     language: Language,
     meeting_type_id: Option<String>,
+    presentation: bool,
+    presenter: Option<String>,
 ) -> Result<Meeting, AppError> {
     Ok(session::start(
         &app,
@@ -28,6 +30,8 @@ pub async fn start_recording(
             title,
             language,
             meeting_type_id,
+            presenter,
+            presentation,
         },
     )
     .await?)

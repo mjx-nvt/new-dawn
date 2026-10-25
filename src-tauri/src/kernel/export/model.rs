@@ -77,7 +77,7 @@ pub fn minutes(input: &MinutesInput) -> Value {
             "item": a.item,
             "owner": a.owner,
             "due": or(&a.due, NOT_SET),
-            "status": "Open",
+            "status": if a.done { "Done" } else { "Open" },
         }))),
         "open_issues": numbered(doc.open_issues.iter().map(|q| json!({
             "issue": q.issue,
@@ -111,6 +111,8 @@ pub fn sample() -> Value {
         notes_md: None,
         created_at: String::new(),
         updated_at: String::new(),
+        format: crate::modules::meetings::MeetingFormat::Discussion,
+        presenter: None,
     };
     let doc = SummaryDoc {
         sections: vec![Section {
@@ -137,6 +139,7 @@ pub fn sample() -> Value {
             owner: "Owner".into(),
             item: "Task".into(),
             due: "Friday".into(),
+            done: false,
         }],
         open_issues: vec![OpenIssue {
             issue: "Question".into(),
@@ -280,6 +283,8 @@ mod tests {
             notes_md: None,
             created_at: String::new(),
             updated_at: String::new(),
+            format: crate::modules::meetings::MeetingFormat::Discussion,
+            presenter: None,
         }
     }
 
@@ -329,6 +334,7 @@ mod tests {
                     owner: format!("Owner {i}"),
                     item: format!("Task {i}"),
                     due: String::new(),
+                    done: false,
                 })
                 .collect(),
             open_issues: vec![OpenIssue {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { useMeetingTypes, type Language } from "../../kernel/bridge/meetings";
 import { useWorkspaces } from "../../kernel/bridge/workspaces";
 import { LANGUAGE_LABEL } from "./format";
@@ -76,6 +76,35 @@ export default function MeetingFields(props: Props) {
         </label>
       </div>
     </>
+  );
+}
+
+/** Discussion, or one main presenter — with their name when the recording may never say it (D-038). */
+export function FormatField({ presentation, presenter, onChange }: { presentation: boolean; presenter: string; onChange: (presentation: boolean, presenter: string) => void }) {
+  const id = useId();
+  return (
+    <div className="field">
+      <span className="fieldLabel" id={id}>
+        Format
+      </span>
+      <div className="segmented" role="group" aria-labelledby={id}>
+        <button type="button" aria-pressed={!presentation} onClick={() => onChange(false, presenter)}>
+          Discussion
+        </button>
+        <button type="button" aria-pressed={presentation} onClick={() => onChange(true, presenter)}>
+          One presenter
+        </button>
+      </div>
+      {presentation && (
+        <input
+          className="input"
+          aria-label="Presenter"
+          value={presenter}
+          placeholder="Presenter's name — if the recording may not say it"
+          onChange={(e) => onChange(true, e.target.value)}
+        />
+      )}
+    </div>
   );
 }
 

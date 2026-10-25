@@ -118,7 +118,8 @@ pub async fn apply(
         fence(&summary_text)
     );
     let cancel = AtomicBool::new(false);
-    let mut session = ollama::session(app, pool.clone(), Some(meeting_id)).await?;
+    let model = agents::model_for(&pool, Agent::Corrections).await;
+    let mut session = ollama::session(app, pool.clone(), Some(meeting_id), model).await?;
     session.for_agent("corrections");
     let answer = session
         .complete(
@@ -260,6 +261,7 @@ pub async fn apply(
     let view = match current {
         None => None,
         Some(mut v) => {
+            let ticks = v.doc.action_items.clone();
             for sec in &parsed.sections {
                 let title = sec.title.trim().to_lowercase();
                 if let Some(i) = v
@@ -275,6 +277,7 @@ pub async fn apply(
                     }
                 }
             }
+            super::review::carry_ticks(&mut v.doc, &ticks);
             // After the rewrites, so a rewritten section can't bring an old spelling back.
             summary_changes = people::rename_in_doc(&mut v.doc, &pairs) as u32;
             let known = people::list(&pool).await?;

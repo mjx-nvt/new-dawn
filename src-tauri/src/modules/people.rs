@@ -538,6 +538,7 @@ mod tests {
                 owner: "Tien Nguyen".into(),
                 item: "Brief Tien Nguyen's team".into(),
                 due: String::new(),
+                done: false,
             }],
             ..SummaryDoc::default()
         };
@@ -635,6 +636,7 @@ mod tests {
                     owner: "Tien Nguyen".into(),
                     item: "x".into(),
                     due: String::new(),
+                    done: false,
                 }],
                 ..SummaryDoc::default()
             };

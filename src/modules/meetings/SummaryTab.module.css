@@ -233,3 +233,6 @@
   color: var(--ink-3);
   text-decoration: line-through;
 }
+
+.taskDue { color: var(--ink-3); }
+.untasked { margin-top: var(--space-3); }

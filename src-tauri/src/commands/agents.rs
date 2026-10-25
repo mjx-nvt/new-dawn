@@ -31,6 +31,21 @@ pub async fn set_agent_guide(
     Ok(agents::list(&hub.pool(&slug)?, folder).await?)
 }
 
+/// Chooses the model an agent runs on (None = the app's selected model).
+#[tauri::command]
+#[specta::specta]
+pub async fn set_agent_model(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    agent: Agent,
+    model: Option<String>,
+) -> Result<Vec<AgentGuide>, AppError> {
+    let workspace = hub.workspace(&slug).await?;
+    let pool = hub.pool(&slug)?;
+    agents::set_model(&pool, agent, model.as_deref()).await?;
+    Ok(agents::list(&pool, Path::new(&workspace.folder_path)).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn reset_agent_guide(

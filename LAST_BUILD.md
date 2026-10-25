@@ -1,4 +1,19 @@
-# Last Build — Transcribe again fixed, detailed summaries, to-do next steps, Corrections agent · release 0.6.0
+# Last Build — One to-do list, meeting format & presenter, a model per agent · release 0.7.0
+_2026-10-25_
+
+## What changed
+- **Action items = the to-do list** (Next steps merged in): "☐ **Owner** — task · due", tickable; the summary agent goes through every person named so no task is missed; "No task for …" lists present attendees without one. Done/Open in the minutes.
+- **Attendees and task owners are checked against the transcript**: people only known from the people memory are no longer listed (live test: a 13-second clip went from 13 invented attendees to the presenter alone).
+- **Meeting format**: Discussion or One presenter (+ name) in Import audio, Start recording, and on the meeting page (facts row) — before or after you stop. Whisper hears the presenter's name; the summary attributes statements accordingly. Migration 0007 (additive), reviewed SAFE.
+- **A model per agent** in Workspace → Agents (Summary, Email, Corrections), with runs and average time per model; the automatic run stays on the Summary model. Only one text model stays loaded; a removed agent model falls back to the app's.
+- **Ticks**: ticking a task isn't an edit, and ticks survive Re-run (either choice) and Corrections.
+- Architect review: 3 must-fixes and the should-fixes applied (presenter cleared for discussions, model unloading, ticks, name check for short names like "Hà"/"Chi", presenter not duplicated as "Lan", time estimate per model, Agents select showing a missing model).
+- Verified live through the app's commands: format set to a presentation by "Dr. Lan" → re-summarised → five sections, tasks in the new format, Dr. Lan first attendee; then only mentioned people kept. **Not seen on screen**: the dev window was shrunk to a thumbnail (Stage Manager) and can't be resized without granting the app a window permission — please look at the meeting header, the Action items list and Workspace → Agents.
+- The test meeting "Nguyen Binh Khiem" was re-summarised twice for these tests (its format is back to Discussion).
+
+---
+
+# Transcribe again fixed, detailed summaries, to-do next steps, Corrections agent · release 0.6.0
 _2026-10-25_
 
 ## What changed

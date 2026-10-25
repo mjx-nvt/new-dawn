@@ -21,6 +21,15 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::kernel::ai::whisper::{Language, Segment};
 
+/// A discussion among several people, or a presentation by one main presenter (D-038).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Type, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum MeetingFormat {
+    Discussion,
+    Presentation,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
@@ -48,6 +57,9 @@ pub struct Meeting {
     pub notes_md: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub format: MeetingFormat,
+    /// The main presenter's name, when the audio may never say it.
+    pub presenter: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
@@ -259,6 +271,39 @@ pub async fn create(pool: &SqlitePool, new: NewMeeting<'_>) -> Result<Meeting> {
     .execute(pool)
     .await?;
     get(pool, new.id).await
+}
+
+/// Sets the meeting's format and presenter (blank = none; a discussion has none).
+pub async fn set_format(
+    pool: &SqlitePool,
+    id: &str,
+    format: MeetingFormat,
+    presenter: Option<&str>,
+) -> Result<Meeting> {
+    let presenter = presenter
+        .filter(|_| format == MeetingFormat::Presentation)
+        .map(|p| crate::modules::people::clean(p, 120))
+        .filter(|p| !p.is_empty());
+    sqlx::query("UPDATE meeting SET format = ?, presenter = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
+        .bind(format)
+        .bind(presenter)
+        .bind(id)
+        .execute(pool)
+        .await?;
+    get(pool, id).await
+}
+
+/// The summary's view of the format: who to attribute statements to.
+pub fn format_note(meeting: &Meeting) -> Option<String> {
+    match (meeting.format, meeting.presenter.as_deref()) {
+        (MeetingFormat::Presentation, Some(p)) => Some(format!(
+            "Meeting format: a presentation by {p}. Statements not clearly made by someone else are {p}'s; other people's contributions are questions or comments to the presenter. List {p} as an attendee."
+        )),
+        (MeetingFormat::Presentation, None) => Some("Meeting format: a presentation by one main presenter; other people's contributions are questions or comments.".to_owned()),
+        // The default: the summary rules already attribute positions, and a note here would
+        // count as owner notes (highlights).
+        (MeetingFormat::Discussion, _) => None,
+    }
 }
 
 pub async fn get(pool: &SqlitePool, id: &str) -> Result<Meeting> {

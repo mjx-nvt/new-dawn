@@ -97,6 +97,8 @@ export const commands = {
 	/**  Saves the workspace's own guide for an agent; empty text restores the default. */
 	setAgentGuide: (slug: string, agent: Agent, text: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_guide", { slug, agent, text })),
 	resetAgentGuide: (slug: string, agent: Agent) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("reset_agent_guide", { slug, agent })),
+	/**  Chooses the model an agent runs on (None = the app's selected model). */
+	setAgentModel: (slug: string, agent: Agent, model: string | null) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_model", { slug, agent, model })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -134,7 +136,7 @@ export const commands = {
 	/**  Recording to the Trash; transcript, summary and export rows deleted (exported files stay). */
 	deleteMeeting: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_meeting", { slug, meetingId })),
 	recorderStatus: () => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("recorder_status")),
-	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId })),
+	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null, presentation: boolean, presenter: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId, presentation, presenter })),
 	setRecordingPaused: (paused: boolean) => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("set_recording_paused", { paused })),
 	/**  Finalises the WAV, marks the meeting `recorded` and queues transcription. */
 	stopRecording: () => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("stop_recording")),
@@ -147,8 +149,10 @@ export const commands = {
 	getTranscript: (slug: string, meetingId: string) => typedError<TranscriptSegment_Serialize[], AppError>(__TAURI_INVOKE("get_transcript", { slug, meetingId })),
 	/**  The recording's peaks for the player (cached beside the recording after the first call). */
 	getWaveform: (slug: string, meetingId: string) => typedError<Waveform, AppError>(__TAURI_INVOKE("get_waveform", { slug, meetingId })),
+	/**  A discussion, or a presentation by `presenter` (D-038). Used by the next transcription and summary. */
+	setMeetingFormat: (slug: string, meetingId: string, format: MeetingFormat, presenter: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("set_meeting_format", { slug, meetingId, format, presenter })),
 	/**  Copies the audio into the workspace, creates the meeting and starts transcription. */
-	importAudio: (slug: string, path: string, title: string, language: Language, meetingTypeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("import_audio", { slug, path, title, language, meetingTypeId })),
+	importAudio: (slug: string, path: string, title: string, language: Language, meetingTypeId: string | null, presentation: boolean, presenter: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("import_audio", { slug, path, title, language, meetingTypeId, presentation, presenter })),
 	/**  Re-runs transcription (after a failure or cancel, or to retry with another model). */
 	transcribeMeeting: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("transcribe_meeting", { slug, meetingId })),
 	cancelTranscription: (meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_transcription", { meetingId })),
@@ -179,10 +183,22 @@ export const events = {
 };
 
 /* Types */
-export type ActionItem = {
+export type ActionItem = ActionItem_Serialize | ActionItem_Deserialize;
+
+export type ActionItem_Deserialize = {
 	owner: string,
 	item: string,
 	due: string,
+	/**  Ticked off in the to-do list (D-038). */
+	done?: boolean,
+};
+
+export type ActionItem_Serialize = {
+	owner: string,
+	item: string,
+	due: string,
+	/**  Ticked off in the to-do list (D-038). */
+	done: boolean,
 };
 
 export type Agent = "summary" | "naming" | "email" | "minutes" | "corrections";
@@ -197,6 +213,9 @@ export type AgentGuide_Deserialize = {
 	/**  The workspace has its own text (else the bundled default is shown). */
 	customised: boolean,
 	last_run?: AgentRun_Deserialize | null,
+	/**  The model this agent uses (None = the app's selected model). */
+	model?: string | null,
+	by_model: ModelStats_Deserialize[],
 };
 
 export type AgentGuide_Serialize = {
@@ -207,6 +226,9 @@ export type AgentGuide_Serialize = {
 	/**  The workspace has its own text (else the bundled default is shown). */
 	customised: boolean,
 	last_run: AgentRun_Serialize | null,
+	/**  The model this agent uses (None = the app's selected model). */
+	model: string | null,
+	by_model: ModelStats_Serialize[],
 };
 
 /**  The last finished call an agent made, from `ai_log`. */
@@ -525,6 +547,9 @@ export type Language = "en" | "vi" | "auto";
 
 export type Meeting = Meeting_Serialize | Meeting_Deserialize;
 
+/**  A discussion among several people, or a presentation by one main presenter (D-038). */
+export type MeetingFormat = "discussion" | "presentation";
+
 /**  One search result: the meeting, plus where the words were found in its transcript or summary. */
 export type MeetingHit = MeetingHit_Serialize | MeetingHit_Deserialize;
 
@@ -587,6 +612,9 @@ export type Meeting_Deserialize = {
 	notes_md?: string | null,
 	created_at: string,
 	updated_at: string,
+	format: MeetingFormat,
+	/**  The main presenter's name, when the audio may never say it. */
+	presenter?: string | null,
 };
 
 export type Meeting_Serialize = {
@@ -602,6 +630,9 @@ export type Meeting_Serialize = {
 	notes_md: string | null,
 	created_at: string,
 	updated_at: string,
+	format: MeetingFormat,
+	/**  The main presenter's name, when the audio may never say it. */
+	presenter: string | null,
 };
 
 /**  A native menu item that the UI has to act on. */
@@ -675,6 +706,23 @@ export type ModelInfo = {
 export type ModelState = { state: "missing" } | 
 /**  A `.part` file from an interrupted or cancelled download; Download resumes it. */
 { state: "partial"; bytes: number } | { state: "downloading" } | { state: "ready" };
+
+/**  How one model has done for an agent (successful runs). */
+export type ModelStats = ModelStats_Serialize | ModelStats_Deserialize;
+
+/**  How one model has done for an agent (successful runs). */
+export type ModelStats_Deserialize = {
+	model: string,
+	runs: number,
+	avg_ms?: number | null,
+};
+
+/**  How one model has done for an agent (successful runs). */
+export type ModelStats_Serialize = {
+	model: string,
+	runs: number,
+	avg_ms: number | null,
+};
 
 /**  What the owner decided for one suspect. */
 export type NameDecision = {
@@ -921,7 +969,7 @@ export type SummaryDoc_Deserialize = {
 	attendees?: Attendee_Deserialize[],
 	discussion?: Topic_Deserialize[],
 	decisions: Decision[],
-	action_items: ActionItem[],
+	action_items: ActionItem_Deserialize[],
 	open_issues?: OpenIssue_Deserialize[],
 	next_focus?: string,
 	/**  What the owner flagged in their notes, each tied to what the meeting said (D-035). */
@@ -939,7 +987,7 @@ export type SummaryDoc_Serialize = {
 	attendees: Attendee_Serialize[],
 	discussion: Topic_Serialize[],
 	decisions: Decision[],
-	action_items: ActionItem[],
+	action_items: ActionItem_Serialize[],
 	open_issues: OpenIssue_Serialize[],
 	next_focus: string,
 	/**  What the owner flagged in their notes, each tied to what the meeting said (D-035). */

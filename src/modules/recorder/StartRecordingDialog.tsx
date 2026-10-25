@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Language } from "../../kernel/bridge/meetings";
 import { openPrivacySettings, useMicrophonePermission, useStartRecording } from "../../kernel/bridge/recorder";
 import { useCurrentWorkspace, useSetCurrentWorkspace } from "../../kernel/bridge/workspaces";
-import MeetingFields, { LanguageField } from "../meetings/MeetingFields";
+import MeetingFields, { FormatField, LanguageField } from "../meetings/MeetingFields";
 import styles from "./StartRecordingDialog.module.css";
 
 function defaultTitle(): string {
@@ -17,6 +17,8 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
   const slug = chosenSlug || current?.slug || "";
   const [title, setTitle] = useState(defaultTitle);
   const [language, setLanguage] = useState<Language>("en");
+  const [presentation, setPresentation] = useState(false);
+  const [presenter, setPresenter] = useState("");
   const [typeId, setTypeId] = useState("");
   const mic = useMicrophonePermission();
   const start = useStartRecording();
@@ -31,7 +33,7 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
 
   function submit() {
     start.mutate(
-      { slug, title, language, meetingTypeId: typeId || null },
+      { slug, title, language, meetingTypeId: typeId || null, presentation, presenter: presenter.trim() || null },
       {
         onSuccess: () => {
           onClose();
@@ -65,6 +67,14 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
           onTypeChange={setTypeId}
           language={language}
           onLanguageChange={setLanguage}
+        />
+        <FormatField
+          presentation={presentation}
+          presenter={presenter}
+          onChange={(p, name) => {
+            setPresentation(p);
+            setPresenter(name);
+          }}
         />
 
         <label className="field">

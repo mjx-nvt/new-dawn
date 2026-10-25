@@ -50,6 +50,9 @@ pub struct ImportRequest {
     pub title: String,
     pub language: Language,
     pub meeting_type_id: Option<String>,
+    /// A presentation by one main presenter (else a discussion), D-038.
+    pub presenter: Option<String>,
+    pub presentation: bool,
 }
 
 /// Copies the file into `recordings/<meeting-id>/`, creates the meeting and starts its job.
@@ -100,6 +103,17 @@ pub async fn import(app: &AppHandle, request: ImportRequest) -> Result<Meeting> 
         },
     )
     .await?;
+    let meeting = if request.presentation {
+        super::set_format(
+            &pool,
+            &id,
+            super::MeetingFormat::Presentation,
+            request.presenter.as_deref(),
+        )
+        .await?
+    } else {
+        meeting
+    };
     start(app, &request.slug, &id).await?;
     Ok(meeting)
 }
@@ -209,7 +223,12 @@ async fn run(
             meeting_id: &meeting.id,
             language: meeting.language,
             cancel,
-            prompt: Some(vocabulary::whisper_prompt(&meeting.title, &people, &terms)),
+            prompt: Some(vocabulary::whisper_prompt(
+                &meeting.title,
+                meeting.presenter.as_deref(),
+                &people,
+                &terms,
+            )),
         };
         let source = audio_path.clone();
         let transcript = whisper::transcribe(
@@ -222,7 +241,12 @@ async fn run(
         .await?;
         progress(Stage::Saving, 97);
         let mut transcript = transcript;
-        let prompt = vocabulary::whisper_prompt(&meeting.title, &people, &terms);
+        let prompt = vocabulary::whisper_prompt(
+            &meeting.title,
+            meeting.presenter.as_deref(),
+            &people,
+            &terms,
+        );
         transcript
             .segments
             .retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));

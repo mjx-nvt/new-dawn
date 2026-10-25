@@ -140,13 +140,16 @@ export interface ImportAudioInput {
   title: string;
   language: Language;
   meetingTypeId: string | null;
+  /** One main presenter (else a discussion), and their name if the audio may not say it. */
+  presentation: boolean;
+  presenter: string | null;
 }
 
 export function useImportAudio() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: ImportAudioInput) =>
-      unwrap(commands.importAudio(input.slug, input.path, input.title, input.language, input.meetingTypeId)),
+      unwrap(commands.importAudio(input.slug, input.path, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter)),
     onSuccess: (_, input) => queryClient.invalidateQueries({ queryKey: keys.meetings(input.slug) }),
   });
 }
@@ -197,6 +200,19 @@ export function useRestoreSegment(slug: string, meetingId: string) {
       void queryClient.invalidateQueries({ queryKey: keys.transcript(slug, meetingId) });
       void queryClient.invalidateQueries({ queryKey: ["summary", slug, meetingId] });
       void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+    },
+  });
+}
+
+/** Discussion, or a presentation by one presenter (D-038); the next transcript and summary use it. */
+export function useSetMeetingFormat(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { presentation: boolean; presenter: string | null }) =>
+      unwrap(commands.setMeetingFormat(slug, meetingId, v.presentation ? "presentation" : "discussion", v.presenter)),
+    onSuccess: (meeting) => {
+      queryClient.setQueryData(keys.meeting(slug, meetingId), meeting);
+      void queryClient.invalidateQueries({ queryKey: keys.meetings(slug) });
     },
   });
 }

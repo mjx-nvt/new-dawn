@@ -2,6 +2,19 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-038 — One to-do list per meeting; meeting format and presenter; a model per agent; people checked against the transcript
+_2026-10-25_
+
+**Decision** (user: "action items and next steps are the same — combine them and go through every person so no task is missed"; "some meetings have one presenter whose name is never said — let me enter it at upload or right after recording"; "assign a model to each agent"):
+- **Action items is the to-do list**; there is no separate Next steps section in new summaries (older ones keep theirs, shown as tasks). The model is told to go through every person named — each attendee, everyone mentioned, the presenter — and list every task, commitment, request and follow-up, then unowned next steps as "Unassigned". Tasks carry `done` ("- [ ] / - [x]"), survive edits and re-runs, and show as Done/Open in the minutes. Under the list, **"No task for …"** names present attendees who own none — a cheap coverage check.
+- **People are checked against the transcript** (`keep_mentioned`): a live test on a 13-second clip showed the model listing 13 attendees from the people memory it is given for spelling. Attendees must be mentioned (any name word of ≥3 letters, titles ignored, people-memory spellings included) in the transcript, the notes or the presenter field; tasks owned by someone never mentioned become "Unassigned".
+- **Meeting format** (migration 0007: `meeting.format`, `meeting.presenter`): Discussion or One presenter (+ name), set in Import audio, Start recording, or on the meeting page any time. Whisper's prompt names the presenter; the summary is told who to attribute statements to (presentation: unattributed = presenter, others = Q&A; discussion: attribute every position and cover every participant); the presenter is listed as an attendee.
+- **A model per agent** (workspace setting `agent_model.<id>`): Summary, Email (Rewrite), Corrections each pick an installed model or follow the app default; the automatic run (summary → names check → cover note) stays on the Summary agent's model so Ollama doesn't swap models mid-run. Each agent card shows runs and average time per model, so the choice can be made on evidence. Still one text model in memory: a session on another model unloads the previous one, and Whisper unloads both the app's and the last-used model. An agent whose model was removed falls back to the app's model (logged) instead of failing.
+- **A tick isn't an edit**: ticking tasks leaves the section unedited (a re-run still writes it fresh) and doesn't mark the email as older; ticks carry over to the same task (owner + task) after a re-run — with or without "keep my edits" — and after a correction. A kept, edited old Next steps section survives a re-run at the end of the summary.
+- A discussion has no presenter (switching back clears it) and adds no format note to the prompt (it would count as owner notes).
+
+---
+
 ## D-037 — A corrections agent instead of name lists in the notes; detailed summaries; next steps as tasks
 _2026-10-25_
 

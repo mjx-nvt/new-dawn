@@ -9,7 +9,9 @@ use crate::modules::meetings::review;
 use crate::modules::meetings::summarise::SummaryJobs;
 use crate::modules::meetings::template;
 use crate::modules::meetings::transcribe::{self, ImportRequest, TranscriptionJobs};
-use crate::modules::meetings::{self, Meeting, MeetingHit, MeetingTypeSummary, TranscriptSegment};
+use crate::modules::meetings::{
+    self, Meeting, MeetingFormat, MeetingHit, MeetingTypeSummary, TranscriptSegment,
+};
 
 #[tauri::command]
 #[specta::specta]
@@ -86,6 +88,7 @@ pub async fn get_waveform(
 /// Copies the audio into the workspace, creates the meeting and starts transcription.
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)] // a command's arguments are its IPC fields
 pub async fn import_audio(
     app: AppHandle,
     slug: String,
@@ -93,6 +96,8 @@ pub async fn import_audio(
     title: String,
     language: Language,
     meeting_type_id: Option<String>,
+    presentation: bool,
+    presenter: Option<String>,
 ) -> Result<Meeting, AppError> {
     let request = ImportRequest {
         slug,
@@ -100,6 +105,8 @@ pub async fn import_audio(
         title,
         language,
         meeting_type_id,
+        presenter,
+        presentation,
     };
     Ok(transcribe::import(&app, request).await?)
 }
@@ -147,6 +154,19 @@ pub async fn set_meeting_notes(
     notes: String,
 ) -> Result<Meeting, AppError> {
     Ok(review::set_notes(&hub.pool(&slug)?, &meeting_id, &notes).await?)
+}
+
+/// A discussion, or a presentation by `presenter` (D-038). Used by the next transcription and summary.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_meeting_format(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    format: MeetingFormat,
+    presenter: Option<String>,
+) -> Result<Meeting, AppError> {
+    Ok(meetings::set_format(&hub.pool(&slug)?, &meeting_id, format, presenter.as_deref()).await?)
 }
 
 #[tauri::command]

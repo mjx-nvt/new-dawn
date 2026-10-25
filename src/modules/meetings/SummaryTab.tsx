@@ -28,7 +28,7 @@ import { formatWhen } from "./format";
 import styles from "./SummaryTab.module.css";
 
 // Until meeting types drive the structure (P1.4), the same sections the backend uses by default.
-const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Next steps", "Open questions"];
+const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Open questions"];
 
 /** Executive summary: your notes on top (pinned while you scroll), then the summary with its
  *  highlights and sections; the email and attendees on the right, which stay in view too. */
@@ -40,7 +40,10 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
   const summarise = useSummarise();
   const writing = !!progress || meeting.status === "summarising";
   const transcribed = ["transcribed", "summarising", "summarised"].includes(meeting.status);
-  const ollamaReady = !!ollama.data?.running && !!ollama.data.model_installed;
+  const agents = useAgents(slug);
+  // The Summary agent's own model, or the app's (the backend falls back to it when the agent's is gone).
+  const agentModel = agents.data?.find((g) => g.agent === "summary")?.model;
+  const ollamaReady = !!ollama.data?.running && (ollama.data.model_installed || ollama.data.installed.some((m) => m.name === agentModel));
   // The newest problem wins: a fresh start attempt clears an older job error and vice versa.
   const error = summarise.error ?? lastError ?? summary.error;
   const run = (deep: boolean, keepEdits: boolean) => summarise.mutate({ slug, meetingId: meeting.id, deep, keepEdits });
@@ -249,6 +252,7 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
           markdown={section.markdown}
           html={view.sections_html[index] ?? ""}
           locked={busy}
+          untasked={section.kind === "action_items" ? peopleWithoutTasks(view) : []}
         />
       ))}
     </>
@@ -346,18 +350,20 @@ interface SectionProps {
   markdown: string;
   html: string;
   locked: boolean;
+  /** Attendees with no task in the to-do list (shown under Action items). */
+  untasked?: string[];
 }
 
 // The minutes are rebuilt from these sections' bullets, so the format matters there (D-025).
 const FORMAT_HINT: Partial<Record<SectionKind, string>> = {
   key_points: "“- **Topic**”, then “  - point” lines under it",
   decisions: "One “- ” line per decision",
-  action_items: "“- **Owner** — task — *due*”, one per line",
+  action_items: "“- [ ] **Owner** — task — *due*”, one per line; “- [x] ” when done",
   next_steps: "“- [ ] ” one step per line; “- [x] ” when done",
   open_questions: "One “- ” line per question",
 };
 
-function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, html, locked }: SectionProps) {
+function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, html, locked, untasked = [] }: SectionProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const update = useUpdateSection(slug, meetingId);
   return (
@@ -398,9 +404,14 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
             </button>
           </div>
         </div>
-      ) : kind === "next_steps" && toTasks(markdown).length > 0 ? (
+      ) : (kind === "next_steps" || kind === "action_items") && toTasks(markdown).length > 0 ? (
         <>
           <TaskList markdown={markdown} locked={locked || update.isPending} onChange={(next) => update.mutate({ index, markdown: next })} />
+          {untasked.length > 0 && (
+            <p className={`fieldHint ${styles.untasked}`}>
+              No task for {untasked.join(", ")}. If one was given a task, add it with Edit or in Corrections.
+            </p>
+          )}
           {update.error && (
             <p className={styles.error} role="alert">
               {update.error.message}
@@ -424,15 +435,39 @@ interface Task {
   text: string;
 }
 
+/** Present attendees who own no task: the coverage check under the to-do list (D-038). */
+function peopleWithoutTasks(view: SummaryView): string[] {
+  const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
+  const owners = view.doc.action_items.map((a) => fold(a.owner)).filter((o) => o && o !== "unassigned");
+  return view.doc.attendees
+    .filter((a) => a.name.trim() && a.attendance !== "Absent")
+    .filter((a) => !owners.some((o) => o === fold(a.name) || o.includes(fold(a.name)) || fold(a.name).includes(o)))
+    .map((a) => a.name);
+}
+
 /** "- [ ] text", "- [x] text", and plain "- text" bullets (older summaries) as tasks. */
 function toTasks(markdown: string): Task[] {
   return markdown.split("\n").flatMap((raw, line) => {
     const m = raw.match(/^[-*]\s+(?:\[( |x|X)\]\s+)?(.+)$/); // top-level lines only
-    return m ? [{ line, done: !!m[1] && m[1] !== " ", text: m[2].replace(/\*\*/g, "") }] : [];
+    return m ? [{ line, done: !!m[1] && m[1] !== " ", text: m[2].replace(/\*+/g, "") }] : [];
   });
 }
 
-/** Next steps as a to-do list: ticking a step saves the section ("- [x] …"). */
+/** "Owner — task — due": the owner in bold, the due date quieter. */
+function TaskText({ text }: { text: string }) {
+  const parts = text.split(" — ");
+  if (parts.length < 2) return <span>{text}</span>;
+  const due = parts.length > 2 ? parts[parts.length - 1] : null;
+  const task = parts.slice(1, due ? -1 : undefined).join(" — ");
+  return (
+    <span>
+      <strong>{parts[0]}</strong> — {task}
+      {due && <span className={styles.taskDue}> · {due}</span>}
+    </span>
+  );
+}
+
+/** The to-do list (Action items; Next steps in older summaries): ticking saves the section. */
 function TaskList({ markdown, locked, onChange }: { markdown: string; locked: boolean; onChange: (markdown: string) => void }) {
   const tasks = toTasks(markdown);
   const toggle = (task: Task) => {
@@ -446,7 +481,7 @@ function TaskList({ markdown, locked, onChange }: { markdown: string; locked: bo
         <li key={t.line}>
           <label className={t.done ? `${styles.task} ${styles.taskDone}` : styles.task}>
             <input type="checkbox" checked={t.done} disabled={locked} onChange={() => toggle(t)} />
-            <span>{t.text}</span>
+            <TaskText text={t.text} />
           </label>
         </li>
       ))}

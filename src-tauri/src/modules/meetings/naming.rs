@@ -478,6 +478,7 @@ mod tests {
                 owner: "Unassigned".into(),
                 item: "x".into(),
                 due: String::new(),
+                done: false,
             }],
             ..SummaryDoc::default()
         };

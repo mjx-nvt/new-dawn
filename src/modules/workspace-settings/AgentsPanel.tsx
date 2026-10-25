@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useAgents, useResetAgentGuide, useSetAgentGuide, type AgentGuide } from "../../kernel/bridge/agents";
+import { useAgents, useResetAgentGuide, useSetAgentGuide, useSetAgentModel, type AgentGuide } from "../../kernel/bridge/agents";
+import { useOllamaStatus } from "../../kernel/bridge/summary";
 import DangerButton from "../../kernel/shell/DangerButton";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import { formatWhen } from "../meetings/format";
@@ -11,7 +12,10 @@ export default function AgentsPanel({ slug }: { slug: string }) {
   const agents = useAgents(slug);
   const save = useSetAgentGuide(slug);
   const reset = useResetAgentGuide(slug);
-  const error = agents.error ?? save.error ?? reset.error;
+  const setModel = useSetAgentModel(slug);
+  const ollama = useOllamaStatus();
+  const installed = ollama.data?.installed.map((m) => m.name) ?? [];
+  const error = agents.error ?? save.error ?? reset.error ?? setModel.error;
 
   return (
     <section className="section">
@@ -25,6 +29,9 @@ export default function AgentsPanel({ slug }: { slug: string }) {
             saving={save.isPending && save.variables?.agent === g.agent}
             onSave={(text) => save.mutate({ agent: g.agent, text })}
             onReset={() => reset.mutate(g.agent)}
+            installed={installed}
+            appModel={ollama.data?.model ?? ""}
+            onModel={(model) => setModel.mutate({ agent: g.agent, model })}
           />
         ))
       ) : (
@@ -43,7 +50,23 @@ export default function AgentsPanel({ slug }: { slug: string }) {
   );
 }
 
-function AgentCard({ guide, saving, onSave, onReset }: { guide: AgentGuide; saving: boolean; onSave: (text: string) => void; onReset: () => void }) {
+function AgentCard({
+  guide,
+  saving,
+  onSave,
+  onReset,
+  installed,
+  appModel,
+  onModel,
+}: {
+  guide: AgentGuide;
+  saving: boolean;
+  onSave: (text: string) => void;
+  onReset: () => void;
+  installed: string[];
+  appModel: string;
+  onModel: (model: string | null) => void;
+}) {
   const [draft, setDraft] = useState(guide.guide);
   useEffect(() => setDraft(guide.guide), [guide.guide]);
   const dirty = draft.trim() !== guide.guide.trim();
@@ -63,6 +86,30 @@ function AgentCard({ guide, saving, onSave, onReset }: { guide: AgentGuide; savi
         <p className={`fieldHint ${styles.run}`}>
           {run ? `Last run ${formatWhen(run.created_at)} · ${run.model} · ${run.status}${run.output_tokens ? ` · ${run.output_tokens} tokens` : ""}${run.duration_ms != null ? ` · ${(run.duration_ms / 1000).toFixed(0)} s` : ""}` : "Not run yet"}
         </p>
+      </div>
+      <div className={styles.modelRow}>
+        {guide.agent === "naming" ? (
+          <p className="fieldHint">Runs inside the summary, on the Summary agent's model (switching models mid-run costs seconds).</p>
+        ) : (
+          <label className={styles.model}>
+            <span className="fieldLabel">Model</span>
+            <select className="input" value={guide.model ?? ""} onChange={(e) => onModel(e.target.value || null)}>
+              <option value="">App default{appModel ? ` (${appModel})` : ""}</option>
+              {guide.model && !installed.includes(guide.model) && <option value={guide.model}>{guide.model} (not installed — uses the app default)</option>}
+              {installed.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {guide.agent === "email" && <p className="fieldHint">For Rewrite email. The cover note written after a summary uses the Summary agent's model.</p>}
+        {guide.by_model.length > 0 && (
+          <p className="fieldHint">
+            {guide.by_model.map((s) => `${s.model}: ${s.runs} run${s.runs === 1 ? "" : "s"}${s.avg_ms != null ? `, ~${Math.round(s.avg_ms / 1000)} s` : ""}`).join(" · ")}
+          </p>
+        )}
       </div>
       <textarea
         className={`input ${styles.editor}`}

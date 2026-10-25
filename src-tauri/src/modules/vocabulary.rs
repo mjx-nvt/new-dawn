@@ -176,12 +176,22 @@ pub async fn learn(pool: &SqlitePool, pairs: &[(String, String)]) -> Result<usiz
 pub async fn preview(pool: &SqlitePool) -> Result<String> {
     let people = people::list(pool).await?;
     let terms = list(pool).await?;
-    Ok(whisper_prompt("<the meeting's title>", &people, &terms))
+    Ok(whisper_prompt(
+        "<the meeting's title>",
+        None,
+        &people,
+        &terms,
+    ))
 }
 
 /// Whisper's initial prompt: the meeting title, the people (recent first) and the terms, as one
 /// plain sentence each, within ~700 characters (Whisper reads about 220 tokens of prompt).
-pub fn whisper_prompt(title: &str, people: &[Person], terms: &[Term]) -> String {
+pub fn whisper_prompt(
+    title: &str,
+    presenter: Option<&str>,
+    people: &[Person],
+    terms: &[Term],
+) -> String {
     const MAX: usize = 700;
     let safe = |s: &str| {
         s.replace(['\0', '<', '>'], " ")
@@ -193,6 +203,12 @@ pub fn whisper_prompt(title: &str, people: &[Person], terms: &[Term]) -> String 
     let title = safe(title);
     if !title.is_empty() {
         out.push_str(&format!("Meeting: {title}."));
+    }
+    if let Some(p) = presenter.map(safe).filter(|p| !p.is_empty()) {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&format!("Presenter: {p}."));
     }
     let mut add_list = |label: &str, items: Vec<String>| {
         let mut list = Vec::new();
@@ -268,7 +284,7 @@ pub fn echoes_prompt(line: &str, prompt: &str) -> bool {
     let prompt = people::fold(prompt);
     line.chars().count() >= 12
         && (prompt.contains(line.trim_end_matches('.'))
-            || ["meeting:", "people:", "terms:"]
+            || ["meeting:", "presenter:", "people:", "terms:"]
                 .iter()
                 .filter(|k| line.contains(*k))
                 .count()
@@ -438,7 +454,7 @@ mod tests {
             "We met Đức about WiredScore today.",
             "Meeting: x. People: Đức. Terms: WiredScore."
         ));
-        let prompt = whisper_prompt("Weekly <meeting>", &people, &terms);
+        let prompt = whisper_prompt("Weekly <meeting>", None, &people, &terms);
         assert_eq!(
             prompt,
             "Meeting: Weekly meeting. People: Đức. Terms: WiredScore."

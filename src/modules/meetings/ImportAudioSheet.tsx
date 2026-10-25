@@ -4,7 +4,7 @@ import { pickAudioFile, useImportAudio, type Language } from "../../kernel/bridg
 import { SparkleIcon } from "../../kernel/shell/icons";
 import { useCurrentWorkspace, useSetCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import styles from "./ImportAudioSheet.module.css";
-import MeetingFields, { LanguageField } from "./MeetingFields";
+import MeetingFields, { FormatField, LanguageField } from "./MeetingFields";
 
 /** File → Import Audio…: pick a file, tenant, type, title and language; creates the meeting. */
 export default function ImportAudioSheet({ onClose }: { onClose: () => void }) {
@@ -14,6 +14,8 @@ export default function ImportAudioSheet({ onClose }: { onClose: () => void }) {
   const [path, setPath] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState<Language>("en");
+  const [presentation, setPresentation] = useState(false);
+  const [presenter, setPresenter] = useState("");
   const [typeId, setTypeId] = useState("");
   const importAudio = useImportAudio();
   const switchWorkspace = useSetCurrentWorkspace();
@@ -36,7 +38,7 @@ export default function ImportAudioSheet({ onClose }: { onClose: () => void }) {
   function submit() {
     if (!path) return;
     importAudio.mutate(
-      { slug, path, title, language, meetingTypeId: typeId || null },
+      { slug, path, title, language, meetingTypeId: typeId || null, presentation, presenter: presenter.trim() || null },
       {
         onSuccess: async (meeting) => {
           // The meeting page reads the current workspace, so follow the import there.
@@ -75,6 +77,14 @@ export default function ImportAudioSheet({ onClose }: { onClose: () => void }) {
           onTypeChange={setTypeId}
           language={language}
           onLanguageChange={setLanguage}
+        />
+        <FormatField
+          presentation={presentation}
+          presenter={presenter}
+          onChange={(p, name) => {
+            setPresentation(p);
+            setPresenter(name);
+          }}
         />
 
         <label className="field">

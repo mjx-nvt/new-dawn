@@ -20,6 +20,15 @@ export function useSetAgentGuide(slug: string) {
   });
 }
 
+/** Chooses the model an agent runs on (null = the app's selected model). */
+export function useSetAgentModel(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent: Agent; model: string | null }) => unwrap(commands.setAgentModel(slug, v.agent, v.model)),
+    onSuccess: (guides) => queryClient.setQueryData(key(slug), guides),
+  });
+}
+
 export function useResetAgentGuide(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
