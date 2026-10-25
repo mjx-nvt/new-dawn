@@ -4,12 +4,17 @@ import {
   cancelTranscription,
   useDeleteMeeting,
   useMeeting,
+  useMeetingTypes,
   useRenameMeeting,
   useRetranscribe,
+  useSetMeetingType,
   useTranscriptionError,
   useTranscriptionProgress,
+  type Meeting,
 } from "../../kernel/bridge/meetings";
+import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
+import MenuButton from "../../kernel/shell/MenuButton";
 import { formatClock, formatWhen, LANGUAGE_LABEL } from "./format";
 import styles from "./MeetingPage.module.css";
 import MinutesTab from "./MinutesTab";
@@ -28,24 +33,23 @@ export const MEETING_TABS = [
 
 export type MeetingTab = (typeof MEETING_TABS)[number]["id"];
 
-/** One meeting: header, then Transcript | Summary | Minutes (tab in the URL). */
+/** One meeting: title and facts, the one action for its current step, then
+ *  Transcript | Summary | Minutes (the tab lives in the URL). */
 export default function MeetingPage() {
   const { meetingId } = route.useParams();
   const { tab, t } = route.useSearch();
+  const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
+  const slug = workspace?.slug ?? "";
   const meeting = useMeeting(workspace?.slug, meetingId);
   const progress = useTranscriptionProgress(meetingId);
   const lastError = useTranscriptionError(meetingId);
   const retranscribe = useRetranscribe();
+  const summarise = useSummarise();
+  const ollama = useOllamaStatus();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmRetranscribe, setConfirmRetranscribe] = useState(false); // replaces corrections too
-
-  useEffect(() => {
-    if (!confirmRetranscribe) return;
-    const t = setTimeout(() => setConfirmRetranscribe(false), 4000);
-    return () => clearTimeout(t);
-  }, [confirmRetranscribe]);
+  const [confirmRetranscribe, setConfirmRetranscribe] = useState(false);
 
   if (meeting.error) {
     return (
@@ -61,90 +65,138 @@ export default function MeetingPage() {
   }
 
   const m = meeting.data;
-  const canRetranscribe = m && (m.status === "recorded" || m.status === "failed" || m.status === "transcribed");
   const busy = !m || m.status === "recording" || m.status === "transcribing" || m.status === "summarising";
+  const ollamaReady = !!ollama.data?.running && !!ollama.data.model_installed;
+  const showTab = (next: MeetingTab) => void navigate({ to: "/meetings/$meetingId", params: { meetingId }, search: { tab: next }, replace: true });
+  const error = lastError ?? retranscribe.error ?? summarise.error;
+
+  // The one thing to do next, by where the meeting is.
+  const primary = (() => {
+    if (!m || !workspace) return null;
+    switch (m.status) {
+      case "recorded":
+      case "failed":
+        return { label: "Transcribe", onClick: () => retranscribe.mutate({ slug, meetingId }), disabled: retranscribe.isPending };
+      case "transcribed":
+        return {
+          label: "Write summary",
+          onClick: () => {
+            summarise.mutate({ slug, meetingId, deep: false, keepEdits: true });
+            showTab("summary");
+          },
+          disabled: !ollamaReady || summarise.isPending,
+          title: ollamaReady ? undefined : "Ollama isn't running with the text model — see Settings → Models",
+        };
+      case "summarised":
+        return { label: "Export minutes", onClick: () => showTab("minutes"), disabled: false };
+      default:
+        return null;
+    }
+  })();
 
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name}</p>
-      <div className={styles.header}>
-        {renaming && m && workspace ? (
-          <TitleEditor slug={workspace.slug} meetingId={meetingId} title={m.title} onDone={() => setRenaming(false)} />
-        ) : (
-          <h1 className="pageTitle">{m?.title ?? ""}</h1>
-        )}
-        <div className={styles.actions}>
-          {!renaming && (
-            <button type="button" className="btn btnGhost btnCompact" disabled={!m} onClick={() => setRenaming(true)}>
-              Rename
-            </button>
+      <header className={styles.header}>
+        <div className={styles.heading}>
+          <p className="eyebrow">{workspace?.name}</p>
+          {renaming && m && workspace ? (
+            <TitleEditor slug={slug} meetingId={meetingId} title={m.title} onDone={() => setRenaming(false)} />
+          ) : (
+            <h1 className="pageTitle" title="Double-click to rename" onDoubleClick={() => m && setRenaming(true)}>
+              {m?.title ?? ""}
+            </h1>
           )}
-          <button
-            type="button"
-            className="btn btnGhost btnCompact"
-            disabled={busy}
-            title={busy ? "Wait until recording, transcription or the summary has finished" : undefined}
-            onClick={() => setDeleting(true)}
-          >
-            Delete…
-          </button>
-          {canRetranscribe && workspace && (
-            <button
-              type="button"
-              className="btn btnSecondary btnCompact"
-              disabled={retranscribe.isPending}
-              title={m.status === "transcribed" ? "Replaces the transcript, including your corrections" : undefined}
-              onClick={() => {
-                if (m.status === "transcribed" && !confirmRetranscribe) return setConfirmRetranscribe(true);
-                setConfirmRetranscribe(false);
-                retranscribe.mutate({ slug: workspace.slug, meetingId });
-              }}
-            >
-              {m.status !== "transcribed" ? "Transcribe" : confirmRetranscribe ? "Replace transcript and corrections?" : "Transcribe again"}
-            </button>
+          {m && (
+            <div className={styles.facts}>
+              <span className={styles.fact}>{formatWhen(m.held_on)}</span>
+              {m.duration_ms != null && <span className={styles.fact}>{formatClock(m.duration_ms)}</span>}
+              <span className={styles.fact}>{LANGUAGE_LABEL[m.language]}</span>
+              <StatusChip status={m.status} />
+              {workspace && <TypePicker slug={slug} meeting={m} />}
+            </div>
           )}
         </div>
-      </div>
-      {m && (
-        <p className={`pageMeta ${styles.meta}`}>
-          {formatWhen(m.held_on)}
-          {m.duration_ms != null && <> · {formatClock(m.duration_ms)}</>} · {LANGUAGE_LABEL[m.language]}
-          <StatusChip status={m.status} />
-        </p>
+        {m && workspace && (
+          <div className={styles.actions}>
+            {primary && (
+              <button type="button" className="btn btnPrimary" disabled={primary.disabled} title={primary.title} onClick={primary.onClick}>
+                {primary.label}
+              </button>
+            )}
+            <MenuButton
+              className="btn btnGhost"
+              items={[
+                { label: "Rename…", onSelect: () => setRenaming(true) },
+                {
+                  label: m.status === "transcribed" || m.status === "summarised" ? "Transcribe again…" : "Transcribe",
+                  onSelect: () => (m.status === "recorded" || m.status === "failed" ? retranscribe.mutate({ slug, meetingId }) : setConfirmRetranscribe(true)),
+                  disabled: busy || retranscribe.isPending,
+                },
+                { label: "Delete…", onSelect: () => setDeleting(true), danger: true, disabled: busy, separator: true },
+              ]}
+            />
+          </div>
+        )}
+      </header>
+
+      {confirmRetranscribe && workspace && (
+        <div className={`card ${styles.notice}`} role="alertdialog" aria-labelledby="retranscribe-title">
+          <div>
+            <p id="retranscribe-title" className={styles.noticeTitle}>
+              Transcribe again?
+            </p>
+            <p className="fieldHint">The transcript is written anew, including any lines you corrected. The summary stays until you re-run it.</p>
+          </div>
+          <div className={styles.noticeActions}>
+            <button type="button" className="btn btnGhost btnCompact" autoFocus onClick={() => setConfirmRetranscribe(false)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btnPrimary btnCompact"
+              onClick={() => {
+                setConfirmRetranscribe(false);
+                retranscribe.mutate({ slug, meetingId });
+              }}
+            >
+              Transcribe again
+            </button>
+          </div>
+        </div>
       )}
+
       {(progress || m?.status === "transcribing") && (
         <div className={`card ${styles.progressCard}`}>
           <div className={styles.progressHead}>
-            <p className={styles.progressTitle}>Transcribing{progress ? ` · ${progress.percent} %` : "…"}</p>
+            <p className={styles.noticeTitle}>Transcribing{progress ? ` · ${progress.percent} %` : "…"}</p>
             <button type="button" className="btn btnGhost btnCompact" onClick={() => void cancelTranscription(meetingId)}>
               Cancel
             </button>
           </div>
           {progress ? <ProgressBar progress={progress} label={m?.title} /> : <p className="fieldHint">Waiting for the job to report progress</p>}
-          <p className="fieldHint">You can leave this page — you'll get a notification when the transcript is ready.</p>
+          <p className="fieldHint">You can leave this page; you'll get a notification when the transcript is ready.</p>
         </div>
       )}
-      {(lastError ?? retranscribe.error) && <p className={styles.error}>{(lastError ?? retranscribe.error)?.message}</p>}
+      {error && (
+        <p className={styles.error} role="alert">
+          {error.message}
+        </p>
+      )}
 
-      <nav className={styles.tabs}>
+      <div className={`segmented ${styles.tabs}`} role="tablist" aria-label="Meeting">
         {MEETING_TABS.map((item) => (
-          <Link
-            key={item.id}
-            to="/meetings/$meetingId"
-            params={{ meetingId }}
-            search={{ tab: item.id }}
-            replace
-            className={item.id === tab ? `${styles.tab} ${styles.activeTab}` : styles.tab}
-          >
+          <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => showTab(item.id)}>
             {item.label}
-          </Link>
+          </button>
         ))}
-      </nav>
+      </div>
 
-      {tab === "transcript" && m && workspace && <TranscriptView key={m.id} slug={workspace.slug} meeting={m} startMs={t} />}
-      {tab === "summary" && m && workspace && <SummaryTab slug={workspace.slug} meeting={m} />}
-      {tab === "minutes" && m && workspace && <MinutesTab slug={workspace.slug} meeting={m} />}
-      {deleting && m && workspace && <DeleteSheet slug={workspace.slug} meetingId={meetingId} title={m.title} onClose={() => setDeleting(false)} />}
+      <div role="tabpanel">
+        {tab === "transcript" && m && workspace && <TranscriptView key={m.id} slug={slug} meeting={m} startMs={t} />}
+        {tab === "summary" && m && workspace && <SummaryTab slug={slug} meeting={m} />}
+        {tab === "minutes" && m && workspace && <MinutesTab slug={slug} meeting={m} />}
+      </div>
+      {deleting && m && workspace && <DeleteSheet slug={slug} meetingId={meetingId} title={m.title} onClose={() => setDeleting(false)} />}
     </div>
   );
 }
@@ -186,6 +238,36 @@ function TitleEditor({ slug, meetingId, title, onDone }: { slug: string; meeting
   );
 }
 
+/** The meeting's type: picks which Word template its minutes use. */
+function TypePicker({ slug, meeting }: { slug: string; meeting: Meeting }) {
+  const types = useMeetingTypes(slug);
+  const setType = useSetMeetingType(slug, meeting.id);
+  if (!types.data?.length) return null;
+  return (
+    <>
+      <select
+        className={`input ${styles.typePicker}`}
+        aria-label="Meeting type"
+        value={meeting.meeting_type_id ?? ""}
+        disabled={setType.isPending}
+        onChange={(e) => setType.mutate(e.target.value || null)}
+      >
+        <option value="">No type</option>
+        {types.data.map((type) => (
+          <option key={type.id} value={type.id}>
+            {type.name}
+          </option>
+        ))}
+      </select>
+      {setType.error && (
+        <span className={styles.error} role="alert">
+          {setType.error.message}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Confirm sheet: the recording goes to the Trash; exported minutes stay in the exports folder. */
 function DeleteSheet({ slug, meetingId, title, onClose }: { slug: string; meetingId: string; title: string; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -213,8 +295,8 @@ function DeleteSheet({ slug, meetingId, title, onClose }: { slug: string; meetin
           Delete “{title}”?
         </h2>
         <p className="fieldHint">
-          The recording moves to the Trash (you can put it back from there). The transcript, summary, notes and export list are
-          deleted. Minutes you already exported stay in the workspace's exports folder.
+          The recording moves to the Trash. The transcript, summary, notes and export list are deleted. Minutes you already
+          exported stay in the workspace's exports folder.
         </p>
         {remove.error && (
           <p className="formError" role="alert">
@@ -227,7 +309,7 @@ function DeleteSheet({ slug, meetingId, title, onClose }: { slug: string; meetin
           </button>
           <button
             type="button"
-            className="btn btnPrimary"
+            className="btn btnDangerFilled"
             disabled={remove.isPending}
             onClick={() => remove.mutate(undefined, { onSuccess: () => void navigate({ to: "/meetings", search: {} }) })}
           >

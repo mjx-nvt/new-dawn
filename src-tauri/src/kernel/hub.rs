@@ -90,9 +90,13 @@ impl WorkspaceHub {
         })
     }
 
+    /// Opens (and migrates) every active workspace. One that fails is logged and left closed —
+    /// its screens say so — instead of stopping the app from starting.
     pub async fn open_all_active(&self) -> Result<()> {
         for workspace in self.registry.list().await?.iter().filter(|w| !w.archived) {
-            self.open_workspace(workspace).await?;
+            if let Err(err) = self.open_workspace(workspace).await {
+                tracing::error!("workspace {} could not be opened: {err:#}", workspace.slug);
+            }
         }
         Ok(())
     }
@@ -102,7 +106,11 @@ impl WorkspaceHub {
         Ok(pools
             .get(slug)
             .cloned()
-            .ok_or_else(|| AppError::not_found(format!("Workspace '{slug}' is not open")))?)
+            .ok_or_else(|| {
+                AppError::not_found(format!(
+                    "Workspace '{slug}' is not open (if it failed to open at launch, the log in ~/Library/Logs/co.majorisdigital.newdawn says why)"
+                ))
+            })?)
     }
 
     /// App-wide setting from `registry.db`.
@@ -199,7 +207,12 @@ impl WorkspaceHub {
             std::fs::create_dir_all(&target)
                 .with_context(|| format!("creating {}", target.display()))?;
             let out = target.join("workspace.db");
-            let open = self.pools.read().expect("hub lock poisoned").get(&workspace.slug).cloned();
+            let open = self
+                .pools
+                .read()
+                .expect("hub lock poisoned")
+                .get(&workspace.slug)
+                .cloned();
             match open {
                 Some(pool) => vacuum_into(&pool, &out).await?,
                 None => {

@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import DangerButton from "../../kernel/shell/DangerButton";
 import type { Meeting } from "../../kernel/bridge/meetings";
+import { useMeetingTypeTemplates } from "../../kernel/bridge/templates";
 import {
   openMinutesFile,
   pdfUrl,
@@ -35,6 +37,11 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
   const converters = useConverters();
   const exportMinutes = useExportMinutes(slug, meeting.id);
   const makePdf = useMakePdf(slug, meeting.id);
+  // The template export will use: the type's own file, else the default type's (as in Rust).
+  const types = useMeetingTypeTemplates(slug);
+  const ownType = types.data?.find((t) => t.id === meeting.meeting_type_id && t.template.path);
+  const defaultType = types.data?.find((t) => t.is_default);
+  const templateName = ownType?.name ?? (defaultType && `${defaultType.name} (default)`);
   const deleteExport = useDeleteExport(slug, meeting.id);
   const [withPdf, setWithPdf] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -57,7 +64,10 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
         <div className={styles.exportHead}>
           <div>
             <p className={styles.cardTitle}>Meeting minutes</p>
-            <p className="fieldHint">The workspace's Word template, filled in from the summary.</p>
+            <p className="fieldHint">
+              {templateName ? `Template: ${templateName}` : "The workspace's Word template"}, filled in from the summary. Change
+              it with the meeting type (next to the date above) or in Settings → Meeting types.
+            </p>
           </div>
           <div className="segmented" role="group" aria-label="Export as">
             <button type="button" aria-pressed={!withPdf} onClick={() => setWithPdf(false)}>
@@ -86,10 +96,7 @@ export default function MinutesTab({ slug, meeting }: { slug: string; meeting: M
         {withPdf && converters.data && !hasConverter && (
           <p className="fieldHint">No PDF converter found. Install Microsoft Word, LibreOffice or Pages (Settings → Converters).</p>
         )}
-        <p className="fieldHint">
-          Filled from the summary as it is now, including your edits. Venue, chair, classification and signatures keep the
-          template's [ ] hints — complete them in Word.
-        </p>
+        <p className="fieldHint">Filled from the summary, with your edits. The bracketed hints in the template (venue, chair, signatures) are for you to complete in Word.</p>
       </div>
 
       {(error ?? openError) && (
@@ -181,29 +188,10 @@ function ExportRow({
         <button type="button" className="btn btnGhost btnCompact" onClick={() => onOpen(item.id, "docx", true)}>
           Reveal in Finder
         </button>
-        <DeleteButton disabled={deleting} onDelete={onDelete} />
+        <DangerButton confirm="Move to Trash?" onConfirm={onDelete} disabled={deleting} title="Moves the DOCX and PDF to the Trash">
+          Delete
+        </DangerButton>
       </div>
     </div>
-  );
-}
-
-/** Two-step: the first click asks, the second moves the files to the Trash. */
-function DeleteButton({ disabled, onDelete }: { disabled: boolean; onDelete: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 4000);
-    return () => clearTimeout(t);
-  }, [armed]);
-  return (
-    <button
-      type="button"
-      className="btn btnGhost btnCompact"
-      disabled={disabled}
-      title="Moves the DOCX and PDF to the Trash"
-      onClick={() => (armed ? onDelete() : setArmed(true))}
-    >
-      {armed ? "Move to Trash?" : "Delete"}
-    </button>
   );
 }

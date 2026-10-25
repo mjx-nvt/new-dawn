@@ -79,12 +79,29 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             Some("CmdOrCtrl+Alt+S"),
             true,
         )?)
+        .item(&item(
+            app,
+            "icon-sidebar",
+            "Icon-only Sidebar",
+            Some("Ctrl+CmdOrCtrl+S"),
+            true,
+        )?)
+        .separator()
+        .item(&item(app, "go-back", "Back", Some("CmdOrCtrl+["), true)?)
+        .item(&item(app, "go-forward", "Forward", Some("CmdOrCtrl+]"), true)?)
         .separator()
         .fullscreen()
         .build()?;
 
     let workspace = SubmenuBuilder::new(app, "Workspace")
         .item(&item(app, "switch-workspace", "Switch…", None, true)?)
+        .item(&item(
+            app,
+            "workspace-settings",
+            "Workspace Settings…",
+            Some("Alt+CmdOrCtrl+,"),
+            true,
+        )?)
         .item(&item(app, "new-workspace", "New Workspace…", None, true)?)
         .separator()
         .item(&item(app, "tenant-setup", "Tenant Setup…", None, true)?)
@@ -119,7 +136,11 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
         "settings" => windows::open_settings(app, SettingsTab::General),
         "new-workspace" | "tenant-setup" => forward(app, MenuAction::OpenTenantSetup),
         "switch-workspace" => forward(app, MenuAction::SwitchWorkspace),
+        "workspace-settings" => forward(app, MenuAction::OpenWorkspace),
         "toggle-sidebar" => forward(app, MenuAction::ToggleSidebar),
+        "icon-sidebar" => forward(app, MenuAction::IconSidebar),
+        "go-back" => forward(app, MenuAction::GoBack),
+        "go-forward" => forward(app, MenuAction::GoForward),
         "import-audio" => forward(app, MenuAction::ImportAudio),
         "run-setup" => forward(app, MenuAction::RunSetup),
         "new-recording" | "record" => forward(app, MenuAction::ToggleRecording),

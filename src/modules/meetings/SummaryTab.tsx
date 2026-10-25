@@ -15,13 +15,16 @@ import {
   type SummaryProgress,
   type SummaryView,
 } from "../../kernel/bridge/summary";
+import MenuButton from "../../kernel/shell/MenuButton";
+import AttendeesBlock from "./AttendeesBlock";
 import { formatWhen } from "./format";
 import styles from "./SummaryTab.module.css";
 
 // Until meeting types drive the structure (P1.4), the same sections the backend uses by default.
 const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Next steps", "Open questions"];
 
-/** Executive summary: written by Qwen after the transcript, editable, copied as an email. */
+/** Executive summary: the sections on the left (editable), and on the right what goes with
+ *  them — the email, who attended, your notes. Stacks on a narrow panel. */
 export default function SummaryTab({ slug, meeting }: { slug: string; meeting: Meeting }) {
   const summary = useSummary(slug, meeting.id);
   const progress = useSummaryProgress(meeting.id);
@@ -34,43 +37,58 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
   // The newest problem wins: a fresh start attempt clears an older job error and vice versa.
   const error = summarise.error ?? lastError ?? summary.error;
   const run = (deep: boolean, keepEdits: boolean) => summarise.mutate({ slug, meetingId: meeting.id, deep, keepEdits });
+  const busy = writing || summarise.isPending;
+  const view = summary.data;
 
   return (
-    <section className="section">
-      <NotesCard key={meeting.id} slug={slug} meeting={meeting} />
-      {ollama.data && !ollamaReady && !writing && <OllamaCard running={ollama.data.running} model={ollama.data.model} />}
-      {writing && <ProgressCard meetingId={meeting.id} progress={progress} />}
-      {error && (
-        <p className={styles.error} role="alert">
-          {error.message}
-        </p>
-      )}
+    <div className={styles.layout}>
+      <div className={styles.main}>
+        {ollama.data && !ollamaReady && !writing && <OllamaCard running={ollama.data.running} model={ollama.data.model} />}
+        {writing && <ProgressCard meetingId={meeting.id} progress={progress} />}
+        {error && (
+          <p className={styles.error} role="alert">
+            {error.message}
+          </p>
+        )}
+        {view ? (
+          <Sections slug={slug} meeting={meeting} view={view} busy={busy} canRun={ollamaReady} onRun={run} />
+        ) : (
+          <>
+            {!writing && !summary.isPending && !summary.error && (
+              <div className={`card ${styles.empty}`}>
+                <div>
+                  <p className={styles.emptyTitle}>{transcribed ? "No summary yet" : "Transcript first"}</p>
+                  <p className="fieldHint">
+                    {transcribed ? "Qwen reads the transcript and your notes, then writes it. About a minute." : "The summary is written once the transcript is ready."}
+                  </p>
+                </div>
+                {transcribed && (
+                  <button type="button" className="btn btnPrimary" disabled={!ollamaReady || summarise.isPending} onClick={() => run(false, true)}>
+                    Write summary
+                  </button>
+                )}
+              </div>
+            )}
+            {SKELETON.map((title) => (
+              <div key={title} className={styles.section}>
+                <h3 className="sectionTitle">{title}</h3>
+                <div className={`${styles.slot} ghostCard`} />
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
-      {summary.data ? (
-        <SummaryBody slug={slug} meeting={meeting} view={summary.data} busy={writing || summarise.isPending} canRun={ollamaReady} onRun={run} />
-      ) : (
-        <>
-          {!writing && !summary.isPending && !summary.error && (
-            <div className={styles.empty}>
-              <p className="ghostText">
-                {transcribed ? "Not yet captured — no summary has been written." : "Not yet captured — the summary is written after the transcript."}
-              </p>
-              {transcribed && (
-                <button type="button" className="btn btnPrimary btnCompact" disabled={!ollamaReady || summarise.isPending} onClick={() => run(false, true)}>
-                  Write summary
-                </button>
-              )}
-            </div>
-          )}
-          {SKELETON.map((title) => (
-            <div key={title} className={styles.section}>
-              <h3 className="sectionTitle">{title}</h3>
-              <div className={`${styles.slot} ghostCard`} />
-            </div>
-          ))}
-        </>
-      )}
-    </section>
+      <aside className={styles.aside}>
+        <EmailCard slug={slug} meeting={meeting} view={view ?? undefined} busy={busy} />
+        <div className={`card ${styles.asideCard}`}>
+          <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />
+        </div>
+        <div className={`card ${styles.asideCard}`}>
+          <NotesCard key={meeting.id} slug={slug} meeting={meeting} />
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -82,9 +100,9 @@ function OllamaCard({ running, model }: { running: boolean; model: string }) {
         <p className={styles.noticeTitle}>{running ? `${model} isn't installed in Ollama` : "Ollama isn't running"}</p>
         <p className="fieldHint">
           {running
-            ? `Run “ollama pull ${model}” in Terminal, then come back.`
+            ? "Download it in Settings → Models."
             : openFailed
-              ? "Couldn't open Ollama from /Applications — start it yourself; this page picks it up within seconds."
+              ? "Not found in Applications — start it yourself; this page picks it up within seconds."
               : "Summaries are written on this Mac by Qwen through Ollama. Open it and this page picks it up within seconds."}
         </p>
       </div>
@@ -105,7 +123,7 @@ function ProgressCard({ meetingId, progress }: { meetingId: string; progress: Su
         ? `Merging parts${progress.parts > 1 ? ` · ${progress.part} of ${progress.parts}` : ""}`
         : `Writing${progress.parts > 1 ? ` part ${progress.part} of ${progress.parts}` : ""}`;
   return (
-    <div className={`card ${styles.progress}`}>
+    <div className={`card ${styles.notice}`}>
       <div>
         <p className={styles.noticeTitle}>Summarising{progress && progress.tokens > 0 ? ` · ${progress.tokens} tokens` : "…"}</p>
         <p className="fieldHint">{label}. You'll get a notification when it's ready.</p>
@@ -126,26 +144,15 @@ interface BodyProps {
   onRun: (deep: boolean, keepEdits: boolean) => void;
 }
 
-function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
-  const copy = useCopyEmail();
-  const mail = useOpenInMail();
-  const [copied, setCopied] = useState(false);
+/** The sections, each editable, with the re-run choice when something was edited. */
+function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
   const [pendingRun, setPendingRun] = useState<null | boolean>(null); // deep? while choosing keep/discard
   const edited = !!view.edited_at;
   const editedCount = view.doc.sections.filter((s) => s.edited).length;
 
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(t);
-  }, [copied]);
-
   function rerun(deep: boolean) {
-    if (edited) {
-      setPendingRun(deep); // ask: keep or discard the hand edits
-      return;
-    }
-    onRun(deep, true);
+    if (edited) setPendingRun(deep);
+    else onRun(deep, true);
   }
 
   function choose(keepEdits: boolean) {
@@ -154,61 +161,39 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
     setPendingRun(null);
   }
 
-  const announce = copied ? "Email copied to the clipboard" : "";
-  const actionError = copy.error ?? mail.error;
   return (
     <>
-      <div className={styles.bar}>
-        <div className={styles.subject}>
-          <p className="fieldLabel">Email subject</p>
-          <p className="fieldValue">{view.email_subject}</p>
-          <p className="fieldHint">
-            {view.model ?? "Qwen"} · {edited ? <span className="chip">Edited</span> : "written"} {formatWhen(view.edited_at ?? view.updated_at)}
-          </p>
-        </div>
-        <div className={styles.actions}>
-          <button
-            type="button"
-            className="btn btnPrimary btnCompact"
-            disabled={busy || copy.isPending}
-            onClick={() => copy.mutate({ slug, meetingId: meeting.id }, { onSuccess: () => setCopied(true) })}
-          >
-            {copied ? "Copied ✓" : "Copy as email"}
-          </button>
-          <button type="button" className="btn btnSecondary btnCompact" disabled={busy} onClick={() => mail.mutate({ slug, meetingId: meeting.id })}>
-            Open in Mail
-          </button>
-          <button type="button" className="btn btnGhost btnCompact" disabled={busy || !canRun} onClick={() => rerun(false)}>
-            Re-run
-          </button>
-          <button type="button" className="btn btnGhost btnCompact" aria-describedby="deep-hint" disabled={busy || !canRun} onClick={() => rerun(true)}>
-            Deep re-run
-          </button>
-          <p id="deep-hint" className={`fieldHint ${styles.deepHint}`}>
-            Deep re-run lets Qwen think first: more careful, takes several minutes.
-          </p>
-        </div>
+      <div className={styles.sectionsHead}>
+        <p className="fieldHint">
+          {view.model ?? "Qwen"} · {edited ? "edited" : "written"} {formatWhen(view.edited_at ?? view.updated_at)}
+        </p>
+        <MenuButton
+          className="btn btnGhost btnCompact"
+          label="Re-run options"
+          items={[
+            { label: "Re-run", onSelect: () => rerun(false), disabled: busy || !canRun },
+            { label: "Deep re-run (thinks first, slower)", onSelect: () => rerun(true), disabled: busy || !canRun },
+          ]}
+        >
+          Re-run ▾
+        </MenuButton>
       </div>
-      <span className="srOnly" aria-live="polite">
-        {announce}
-      </span>
+
       {pendingRun !== null && (
         <div className={`card ${styles.notice}`} role="alertdialog" aria-labelledby="rerun-title">
           <div>
             <p id="rerun-title" className={styles.noticeTitle}>
-              {editedCount > 0 ? `You edited ${editedCount === 1 ? "1 section" : `${editedCount} sections`}` : "This summary has older edits"}
+              {editedCount > 0 ? `Keep your ${editedCount === 1 ? "edit" : `${editedCount} edits`}?` : "This summary has older edits"}
             </p>
             <p className="fieldHint">
-              {editedCount > 0
-                ? "Keep them and let Qwen rewrite the rest, or start over from the transcript."
-                : "They were made before edits were tracked per section, so a re-run replaces them."}
+              {editedCount > 0 ? "Kept sections stay as you wrote them; Qwen rewrites the rest." : "They can't be kept section by section, so a re-run replaces them."}
             </p>
           </div>
           <div className={styles.choice}>
             <button type="button" className="btn btnGhost btnCompact" autoFocus={editedCount === 0} onClick={() => setPendingRun(null)}>
               Cancel
             </button>
-            <button type="button" className={`btn btnCompact ${editedCount > 0 ? "btnSecondary" : "btnPrimary"}`} onClick={() => choose(false)}>
+            <button type="button" className={`btn btnCompact ${editedCount > 0 ? "btnDanger" : "btnPrimary"}`} onClick={() => choose(false)}>
               {editedCount > 0 ? "Discard edits" : "Re-run and replace"}
             </button>
             {editedCount > 0 && (
@@ -219,16 +204,7 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
           </div>
         </div>
       )}
-      {view.transcript_changed && !busy && (
-        <p className={`fieldHint ${styles.stale}`}>
-          The transcript was corrected after this summary was written — Re-run to use it (your edited sections are kept).
-        </p>
-      )}
-      {actionError && (
-        <p className={styles.error} role="alert">
-          {actionError.message}
-        </p>
-      )}
+      {view.transcript_changed && !busy && <p className={`fieldHint ${styles.stale}`}>The transcript was corrected after this summary — re-run to use it (your edits are kept).</p>}
 
       {view.doc.sections.map((section, index) => (
         <SectionBlock
@@ -244,13 +220,48 @@ function SummaryBody({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
           locked={busy}
         />
       ))}
-
-      <details className={styles.preview}>
-        <summary>Email preview</summary>
-        <p className={styles.previewSubject}>{view.email_subject}</p>
-        <p className={styles.previewBody}>{view.email_md}</p>
-      </details>
     </>
+  );
+}
+
+/** The summary as an email: subject, copy, open in Mail, and a preview on request. */
+function EmailCard({ slug, meeting, view, busy }: { slug: string; meeting: Meeting; view: SummaryView | undefined; busy: boolean }) {
+  const copy = useCopyEmail();
+  const mail = useOpenInMail();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+  const actionError = copy.error ?? mail.error;
+  return (
+    <div className={`card ${styles.asideCard}`}>
+      <p className={styles.asideTitle}>Email</p>
+      {view ? <p className={styles.subject}>{view.email_subject}</p> : <p className="ghostText">Not yet captured</p>}
+      <div className={styles.asideActions}>
+        <button type="button" className="btn btnPrimary btnCompact" disabled={!view || busy || copy.isPending} onClick={() => copy.mutate({ slug, meetingId: meeting.id }, { onSuccess: () => setCopied(true) })}>
+          {copied ? "Copied" : "Copy as email"}
+        </button>
+        <button type="button" className="btn btnSecondary btnCompact" disabled={!view || busy} onClick={() => mail.mutate({ slug, meetingId: meeting.id })}>
+          Open in Mail
+        </button>
+      </div>
+      <span className="srOnly" aria-live="polite">
+        {copied ? "Email copied to the clipboard" : ""}
+      </span>
+      {actionError && (
+        <p className={styles.error} role="alert">
+          {actionError.message}
+        </p>
+      )}
+      {view && (
+        <details className={styles.preview}>
+          <summary>Preview</summary>
+          <p className={styles.previewBody}>{view.email_md}</p>
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -285,7 +296,7 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
           {edited && <span className="chip">Edited</span>}
         </div>
         {draft === null && (
-          <button type="button" className="btn btnGhost btnCompact" disabled={locked} onClick={() => setDraft(markdown)} aria-label={`Edit ${title}`}>
+          <button type="button" className={`btn btnGhost btnCompact ${styles.editButton}`} disabled={locked} onClick={() => setDraft(markdown)} aria-label={`Edit ${title}`}>
             Edit
           </button>
         )}
@@ -310,12 +321,7 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
             <button type="button" className="btn btnGhost btnCompact" onClick={() => setDraft(null)}>
               Cancel
             </button>
-            <button
-              type="button"
-              className="btn btnPrimary btnCompact"
-              disabled={locked || update.isPending}
-              onClick={() => update.mutate({ index, markdown: draft }, { onSuccess: () => setDraft(null) })}
-            >
+            <button type="button" className="btn btnPrimary btnCompact" disabled={locked || update.isPending} onClick={() => update.mutate({ index, markdown: draft }, { onSuccess: () => setDraft(null) })}>
               Save
             </button>
           </div>
@@ -357,30 +363,27 @@ function NotesCard({ slug, meeting }: { slug: string; meeting: Meeting }) {
   }, [draft, mutate]);
 
   return (
-    <div className={styles.notes}>
-      <label className="field">
-        <span className="fieldLabel">Your notes</span>
-        <textarea
-          className="input"
-          rows={3}
-          value={draft}
-          placeholder="Names and spellings, who chaired, what the recording missed…"
-          onChange={(e) => {
-            latest.current = e.target.value;
-            setDraft(e.target.value);
-          }}
-          onBlur={() => {
-            // Clicking Re-run right after typing: save now, not after the debounce.
-            if (latest.current !== saved.current) {
-              saved.current = latest.current;
-              mutate(latest.current);
-            }
-          }}
-        />
-      </label>
-      <p className="fieldHint">
-        {save.error ? save.error.message : save.isPending ? "Saving…" : "Saved on this Mac · the next summary run reads these notes"}
-      </p>
-    </div>
+    <>
+      <p className={styles.asideTitle}>Your notes</p>
+      <textarea
+        className="input"
+        rows={4}
+        value={draft}
+        aria-label="Your notes"
+        placeholder="Names, who chaired, what the recording missed…"
+        onChange={(e) => {
+          latest.current = e.target.value;
+          setDraft(e.target.value);
+        }}
+        onBlur={() => {
+          // Clicking Re-run right after typing: save now, not after the debounce.
+          if (latest.current !== saved.current) {
+            saved.current = latest.current;
+            mutate(latest.current);
+          }
+        }}
+      />
+      <p className="fieldHint">{save.error ? save.error.message : save.isPending ? "Saving…" : "Read by the next summary run."}</p>
+    </>
   );
 }

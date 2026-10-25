@@ -33,8 +33,53 @@ export const commands = {
 	openSummaryInMail: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_summary_in_mail", { slug, meetingId })),
 	ollamaStatus: () => typedError<OllamaStatus, AppError>(__TAURI_INVOKE("ollama_status")),
 	openOllamaApp: () => typedError<null, AppError>(__TAURI_INVOKE("open_ollama_app")),
-	/**  Starts downloading Qwen through Ollama; progress arrives as events. */
-	pullOllamaModel: () => typedError<null, AppError>(__TAURI_INVOKE("pull_ollama_model")),
+	/**
+	 *  Starts downloading a model through Ollama (`None` = the selected one); progress arrives as
+	 *  events.
+	 */
+	pullOllamaModel: (model: string | null) => typedError<null, AppError>(__TAURI_INVOKE("pull_ollama_model", { model })),
+	removeOllamaModel: (model: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_ollama_model", { model })),
+	/**  The text model for every summary from now on. */
+	selectOllamaModel: (model: string) => typedError<OllamaStatus, AppError>(__TAURI_INVOKE("select_ollama_model", { model })),
+	/**  Drops the text model from memory now. */
+	unloadOllamaModel: () => typedError<null, AppError>(__TAURI_INVOKE("unload_ollama_model")),
+	/**  The workspace's meeting types with their templates (a first one is made if there are none). */
+	listMeetingTypeTemplates: (slug: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("list_meeting_type_templates", { slug })),
+	/**  A new type; `template` = a picked .docx, else a copy of the default type's template. */
+	createMeetingType: (slug: string, name: string, language: Language, template: string | null) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("create_meeting_type", { slug, name, language, template })),
+	updateMeetingType: (slug: string, id: string, name: string, language: Language) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("update_meeting_type", { slug, id, name, language })),
+	setDefaultMeetingType: (slug: string, id: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("set_default_meeting_type", { slug, id })),
+	deleteMeetingType: (slug: string, id: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("delete_meeting_type", { slug, id })),
+	/**  Checks a .docx the user picked, without using it. */
+	checkMinutesTemplate: (path: string) => typedError<TemplateCheck_Serialize, AppError>(__TAURI_INVOKE("check_minutes_template", { path })),
+	replaceTypeTemplate: (slug: string, id: string, path: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("replace_type_template", { slug, id, path })),
+	resetTypeTemplate: (slug: string, id: string) => typedError<MeetingTypeView_Serialize[], AppError>(__TAURI_INVOKE("reset_type_template", { slug, id })),
+	/**  Opens the type's template in Word, or shows it in Finder. */
+	openTypeTemplate: (slug: string, id: string, reveal: boolean) => typedError<null, AppError>(__TAURI_INVOKE("open_type_template", { slug, id, reveal })),
+	/**  Every field a minutes template can use. */
+	minutesTemplateFields: () => typedError<TemplateField[], AppError>(__TAURI_INVOKE("minutes_template_fields")),
+	/**  Changes (or clears) a meeting's type. */
+	setMeetingType: (slug: string, meetingId: string, typeId: string | null) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("set_meeting_type", { slug, meetingId, typeId })),
+	getBrand: (slug: string) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("get_brand", { slug })),
+	updateBrand: (slug: string, patch: BrandPatch_Deserialize) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("update_brand", { slug, patch })),
+	/**  A picked SVG/PNG becomes the logo (`on_dark`: the variant for dark backgrounds); `None` clears. */
+	setBrandLogo: (slug: string, path: string | null, onDark: boolean) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("set_brand_logo", { slug, path, onDark })),
+	resetBrand: (slug: string) => typedError<BrandView_Serialize, AppError>(__TAURI_INVOKE("reset_brand", { slug })),
+	getStorageReport: () => typedError<StorageReport, AppError>(__TAURI_INVOKE("get_storage_report")),
+	/**  0 keeps recordings forever. */
+	setRetentionDays: (days: number) => typedError<null, AppError>(__TAURI_INVOKE("set_retention_days", { days })),
+	/**  Compresses every original recording in the workspace; returns how many. */
+	compressRecordings: (slug: string) => typedError<number, AppError>(__TAURI_INVOKE("compress_recordings", { slug })),
+	/**  Trashes recordings of summarised meetings older than `days`; returns how many. */
+	trashOldRecordings: (slug: string, days: number) => typedError<number, AppError>(__TAURI_INVOKE("trash_old_recordings", { slug, days })),
+	/**  Saves corrected attendees; `remember` teaches the people memory (D-028). */
+	updateAttendees: (slug: string, meetingId: string, attendees: AttendeeEdit_Deserialize[], remember: boolean) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_attendees", { slug, meetingId, attendees, remember })),
+	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
+	/**  Adds (no id) or updates a remembered person. */
+	savePerson: (slug: string, person: PersonInput_Deserialize) => typedError<Person, AppError>(__TAURI_INVOKE("save_person", { slug, person })),
+	deletePerson: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_person", { slug, id })),
+	/**  `other` becomes another spelling of `keep`. */
+	mergePeople: (slug: string, keep: string, other: string) => typedError<Person, AppError>(__TAURI_INVOKE("merge_people", { slug, keep, other })),
 	getBackupStatus: () => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("get_backup_status")),
 	/**  `None` turns daily backups off. */
 	setBackupFolder: (folder: string | null) => typedError<BackupStatus_Serialize, AppError>(__TAURI_INVOKE("set_backup_folder", { folder })),
@@ -84,6 +129,7 @@ export const commands = {
 
 /** Events */
 export const events = {
+	brandChanged: makeEvent<BrandChanged, BrandChanged>("brand-changed"),
 	menuAction: makeEvent<MenuAction, MenuAction>("menu-action"),
 	modelDownloadFinished: makeEvent<ModelDownloadFinished_Serialize, ModelDownloadFinished_Deserialize>("model-download-finished"),
 	modelDownloadProgress: makeEvent<ModelDownloadProgress, ModelDownloadProgress>("model-download-progress"),
@@ -118,6 +164,40 @@ export type AppError = {
 
 export type Attendee = Attendee_Serialize | Attendee_Deserialize;
 
+/**
+ *  One attendee as the user saved it; `heard_as` is the spelling it had before (from the
+ *  model), kept as another spelling when the user changed the name.
+ */
+export type AttendeeEdit = AttendeeEdit_Serialize | AttendeeEdit_Deserialize;
+
+/**
+ *  One attendee as the user saved it; `heard_as` is the spelling it had before (from the
+ *  model), kept as another spelling when the user changed the name.
+ */
+export type AttendeeEdit_Deserialize = {
+	name: string,
+	title: string,
+	organisation: string,
+	attendance: string,
+	heard_as?: string | null,
+	/**  Added or changed in this edit: only these teach the memory. */
+	changed?: boolean,
+};
+
+/**
+ *  One attendee as the user saved it; `heard_as` is the spelling it had before (from the
+ *  model), kept as another spelling when the user changed the name.
+ */
+export type AttendeeEdit_Serialize = {
+	name: string,
+	title: string,
+	organisation: string,
+	attendance: string,
+	heard_as: string | null,
+	/**  Added or changed in this edit: only these teach the memory. */
+	changed: boolean,
+};
+
 export type Attendee_Deserialize = {
 	name?: string,
 	organisation?: string,
@@ -148,6 +228,134 @@ export type BackupStatus_Serialize = {
 	folder: string | null,
 	last_at: string | null,
 	last_error: string | null,
+};
+
+/**  A workspace's brand pack changed (colours, logo, reset): every window re-applies it. */
+export type BrandChanged = {
+	slug: string,
+};
+
+/**
+ *  Fields the Brand screen can change (each `None` = leave as is; `Some("")` clears an
+ *  optional colour or text).
+ */
+export type BrandPatch = BrandPatch_Serialize | BrandPatch_Deserialize;
+
+/**
+ *  Fields the Brand screen can change (each `None` = leave as is; `Some("")` clears an
+ *  optional colour or text).
+ */
+export type BrandPatch_Deserialize = {
+	primary?: string | null,
+	secondary?: string | null,
+	accent?: string | null,
+	text?: string | null,
+	canvas?: string | null,
+	positive?: string | null,
+	warning?: string | null,
+	negative?: string | null,
+	/**  sharp | soft | round */
+	radius_preset?: string | null,
+	button_shape?: string | null,
+	button_primary?: string | null,
+	button_secondary?: string | null,
+	slogan_en?: string | null,
+	slogan_vi?: string | null,
+	font_heading?: string | null,
+	font_body?: string | null,
+};
+
+/**
+ *  Fields the Brand screen can change (each `None` = leave as is; `Some("")` clears an
+ *  optional colour or text).
+ */
+export type BrandPatch_Serialize = {
+	primary: string | null,
+	secondary: string | null,
+	accent: string | null,
+	text: string | null,
+	canvas: string | null,
+	positive: string | null,
+	warning: string | null,
+	negative: string | null,
+	/**  sharp | soft | round */
+	radius_preset: string | null,
+	button_shape: string | null,
+	button_primary: string | null,
+	button_secondary: string | null,
+	slogan_en: string | null,
+	slogan_vi: string | null,
+	font_heading: string | null,
+	font_body: string | null,
+};
+
+/**  What the UI gets: every value resolved, logos as absolute paths (asset protocol). */
+export type BrandView = BrandView_Serialize | BrandView_Deserialize;
+
+/**  What the UI gets: every value resolved, logos as absolute paths (asset protocol). */
+export type BrandView_Deserialize = {
+	name: string,
+	/**  The starter pack this workspace's brand came from (its slug, or "default"). */
+	starter: string,
+	primary: string,
+	/**  50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950. */
+	ramp: string[],
+	secondary?: string | null,
+	accent?: string | null,
+	text: string,
+	canvas: string,
+	status: Status_Deserialize,
+	radius: Radius_Deserialize,
+	button: Button_Deserialize,
+	slogan: Slogan_Deserialize,
+	document_fonts: Fonts_Deserialize,
+	logo_primary?: string | null,
+	logo_on_dark?: string | null,
+	/**  Changes whenever a logo file is replaced (its name carries a timestamp): cache-busting. */
+	logo_version: string,
+};
+
+/**  What the UI gets: every value resolved, logos as absolute paths (asset protocol). */
+export type BrandView_Serialize = {
+	name: string,
+	/**  The starter pack this workspace's brand came from (its slug, or "default"). */
+	starter: string,
+	primary: string,
+	/**  50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950. */
+	ramp: string[],
+	secondary: string | null,
+	accent: string | null,
+	text: string,
+	canvas: string,
+	status: Status_Serialize,
+	radius: Radius_Serialize,
+	button: Button_Serialize,
+	slogan: Slogan_Serialize,
+	document_fonts: Fonts_Serialize,
+	logo_primary: string | null,
+	logo_on_dark: string | null,
+	/**  Changes whenever a logo file is replaced (its name carries a timestamp): cache-busting. */
+	logo_version: string,
+};
+
+export type Button = Button_Serialize | Button_Deserialize;
+
+export type Button_Deserialize = {
+	/**  square | rounded | pill */
+	shape?: string,
+	/**  filled | soft | outline */
+	primary?: string,
+	/**  soft | outline | ghost */
+	secondary?: string,
+};
+
+export type Button_Serialize = {
+	/**  square | rounded | pill */
+	shape: string,
+	/**  filled | soft | outline */
+	primary: string,
+	/**  soft | outline | ghost */
+	secondary: string,
 };
 
 export type Converter = "word" | "libreoffice" | "pages";
@@ -190,7 +398,26 @@ export type ExportOptions_Serialize = {
 	file_name: string | null,
 };
 
+export type Fonts = Fonts_Serialize | Fonts_Deserialize;
+
+export type Fonts_Deserialize = {
+	heading?: string,
+	body?: string,
+	files?: string[],
+};
+
+export type Fonts_Serialize = {
+	heading: string,
+	body: string,
+	files?: string[],
+};
+
 export type GlassStatus = "liquid_glass" | "vibrancy" | "none";
+
+export type InstalledModel = {
+	name: string,
+	size_mb: number,
+};
 
 export type Language = "en" | "vi" | "auto";
 
@@ -225,6 +452,24 @@ export type MeetingTypeSummary = {
 	name: string,
 	language: Language,
 	is_default: boolean,
+};
+
+export type MeetingTypeView = MeetingTypeView_Serialize | MeetingTypeView_Deserialize;
+
+export type MeetingTypeView_Deserialize = {
+	id: string,
+	name: string,
+	language: Language,
+	is_default: boolean,
+	template: TemplateInfo_Deserialize,
+};
+
+export type MeetingTypeView_Serialize = {
+	id: string,
+	name: string,
+	language: Language,
+	is_default: boolean,
+	template: TemplateInfo_Serialize,
 };
 
 export type Meeting_Deserialize = {
@@ -262,7 +507,13 @@ export type MenuAction = "switch_workspace" | "toggle_sidebar" | "open_tenant_se
 /**  File → New Recording (⌘R) or the tray item: start when idle, stop when recording. */
 "toggle_recording" | 
 /**  New Dawn → Run Setup…: the first-run welcome steps again. */
-"run_setup";
+"run_setup" | 
+/**  View → Icon-only Sidebar (⌃⌘S): labels on/off. */
+"icon_sidebar" | 
+/**  Workspace → Workspace Settings… (⌥⌘,): brand, meeting types, people of the current one. */
+"open_workspace" | 
+/**  View → Back / Forward (⌘[ / ⌘]): in-app history. */
+"go_back" | "go_forward";
 
 export type MinutesExport = MinutesExport_Serialize | MinutesExport_Deserialize;
 
@@ -328,16 +579,19 @@ export type OllamaPullFinished = OllamaPullFinished_Serialize | OllamaPullFinish
 
 /**  The Qwen download ended: `error` is None on success. */
 export type OllamaPullFinished_Deserialize = {
+	model: string,
 	error?: AppError | null,
 };
 
 /**  The Qwen download ended: `error` is None on success. */
 export type OllamaPullFinished_Serialize = {
+	model: string,
 	error: AppError | null,
 };
 
 /**  Ollama is downloading Qwen (onboarding): the current layer's progress, in MB. */
 export type OllamaPullProgress = {
+	model: string,
 	status: string,
 	completed_mb: number,
 	total_mb: number,
@@ -345,8 +599,12 @@ export type OllamaPullProgress = {
 
 export type OllamaStatus = {
 	running: boolean,
+	/**  The selected model is pulled. */
 	model_installed: boolean,
+	/**  The selected model. */
 	model: string,
+	/**  Every model Ollama has, for the picker. */
+	installed: InstalledModel[],
 };
 
 export type OpenIssue = OpenIssue_Serialize | OpenIssue_Deserialize;
@@ -373,6 +631,54 @@ export type OpenSettingsTab = {
 };
 
 export type PermissionState = "granted" | "denied" | "not_determined" | "restricted";
+
+export type Person = {
+	id: string,
+	name: string,
+	title: string,
+	organisation: string,
+	/**  Other spellings that mean this person. */
+	aliases: string[],
+	updated_at: string,
+};
+
+export type PersonInput = PersonInput_Serialize | PersonInput_Deserialize;
+
+export type PersonInput_Deserialize = {
+	/**  `None` adds a person. */
+	id?: string | null,
+	name: string,
+	title: string,
+	organisation: string,
+	aliases: string[],
+};
+
+export type PersonInput_Serialize = {
+	/**  `None` adds a person. */
+	id: string | null,
+	name: string,
+	title: string,
+	organisation: string,
+	aliases: string[],
+};
+
+export type Radius = Radius_Serialize | Radius_Deserialize;
+
+export type Radius_Deserialize = {
+	preset?: string,
+	card?: number,
+	chip?: number,
+	control?: number,
+	modal?: number,
+};
+
+export type Radius_Serialize = {
+	preset: string,
+	card: number,
+	chip: number,
+	control: number,
+	modal: number,
+};
 
 /**  10 Hz meter while recording: RMS 0–1 for the mic ("you") and the call ("them"). */
 export type RecorderLevel = {
@@ -430,10 +736,43 @@ export type Section_Serialize = {
 	edited: boolean,
 };
 
-export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "about";
+export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";
+
+export type Slogan = Slogan_Serialize | Slogan_Deserialize;
+
+export type Slogan_Deserialize = {
+	en?: string,
+	vi?: string,
+};
+
+export type Slogan_Serialize = {
+	en: string,
+	vi: string,
+};
 
 /**  Where a transcription job is; sent to the UI with a 0–100 percent. */
 export type Stage = "queued" | "decoding" | "detecting_speech" | "transcribing" | "saving";
+
+export type Status = Status_Serialize | Status_Deserialize;
+
+export type Status_Deserialize = {
+	positive?: string,
+	warning?: string,
+	negative?: string,
+};
+
+export type Status_Serialize = {
+	positive: string,
+	warning: string,
+	negative: string,
+};
+
+export type StorageReport = {
+	workspaces: WorkspaceStorage[],
+	models_bytes: number | null,
+	logs_bytes: number | null,
+	retention_days: number,
+};
 
 /**
  *  What `summary.sections_json` holds. The structured lists feed the email sections and the
@@ -539,6 +878,59 @@ export type SystemAudio =
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
 
+export type TemplateCheck = TemplateCheck_Serialize | TemplateCheck_Deserialize;
+
+export type TemplateCheck_Deserialize = {
+	/**  Every `{{field}}` the file uses. */
+	fields: string[],
+	/**  Fields New Dawn doesn't know (typos): they come out empty. */
+	unknown: string[],
+	/**  Top-level fields the file doesn't use (fine, just not shown). */
+	unused: string[],
+	/**  Why the file can't be used (not a .docx, unclosed `{{#block}}`…); `None` = usable. */
+	error?: string | null,
+};
+
+export type TemplateCheck_Serialize = {
+	/**  Every `{{field}}` the file uses. */
+	fields: string[],
+	/**  Fields New Dawn doesn't know (typos): they come out empty. */
+	unknown: string[],
+	/**  Top-level fields the file doesn't use (fine, just not shown). */
+	unused: string[],
+	/**  Why the file can't be used (not a .docx, unclosed `{{#block}}`…); `None` = usable. */
+	error: string | null,
+};
+
+/**  A field a template can use: a value, or a list (`{{#name}}…{{/name}}`) with its own fields. */
+export type TemplateField = {
+	name: string,
+	list: boolean,
+	children: TemplateField[],
+};
+
+export type TemplateInfo = TemplateInfo_Serialize | TemplateInfo_Deserialize;
+
+export type TemplateInfo_Deserialize = {
+	/**  The type's own file (None: it has none yet and the default type's is used). */
+	path?: string | null,
+	/**  Last change of the file (ISO-8601 UTC). */
+	modified_at?: string | null,
+	/**  A starter pack for this workspace ships with the app (Reset is possible). */
+	has_starter: boolean,
+	check?: TemplateCheck_Deserialize | null,
+};
+
+export type TemplateInfo_Serialize = {
+	/**  The type's own file (None: it has none yet and the default type's is used). */
+	path: string | null,
+	/**  Last change of the file (ISO-8601 UTC). */
+	modified_at: string | null,
+	/**  A starter pack for this workspace ships with the app (Reset is possible). */
+	has_starter: boolean,
+	check: TemplateCheck_Serialize | null,
+};
+
 /**  One agenda item / topic and what was said about it. */
 export type Topic = Topic_Serialize | Topic_Deserialize;
 
@@ -598,6 +990,17 @@ export type WorkspacePatch_Deserialize = {
 export type WorkspacePatch_Serialize = {
 	name: string | null,
 	archived: boolean | null,
+};
+
+/**  Sizes are bytes as f64: the bindings export refuses u64. */
+export type WorkspaceStorage = {
+	slug: string,
+	name: string,
+	recordings_bytes: number | null,
+	/**  Recordings still in their original (uncompressed) form. */
+	originals: number,
+	exports_bytes: number | null,
+	database_bytes: number | null,
 };
 
 export type Workspace_Deserialize = {

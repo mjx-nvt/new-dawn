@@ -27,18 +27,23 @@ mod kernel {
         pub mod pdf;
     }
     pub mod backup;
+    pub mod brand {
+        pub mod tokens;
+    }
     pub mod glass;
     pub mod hub;
     pub mod menu;
     pub mod notify;
     pub mod permissions;
     pub mod registry;
+    pub mod storage;
     pub mod tray;
     pub mod windows;
 }
 
 mod modules {
     pub mod meetings;
+    pub mod people;
 }
 
 mod recorder {
@@ -51,13 +56,17 @@ mod recorder {
 
 mod commands {
     pub mod backup;
+    pub mod brand;
     pub mod glass;
     pub mod meetings;
     pub mod minutes;
     pub mod models;
     pub mod onboarding;
+    pub mod people;
     pub mod recorder;
+    pub mod storage;
     pub mod summary;
+    pub mod templates;
     pub mod window;
     pub mod workspace;
 }
@@ -94,6 +103,33 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::ollama_status,
             commands::summary::open_ollama_app,
             commands::summary::pull_ollama_model,
+            commands::summary::remove_ollama_model,
+            commands::summary::select_ollama_model,
+            commands::summary::unload_ollama_model,
+            commands::templates::list_meeting_type_templates,
+            commands::templates::create_meeting_type,
+            commands::templates::update_meeting_type,
+            commands::templates::set_default_meeting_type,
+            commands::templates::delete_meeting_type,
+            commands::templates::check_minutes_template,
+            commands::templates::replace_type_template,
+            commands::templates::reset_type_template,
+            commands::templates::open_type_template,
+            commands::templates::minutes_template_fields,
+            commands::meetings::set_meeting_type,
+            commands::brand::get_brand,
+            commands::brand::update_brand,
+            commands::brand::set_brand_logo,
+            commands::brand::reset_brand,
+            commands::storage::get_storage_report,
+            commands::storage::set_retention_days,
+            commands::storage::compress_recordings,
+            commands::storage::trash_old_recordings,
+            commands::summary::update_attendees,
+            commands::people::list_people,
+            commands::people::save_person,
+            commands::people::delete_person,
+            commands::people::merge_people,
             commands::backup::get_backup_status,
             commands::backup::set_backup_folder,
             commands::backup::backup_now,
@@ -143,6 +179,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             events::SummaryProgress,
             events::OllamaPullProgress,
             events::OllamaPullFinished,
+            events::BrandChanged,
             events::SummaryFinished,
         ])
 }
@@ -196,6 +233,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // OTA updates (D-031): the only non-localhost traffic besides model downloads, and only
+        // when the user (or the daily check they can switch off) asks for it.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // Position and size only: restoring VISIBLE would reopen the app with a hidden main window.
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -246,6 +287,9 @@ pub fn run() {
                         );
                     }
                 }
+                if let Some(model) = hub.app_setting(kernel::ai::ollama::MODEL_SETTING).await? {
+                    kernel::ai::ollama::use_model(&model);
+                }
                 let idle = hub
                     .app_setting(kernel::ai::whisper::IDLE_UNLOAD_SETTING)
                     .await?;
@@ -264,6 +308,7 @@ pub fn run() {
             app.manage(recorder::session::Recorder::default());
             app.manage(modules::meetings::summarise::SummaryJobs::default());
             kernel::backup::spawn_scheduler(app.handle());
+            kernel::storage::spawn_scheduler(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {

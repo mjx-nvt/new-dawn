@@ -8,7 +8,6 @@ use chrono::{DateTime, Local, NaiveTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use sqlx::SqlitePool;
-use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 
 use super::summarise;
@@ -17,8 +16,6 @@ use crate::kernel::export::docx;
 use crate::kernel::export::model::{self, MinutesInput};
 use crate::kernel::export::pdf::{self, Converter};
 use crate::kernel::hub::WorkspaceHub;
-
-const TEMPLATE: &str = "templates/meeting-minutes/template.docx";
 
 #[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
 pub struct MinutesExport {
@@ -100,7 +97,7 @@ pub async fn export_docx(
     });
 
     let folder = Path::new(&workspace.folder_path);
-    let template = template_path(app, folder, slug)?;
+    let template = super::template::path_for(app, slug, meeting.meeting_type_id.as_deref()).await?;
     let stem = options
         .file_name
         .as_deref()
@@ -240,25 +237,6 @@ async fn day_seq(
     .fetch_one(pool)
     .await?;
     Ok(n.max(1))
-}
-
-/// The workspace's own template, else the bundled starter pack with the same slug.
-// ponytail: matched by slug until tenant setup (P1.4) copies the starter pack into the workspace
-// and records it in `document_template`.
-fn template_path(app: &AppHandle, folder: &Path, slug: &str) -> Result<PathBuf> {
-    let own = folder.join("brand").join(TEMPLATE);
-    if own.is_file() {
-        return Ok(own);
-    }
-    let bundled = app
-        .path()
-        .resolve(format!("brands/{slug}/{TEMPLATE}"), BaseDirectory::Resource)?;
-    if bundled.is_file() {
-        return Ok(bundled);
-    }
-    bail!(AppError::not_found(
-        "This workspace has no meeting-minutes template yet"
-    ))
 }
 
 /// A safe file name: no path separators, colons or control characters, no typed extension, at

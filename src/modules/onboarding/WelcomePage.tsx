@@ -32,11 +32,11 @@ export default function WelcomePage() {
   useWorkspacesSync();
   const index = WELCOME_STEPS.findIndex((s) => s.id === step);
   const go = (to: number) => void navigate({ to: "/welcome", search: { step: WELCOME_STEPS[to].id }, replace: true });
-  const close = () => finish.mutate(true, { onSuccess: () => void navigate({ to: "/meetings", search: {} }) });
+  const close = () => finish.mutate(true, { onSuccess: () => void navigate({ to: "/meetings", search: {}, replace: true }) }); // Back never returns here
 
   return (
     <div className={styles.window}>
-      <header className={styles.strip} data-tauri-drag-region>
+      <header className={styles.strip} data-tauri-drag-region="deep">
         <ol className={styles.steps}>
           {WELCOME_STEPS.map((s, i) => (
             <li key={s.id} className={i === index ? styles.current : i < index ? styles.past : undefined}>
@@ -211,7 +211,7 @@ function OllamaStep() {
           {s?.model_installed || pull.done ? (
             <span className="chip chipBrand">Installed</span>
           ) : (
-            <button type="button" className="btn btnSecondary btnCompact" disabled={!s?.running || pull.running} onClick={pull.start}>
+            <button type="button" className="btn btnSecondary btnCompact" disabled={!s?.running || pull.running} onClick={() => pull.start()}>
               {pull.running ? "Downloading…" : "Download"}
             </button>
           )}

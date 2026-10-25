@@ -1,7 +1,7 @@
 {
   "name": "new-dawn",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "check:localhost": "bash scripts/check-localhost-only.sh"
+    "check:localhost": "bash scripts/check-localhost-only.sh",
+    "check:listing": "node --experimental-strip-types scripts/check-listing.ts"
   },
   "dependencies": {
     "@fontsource/be-vietnam-pro": "^5.0.0",
@@ -18,6 +19,8 @@
     "@tauri-apps/api": "~2.11.1",
     "@tauri-apps/plugin-dialog": "~2.7.3",
     "@tauri-apps/plugin-opener": "~2.5.5",
+    "@tauri-apps/plugin-process": "~2.3.1",
+    "@tauri-apps/plugin-updater": "~2.12.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

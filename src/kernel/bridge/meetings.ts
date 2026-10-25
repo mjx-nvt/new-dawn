@@ -204,3 +204,15 @@ export function useDeleteMeeting(slug: string, meetingId: string) {
     },
   });
 }
+
+/** Changes (or clears) a meeting's type; the next minutes export uses its template. */
+export function useSetMeetingType(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (typeId: string | null) => unwrap(commands.setMeetingType(slug, meetingId, typeId)),
+    onSuccess: (meeting) => {
+      queryClient.setQueryData(keys.meeting(slug, meetingId), meeting);
+      void queryClient.invalidateQueries({ queryKey: keys.meetings(slug) });
+    },
+  });
+}

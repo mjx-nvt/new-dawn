@@ -21,7 +21,40 @@ use crate::kernel::ai::queue::AiQueue;
 use crate::kernel::ai::whisper::WhisperEngine;
 
 const BASE: &str = "http://localhost:11434";
-pub const MODEL: &str = "qwen3.5:9b";
+/// The text model until the user picks another in Settings → Models (D-027).
+pub const DEFAULT_MODEL: &str = "qwen3.5:9b";
+/// App setting holding the picked model.
+pub const MODEL_SETTING: &str = "ollama_model";
+/// The picked model ("" = default); loaded at launch, changed by `select`.
+static SELECTED: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
+
+/// The text model every call uses.
+pub fn model() -> String {
+    let picked = SELECTED
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if picked.is_empty() {
+        DEFAULT_MODEL.to_owned()
+    } else {
+        picked.clone()
+    }
+}
+
+/// Uses `name` from now on (the caller stores it as `MODEL_SETTING`).
+pub fn use_model(name: &str) {
+    *SELECTED
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = name.to_owned();
+}
+
+/// Ollama model names: letters, digits and `._:/-` (e.g. `qwen3.5:9b`, `library/qwen3:4b`).
+pub fn valid_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 200
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._:/-".contains(c))
+}
 /// Context window asked of Ollama for every call (fits the 9B model on 16 GB with Whisper unloaded).
 pub const NUM_CTX: u32 = 32_768;
 /// How long Ollama keeps Qwen loaded after a call (several calls per summary reuse it).
@@ -30,8 +63,18 @@ const KEEP_ALIVE: &str = "5m";
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct OllamaStatus {
     pub running: bool,
+    /// The selected model is pulled.
     pub model_installed: bool,
+    /// The selected model.
     pub model: String,
+    /// Every model Ollama has, for the picker.
+    pub installed: Vec<InstalledModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct InstalledModel {
+    pub name: String,
+    pub size_mb: u32,
 }
 
 /// A client that never uses HTTP(S)_PROXY / ALL_PROXY: meeting text must not leave the Mac
@@ -53,11 +96,15 @@ pub async fn status() -> OllamaStatus {
     #[derive(Deserialize)]
     struct Tag {
         name: String,
+        #[serde(default)]
+        size: u64,
     }
+    let model = model();
     let down = || OllamaStatus {
         running: false,
         model_installed: false,
-        model: MODEL.to_owned(),
+        model: model.clone(),
+        installed: Vec::new(),
     };
     let Ok(client) = client(Duration::from_secs(2)) else {
         return down();
@@ -69,31 +116,58 @@ pub async fn status() -> OllamaStatus {
         .await;
     match tags {
         Ok(response) => {
-            let installed = response
+            let mut installed: Vec<InstalledModel> = response
                 .json::<Tags>()
                 .await
-                .map(|t| t.models.iter().any(|m| m.name == MODEL))
-                .unwrap_or(false);
+                .map(|t| t.models)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|m| InstalledModel {
+                    name: m.name,
+                    size_mb: (m.size / 1_000_000) as u32,
+                })
+                .collect();
+            installed.sort_by(|a, b| a.name.cmp(&b.name));
             OllamaStatus {
                 running: true,
-                model_installed: installed,
-                model: MODEL.to_owned(),
+                model_installed: installed.iter().any(|m| m.name == model),
+                model,
+                installed,
             }
         }
         Err(_) => down(),
     }
 }
 
-/// One pull at a time (the onboarding button can't start two).
+/// One pull at a time (the onboarding button can't start two), and which model it is.
 static PULLING: AtomicBool = AtomicBool::new(false);
+static PULLING_NAME: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
 /// Asks Ollama to download Qwen in the background (Ollama fetches it; New Dawn only talks to
 /// localhost). Progress: `OllamaPullProgress` in MB; the end: `OllamaPullFinished`.
-pub fn start_pull(app: &AppHandle) -> Result<()> {
-    if PULLING.swap(true, Ordering::AcqRel) {
-        return Ok(()); // already running: the caller just listens to its progress
+pub fn start_pull(app: &AppHandle, name: &str) -> Result<()> {
+    if !valid_name(name) {
+        bail!(AppError::invalid(
+            "That isn't an Ollama model name (e.g. qwen3.5:9b)"
+        ));
     }
-    let app = app.clone();
+    {
+        let mut current = PULLING_NAME
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if PULLING.load(Ordering::Acquire) {
+            if *current == name {
+                return Ok(()); // already running: the caller just listens to its progress
+            }
+            bail!(AppError::new(
+                "busy",
+                format!("{current} is downloading — try again when it's done")
+            ));
+        }
+        PULLING.store(true, Ordering::Release);
+        name.clone_into(&mut current);
+    }
+    let (app, name) = (app.clone(), name.to_owned());
     tauri::async_runtime::spawn(async move {
         /// Clears the flag however the task ends (a panic included).
         struct Done;
@@ -103,12 +177,13 @@ pub fn start_pull(app: &AppHandle) -> Result<()> {
             }
         }
         let done = Done;
-        let result = pull(&app).await;
+        let result = pull(&app, &name).await;
         drop(done);
         if let Err(err) = &result {
             tracing::warn!("model pull ended: {err:#}");
         }
         let _ = OllamaPullFinished {
+            model: name,
             error: result.err().map(AppError::from),
         }
         .emit(&app);
@@ -116,7 +191,7 @@ pub fn start_pull(app: &AppHandle) -> Result<()> {
     Ok(())
 }
 
-async fn pull(app: &AppHandle) -> Result<()> {
+async fn pull(app: &AppHandle, name: &str) -> Result<()> {
     #[derive(Deserialize)]
     struct Line {
         #[serde(default)]
@@ -128,7 +203,7 @@ async fn pull(app: &AppHandle) -> Result<()> {
     // A long read timeout: Ollama can go quiet while it verifies a multi-GB layer.
     let response = client(Duration::from_secs(300))?
         .post(format!("{BASE}/api/pull"))
-        .json(&serde_json::json!({ "model": MODEL, "stream": true }))
+        .json(&serde_json::json!({ "model": name, "stream": true }))
         .send()
         .await
         .map_err(|_| AppError::new("ollama_unavailable", "Ollama isn't running"))?;
@@ -161,6 +236,7 @@ async fn pull(app: &AppHandle) -> Result<()> {
                 last_status.clone_from(&line.status);
                 let mb = |b: Option<u64>| (b.unwrap_or(0) / 1_000_000) as u32;
                 let _ = OllamaPullProgress {
+                    model: name.to_owned(),
                     status: line.status,
                     completed_mb: mb(line.completed),
                     total_mb: mb(line.total),
@@ -175,9 +251,56 @@ async fn pull(app: &AppHandle) -> Result<()> {
     ))
 }
 
-/// Asks Ollama to drop Qwen from memory now (before Whisper loads). Best effort.
+/// Picks the text model (must already be in Ollama) and remembers it.
+/// Waits for the AI queue, so a running summary finishes with the model it started with.
+pub async fn select(app: &AppHandle, name: &str) -> Result<OllamaStatus> {
+    if !valid_name(name) {
+        bail!(AppError::invalid("That isn't an Ollama model name"));
+    }
+    let _turn = app.state::<AiQueue>().inner().acquire().await;
+    if !status().await.installed.iter().any(|m| m.name == name) {
+        bail!(AppError::invalid(format!(
+            "Download {name} before choosing it"
+        )));
+    }
+    unload().await; // the old one leaves memory
+    app.state::<crate::kernel::hub::WorkspaceHub>()
+        .set_app_setting(MODEL_SETTING, name)
+        .await?;
+    use_model(name);
+    Ok(status().await)
+}
+
+/// Deletes a model from Ollama. Waits for the AI queue, so it never pulls the model out from
+/// under a running summary.
+pub async fn remove(app: &AppHandle, name: &str) -> Result<()> {
+    if !valid_name(name) {
+        bail!(AppError::invalid("That isn't an Ollama model name"));
+    }
+    if name == model() {
+        bail!(AppError::invalid(
+            "This model writes the summaries — choose another one first"
+        ));
+    }
+    let _turn = app.state::<AiQueue>().inner().acquire().await;
+    let response = client(Duration::from_secs(30))?
+        .delete(format!("{BASE}/api/delete"))
+        .json(&serde_json::json!({ "model": name }))
+        .send()
+        .await
+        .map_err(|_| AppError::new("ollama_unavailable", "Ollama isn't running"))?;
+    if !response.status().is_success() {
+        bail!(AppError::new(
+            "ollama_error",
+            format!("Ollama couldn't remove {name} ({})", response.status())
+        ));
+    }
+    Ok(())
+}
+
+/// Asks Ollama to drop the text model from memory now (before Whisper loads). Best effort.
 pub async fn unload() {
-    let body = serde_json::json!({ "model": MODEL, "keep_alive": 0 });
+    let body = serde_json::json!({ "model": model(), "keep_alive": 0 });
     if let Ok(client) = client(Duration::from_secs(10)) {
         let _ = client
             .post(format!("{BASE}/api/generate"))
@@ -212,6 +335,8 @@ pub struct TextSession<'a> {
     _turn: MutexGuard<'a, ()>,
     pool: SqlitePool,
     meeting_id: Option<String>,
+    /// Fixed for the whole session (a pick in Settings waits for the queue anyway).
+    model: String,
 }
 
 /// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
@@ -231,7 +356,10 @@ pub async fn session<'a>(
     if !ollama.model_installed {
         bail!(AppError::new(
             "ollama_model_missing",
-            format!("Ollama doesn't have {MODEL} yet (run: ollama pull {MODEL})")
+            format!(
+                "Ollama doesn't have {} yet — download it in Settings → Models",
+                ollama.model
+            )
         ));
     }
     app.state::<WhisperEngine>().unload_now();
@@ -239,7 +367,20 @@ pub async fn session<'a>(
         _turn: turn,
         pool,
         meeting_id: meeting_id.map(str::to_owned),
+        model: ollama.model,
     })
+}
+
+#[cfg(test)]
+mod name_tests {
+    #[test]
+    fn model_names_are_checked() {
+        assert!(super::valid_name("qwen3.5:9b"));
+        assert!(super::valid_name("library/qwen3:4b-q4_K_M"));
+        assert!(!super::valid_name(""));
+        assert!(!super::valid_name("qwen; rm -rf"));
+        assert!(!super::valid_name("a b"));
+    }
 }
 
 #[cfg(test)]
@@ -250,11 +391,17 @@ impl<'a> TextSession<'a> {
             _turn: turn,
             pool,
             meeting_id: None,
+            model: model(),
         }
     }
 }
 
 impl TextSession<'_> {
+    /// The model this session talks to.
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
     /// One streamed `/api/chat` call. `on_token` gets the running count of generated tokens.
     /// Errors with `context_overflow` if the prompt filled the context (Ollama truncates silently).
     pub async fn complete(
@@ -290,7 +437,7 @@ impl TextSession<'_> {
         };
         let entry = AiLogEntry {
             kind: "complete",
-            model: MODEL,
+            model: &self.model,
             meeting_id: self.meeting_id.as_deref(),
             duration_ms: started.elapsed().as_millis() as u32,
             status,
@@ -334,7 +481,7 @@ impl TextSession<'_> {
         }
 
         let body = serde_json::json!({
-            "model": MODEL,
+            "model": self.model,
             "messages": request.messages,
             "stream": true,
             "think": request.think,

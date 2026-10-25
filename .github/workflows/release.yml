@@ -1,0 +1,59 @@
+# Builds New Dawn for Apple Silicon and publishes the .dmg plus the signed update bundle and
+# latest.json to the public releases repo (the app's updater reads it from there).
+# Trigger: push a tag like v0.2.0.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tag must match the app version (else the updater never offers it)
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          test "v$version" = "${{ github.ref_name }}" || { echo "tag ${{ github.ref_name }} != v$version"; exit 1; }
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # The release lives in the public repo; RELEASES_TOKEN is a fine-grained token with
+          # "Contents: read and write" on mjx-nvt/new-dawn-releases.
+          owner: mjx-nvt
+          repo: new-dawn-releases
+          tagName: ${{ github.ref_name }}
+          releaseName: "New Dawn ${{ github.ref_name }}"
+          releaseBody: "See the commit history for what changed."
+          releaseDraft: false
+          prerelease: false
+          args: --target aarch64-apple-darwin

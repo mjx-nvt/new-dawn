@@ -49,6 +49,8 @@
   transition: background 150ms ease-out;
 }
 .item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.item:disabled { opacity: .5; }
 
 .active,
 .active:hover {
@@ -57,18 +59,26 @@
   font-weight: 600;
 }
 
-.disabled,
-.disabled:hover {
-  background: none;
-  color: var(--ink-3);
+.item > svg { flex: none; color: var(--ink-2); }
+.active > svg { color: inherit; }
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.recordDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--status-negative);
-  opacity: .5;
+.recording,
+.recording > svg { color: var(--status-negative); }
+
+/* Icon-only rail: items become centred squares; labels live in tooltips. */
+/* visible: the workspace popover is wider than the rail. */
+.rail { padding: 0 var(--space-3) var(--space-3); overflow: visible; }
+.rail .item {
+  justify-content: center;
+  height: 36px;
+  padding: 0;
 }
 
 @media (prefers-color-scheme: dark) {

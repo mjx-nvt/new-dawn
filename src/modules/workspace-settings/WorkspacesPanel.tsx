@@ -8,6 +8,7 @@ import {
   useWorkspaces,
   type Workspace,
 } from "../../kernel/bridge/workspaces";
+import DangerButton from "../../kernel/shell/DangerButton";
 import settings from "./Settings.module.css";
 import styles from "./WorkspacesPanel.module.css";
 
@@ -97,7 +98,6 @@ function WorkspaceRow({ workspace, isCurrent }: { workspace: Workspace; isCurren
   const update = useUpdateWorkspace();
   const choose = useSetCurrentWorkspace();
   const remove = useDeleteWorkspace();
-  const [confirming, setConfirming] = useState(false);
   const error = update.error ?? remove.error ?? choose.error;
 
   return (
@@ -125,15 +125,9 @@ function WorkspaceRow({ workspace, isCurrent }: { workspace: Workspace; isCurren
         >
           {workspace.archived ? "Unarchive" : "Archive"}
         </button>
-        <button
-          className={confirming ? styles.danger : styles.ghost}
-          type="button"
-          disabled={remove.isPending}
-          onClick={() => (confirming ? remove.mutate(workspace.slug) : setConfirming(true))}
-          onBlur={() => setConfirming(false)}
-        >
-          {confirming ? "Confirm: move to Trash" : "Move to Trash"}
-        </button>
+        <DangerButton confirm="Move to Trash?" onConfirm={() => remove.mutate(workspace.slug)} disabled={remove.isPending} compact={false}>
+          Move to Trash
+        </DangerButton>
       </div>
     </div>
   );

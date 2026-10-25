@@ -25,6 +25,8 @@ export function testNotification(): Promise<null> {
 }
 
 export interface PullState {
+  /** The model being (or last) downloaded. */
+  model: string;
   running: boolean;
   status: string;
   completedMb: number;
@@ -36,14 +38,21 @@ export interface PullState {
 /** Downloads Qwen through Ollama, with live progress from the pull events. */
 export function useOllamaPull() {
   const queryClient = useQueryClient();
-  const [state, setState] = useState<PullState>({ running: false, status: "", completedMb: 0, totalMb: 0, error: null, done: false });
+  const [state, setState] = useState<PullState>({ model: "", running: false, status: "", completedMb: 0, totalMb: 0, error: null, done: false });
 
   useEffect(() => {
     const onProgress = events.ollamaPullProgress.listen(({ payload }) =>
-      setState((s) => ({ ...s, running: true, status: payload.status, completedMb: payload.completed_mb, totalMb: payload.total_mb })),
+      setState((s) => ({
+        ...s,
+        model: payload.model,
+        running: true,
+        status: payload.status,
+        completedMb: payload.completed_mb,
+        totalMb: payload.total_mb,
+      })),
     );
     const onFinished = events.ollamaPullFinished.listen(({ payload }) => {
-      setState((s) => ({ ...s, running: false, error: payload.error, done: !payload.error }));
+      setState((s) => ({ ...s, model: payload.model, running: false, error: payload.error, done: !payload.error }));
       void queryClient.invalidateQueries({ queryKey: keys.ollama });
     });
     return () => {
@@ -52,9 +61,10 @@ export function useOllamaPull() {
     };
   }, [queryClient]);
 
-  const start = () => {
-    setState({ running: true, status: "starting", completedMb: 0, totalMb: 0, error: null, done: false });
-    unwrap(commands.pullOllamaModel()).catch((error: AppError) => setState((s) => ({ ...s, running: false, error })));
+  /** Downloads `model`, or the selected text model when omitted. */
+  const start = (model?: string) => {
+    setState({ model: model ?? "", running: true, status: "starting", completedMb: 0, totalMb: 0, error: null, done: false });
+    unwrap(commands.pullOllamaModel(model ?? null)).catch((error: AppError) => setState((s) => ({ ...s, running: false, error })));
   };
   return { ...state, start };
 }

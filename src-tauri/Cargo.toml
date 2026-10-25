@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.1.0"
+version = "0.2.0"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -34,6 +34,7 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
+unicode-normalization = "0.1"
 # tauri-specta is in beta: keep all three pinned together (see tauri-specta docs).
 tauri-specta = { version = "=2.0.0-rc.26", features = ["typescript", "derive"] }
 specta = "=2.0.0-rc.26"
@@ -57,6 +58,8 @@ rubato = "5"
 cpal = "0.18"
 ebur128 = "0.1"
 cidre = { version = "0.29", default-features = false, features = ["core_audio", "av", "async", "dispatch", "macos_14_2"] }
+tauri-plugin-updater = "2.12.0"
+tauri-plugin-process = "2.3.1"
 
 # ── Added per phase (see docs/playbook.md). Keep this list honest: add a crate
 #    in the prompt that first needs it, and check its current API on docs.rs. ──

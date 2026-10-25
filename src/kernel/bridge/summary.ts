@@ -125,3 +125,25 @@ export function openOllamaApp(): Promise<boolean> {
     },
   );
 }
+
+/** Every summary from now on uses `model` (it must be downloaded). */
+export function useSelectOllamaModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (model: string) => unwrap(commands.selectOllamaModel(model)),
+    onSuccess: (status) => queryClient.setQueryData(keys.ollama, status),
+  });
+}
+
+export function useRemoveOllamaModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (model: string) => unwrap(commands.removeOllamaModel(model)),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: keys.ollama }),
+  });
+}
+
+/** Drops the text model from memory now. */
+export function unloadOllamaModel(): Promise<null> {
+  return unwrap(commands.unloadOllamaModel());
+}

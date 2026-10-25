@@ -7,6 +7,7 @@ use anyhow::{Result, bail};
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use sqlx::SqlitePool;
 
+use super::summarise::Attendee;
 use super::summarise::{
     self, ActionItem, Decision, OpenIssue, SectionKind, SummaryDoc, Topic, not_discussed,
 };
@@ -14,6 +15,7 @@ use super::{Meeting, MeetingStatus};
 use crate::error::AppError;
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::people::{self, AttendeeEdit};
 
 /// One top-level bullet (or paragraph) and the bullets nested under it, as plain text.
 #[derive(Debug, PartialEq)]
@@ -175,6 +177,38 @@ pub fn keep_edits(new: &mut SummaryDoc, old: &SummaryDoc) {
     }
 }
 
+/// Saves the attendees as the user corrected them (minutes and email follow) and, with
+/// `remember`, teaches the people memory so the next meeting gets them right.
+pub async fn update_attendees(
+    pool: &SqlitePool,
+    workspace: &str,
+    meeting_id: &str,
+    attendees: &[AttendeeEdit],
+    remember: bool,
+) -> Result<summarise::SummaryView> {
+    let meeting = super::get(pool, meeting_id).await?;
+    if meeting.status == MeetingStatus::Summarising {
+        bail!(AppError::invalid(
+            "A summary is being written — edit it when it's done"
+        ));
+    }
+    let mut current = summarise::view(pool, meeting_id)
+        .await?
+        .ok_or_else(|| AppError::not_found("This meeting has no summary yet"))?;
+    current.doc.attendees = attendees
+        .iter()
+        .filter(|a| !a.name.trim().is_empty())
+        .map(Attendee::from)
+        .collect();
+    summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
+    if remember {
+        people::remember(pool, attendees).await?;
+    }
+    summarise::view(pool, meeting_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("summary vanished while saving"))
+}
+
 fn busy(meeting: &Meeting) -> bool {
     matches!(
         meeting.status,
@@ -252,7 +286,7 @@ pub async fn rename(
 }
 
 /// Moves a file or folder to the Trash off the async workers (Finder can take a second).
-pub(super) async fn to_trash(path: PathBuf) -> Result<()> {
+pub async fn to_trash(path: PathBuf) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || {
         trash::delete(&path)
             .map_err(|e| anyhow::anyhow!("moving {} to the Trash: {e}", path.display()))

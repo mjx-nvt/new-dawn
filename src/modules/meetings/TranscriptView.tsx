@@ -43,6 +43,9 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
         />
       )}
 
+      {!meeting.audio_path && meeting.status === "summarised" && (
+        <p className={`fieldHint ${styles.empty}`}>The recording was removed under the retention setting (Settings → Storage); the transcript stays.</p>
+      )}
       {transcript.error && <p className={styles.error}>{transcript.error.message}</p>}
       {update.error && (
         <p className={styles.error} role="alert">

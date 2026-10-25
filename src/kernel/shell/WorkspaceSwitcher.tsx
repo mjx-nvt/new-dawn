@@ -1,21 +1,25 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { useCurrentWorkspace, useSetCurrentWorkspace, useWorkspaces } from "../bridge/workspaces";
+import { useBrandLogo } from "../theme/applyBrand";
 import styles from "./WorkspaceSwitcher.module.css";
 
 interface Props {
+  /** In the icon rail: just the logo mark (the name is the tooltip). */
+  compact?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /** The workspace badge at the top of the sidebar; click opens the switcher popover. */
-export default function WorkspaceSwitcher({ open, onOpenChange }: Props) {
+export default function WorkspaceSwitcher({ compact = false, open, onOpenChange }: Props) {
   const { data: current } = useCurrentWorkspace();
   const { data: workspaces } = useWorkspaces();
   const { mutate: choose } = useSetCurrentWorkspace();
   const navigate = useNavigate();
   const root = useRef<HTMLDivElement>(null);
   const active = (workspaces ?? []).filter((w) => !w.archived);
+  const logo = useBrandLogo(current?.slug);
 
   useEffect(() => {
     if (!open) return;
@@ -37,17 +41,30 @@ export default function WorkspaceSwitcher({ open, onOpenChange }: Props) {
     <div className={styles.root} ref={root}>
       <button
         type="button"
-        className={styles.badge}
+        className={compact ? `${styles.badge} ${styles.compact}` : styles.badge}
         aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={compact ? `Workspace: ${current?.name ?? "none"}` : undefined}
+        title={compact ? current?.name : undefined}
         onClick={() => onOpenChange(!open)}
       >
-        <span className={current ? styles.mark : `${styles.mark} ghostAvatar`}>
-          {current ? current.name.charAt(0).toUpperCase() : ""}
-        </span>
-        <span className={current ? styles.badgeName : `${styles.badgeName} ghostText`}>
-          {current ? current.name : "No workspace"}
-        </span>
-        <span className={styles.chevron} aria-hidden>⌄</span>
+        {logo && !compact ? (
+          <img className={styles.logo} src={logo} alt="" />
+        ) : (
+          <span className={current ? styles.mark : `${styles.mark} ghostAvatar`}>
+            {current ? current.name.charAt(0).toUpperCase() : ""}
+          </span>
+        )}
+        {!compact && (
+          <>
+            <span className={current ? styles.badgeName : `${styles.badgeName} ghostText`}>
+              {current ? current.name : "No workspace"}
+            </span>
+            <span className={styles.chevron} aria-hidden>
+              ⌄
+            </span>
+          </>
+        )}
       </button>
 
       {open && (

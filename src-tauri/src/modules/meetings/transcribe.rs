@@ -220,6 +220,12 @@ async fn run(
             transcript.duration_ms,
         )
         .await?;
+        // The transcript is safe: the original can shrink now (D-031). Not fatal either.
+        if let Err(err) =
+            crate::kernel::storage::compress_meeting(&pool, &meeting.id, &audio_path).await
+        {
+            tracing::warn!("could not compress the recording: {err:#}");
+        }
         // Side file only; the database is the source of truth, so a failure here is not fatal.
         if let Some(folder) = audio_path.parent() {
             if let Err(err) =

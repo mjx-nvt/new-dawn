@@ -21,6 +21,13 @@ pub enum MenuAction {
     ToggleRecording,
     /// New Dawn → Run Setup…: the first-run welcome steps again.
     RunSetup,
+    /// View → Icon-only Sidebar (⌃⌘S): labels on/off.
+    IconSidebar,
+    /// Workspace → Workspace Settings… (⌥⌘,): brand, meeting types, people of the current one.
+    OpenWorkspace,
+    /// View → Back / Forward (⌘[ / ⌘]): in-app history.
+    GoBack,
+    GoForward,
 }
 
 /// Ask an already-open Settings window to show a tab.
@@ -103,6 +110,7 @@ pub fn notify_workspaces_changed(app: &AppHandle) {
 /// Ollama is downloading Qwen (onboarding): the current layer's progress, in MB.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct OllamaPullProgress {
+    pub model: String,
     pub status: String,
     pub completed_mb: u32,
     pub total_mb: u32,
@@ -111,5 +119,12 @@ pub struct OllamaPullProgress {
 /// The Qwen download ended: `error` is None on success.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct OllamaPullFinished {
+    pub model: String,
     pub error: Option<AppError>,
+}
+
+/// A workspace's brand pack changed (colours, logo, reset): every window re-applies it.
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct BrandChanged {
+    pub slug: String,
 }

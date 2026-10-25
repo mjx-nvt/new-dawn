@@ -6,11 +6,31 @@
   transition: grid-template-columns 220ms ease-out;
 }
 
+.icons { grid-template-columns: 76px 1fr; }
 .collapsed { grid-template-columns: 0 1fr; }
 
 .main {
+  container: shell / inline-size; /* the toolbar adapts to the space beside the sidebar */
   display: grid;
   grid-template-rows: 52px 1fr;
   min-width: 0;
   min-height: 0;
+}
+
+.updateBanner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--brand-50);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+.updateBanner > span { flex: 1 1 200px; }
+@media (prefers-color-scheme: dark) {
+  .updateBanner { background: color-mix(in srgb, var(--brand-400) 14%, transparent); }
 }

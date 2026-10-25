@@ -2,6 +2,65 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-031 — Storage that stays flat; OTA updates; a shippable app
+_2026-10-25_
+
+**Decision** (user: "I don't want this app booming my disk after a couple of weeks"):
+- **Audio is the only thing that grows** (16 kHz WAV = 115 MB/hour; imports keep their size; the databases are hundreds of KB). So, once a transcript is saved, `kernel/storage.rs` converts the original to mono AAC at 48 kbps with `afconvert` (ships with macOS; ~20 MB/hour; 57 MB import → 17 MB in 10 s) as `recording.m4a` and deletes the original. Re-transcription decodes it with the same importer (symphonia, AAC). Originals are named `audio.<ext>`, compressed ones `recording.m4a`, so "not yet compressed" is a file-name check.
+- **Retention**: app setting `retention_days` (default 90; 30 / 180 / 365 / 0 = forever). Two minutes after launch and daily, recordings of *summarised* meetings whose summary is older than that go to the Trash and `audio_path` is cleared; transcript, summary, minutes and `transcript.json` stay, and the Transcript tab says so. `ai_log` rows older than 90 days are pruned. Settings → Storage shows sizes per workspace and offers Compress now / Trash old recordings.
+- **OTA updates** via `tauri-plugin-updater`: endpoint = `latest.json` of the **public `mjx-nvt/new-dawn-releases`** repo (the source repo stays private, so its release assets can't be fetched anonymously). Update bundles are minisign-signed with a key pair generated on 25 Oct 2026 (`~/.tauri/newdawn.key`; public key in `tauri.conf.json`); the app refuses anything else. This is the second exception to rule 3 after model downloads: one host, only for the check the user runs from Settings → About or the daily launch check they can switch off, and the download they confirm. Not notarised (no Developer ID): first install is right-click → Open; updates the app installs itself don't carry the quarantine flag.
+- **Release pipeline**: `.github/workflows/release.yml` on a tag `v*` builds on an Apple Silicon runner and publishes `.dmg` + update bundle + `latest.json` to the releases repo through a fine-grained token (`RELEASES_TOKEN`). Version 0.2.0.
+
+---
+
+## D-030 — Brand packs applied and editable; Apple-style structure
+_2026-10-24_
+
+**Decision** (user feedback: fixed max width, too compact, too much text, no way to edit a brand):
+- **Brand is live.** `kernel/brand/tokens.rs` reads `<workspace>/brand/tokens.json` (the bundled starter with the workspace's slug, else `default`, is copied in on first read: tokens + logos), validates, derives the 50–950 ramp when the pack has none, and resolves to a `BrandView`. `applyBrand` sets the brand variables inline on `.content-root` (main window, Settings, previews); in dark mode the pack's canvas/text/status stay with the system's dark tokens. Logos are served through the asset protocol (`brand/**` in scope); the sidebar badge shows the logo. **Settings → Brand** edits the pack in place (atomic write, unknown fields kept): logo light/dark, colours (system colour picker + hex), corners, button styles, slogan, document fonts; Reset to starter trashes the workspace's tokens and logos. Brand import from DOCX/PDF (the rest of P1.4) is still to come.
+- **App settings ≠ workspace settings** (user feedback: one window mixing both was hard to read). The Settings window is app-only (General, Workspaces, Backup, Models, PDF converters, About). A workspace's own settings — Overview, Brand, Meeting types, People — are a page in the main window (`/workspace`, sidebar item, Workspace → Workspace Settings… ⌥⌘,), always for the current workspace; switching workspace switches the page.
+- **Apple-style structure**: type scale raised (body 14.5, section titles 17/600 sentence case; uppercase only for the eyebrow); `.page` fills the panel; System-Settings-style Settings window (glass sidebar of panes grouped App / Workspace / AI, grouped inset rows); one primary action per state and a ⋯ menu on the meeting page, facts as a row, tabs as a segmented control, double-click to rename; Summary as two columns (sections + aside with email / attendees / notes) on wide panels; Meetings list without the duplicate search field; one hint per group.
+- **Destructive = red**: `.btnDanger` / `DangerButton` (two-step, red fill to confirm) everywhere (Delete meeting, Move to Trash, Forget, Remove model, Delete type, Reset, Discard edits).
+
+---
+
+## D-029 — Navigation: icon rail, back/forward, container-based responsiveness
+_2026-10-24_
+
+**Decision** (user-approved plan):
+- **Sidebar states**: labels (240) / icon rail (76) / hidden. Preference `auto | expanded | icons` in localStorage (a per-Mac convenience, guarded): auto = rail below a 1000 pt window; choosing what auto would pick returns to auto. ⌃⌘S and the ⟨⟨/⟩⟩ button toggle; ⌥⌘S still hides. Sidebar Record now toggles recording.
+- **Back/forward** follow the webview's own history (TanStack `__TSR_index`), tracked once per window in a module store (survives the toolbar unmounting on /welcome); PUSH truncates forward entries, redirects are REPLACE. Toolbar ‹ ›, ⌘[ / ⌘] (ignored while a text field has focus, so an unsaved edit isn't left by accident). Finishing the welcome steps replaces history, so Back never re-enters it.
+- **Toolbar search** is live: ⌘K, Enter → `/meetings?q=` (replace when already there), follows `?q`.
+- **Responsive by container, not window**: `.content-root` = container `content`, `.main` = container `shell` (toolbar). Grids collapse, rows wrap, the Attendees editor turns into cards. Main window min 760 pt; Settings 860 × 560, resizable (min 600 × 420), tab strip scrolls.
+- Drag regions are `"deep"` (Tauri 2.11: a bare attribute only drags on direct clicks on that element).
+- Traffic lights y = 28 (tao's y is the title-bar strip height minus a button's; 28 centres them in 52 pt bars).
+
+---
+
+## D-028 — Meeting types own their templates; people memory
+_2026-10-24_
+
+**Decision** (user-approved; "the template I gave you is just the weekly meeting"):
+- **One Word template per meeting type**: `<workspace>/brand/templates/meeting-minutes/<type id>.docx` (type ids are checked to be one plain file name). Minutes use the meeting's type template → the default type's → the older single `template.docx` (D-027) → the bundled starter. `document_template` stays unused; the type id is the link.
+- **First use seeds "Weekly meeting"** (default, spoken language Auto) for a workspace without types: from its own `template.docx` (moved; a copy goes to the Trash) or the starter pack; serialised so two windows can't seed twice. A workspace keeps at least one type (deleting the last would only re-seed it). Deleting a type: its meetings keep everything but lose the type (FK `SET NULL`), its template goes to the Trash, and the default moves to the first remaining type.
+- **Settings → Meeting types** (per workspace): name, language, Default, and per type Edit in Word / Replace… (checked copy) / Reveal / Reset to starter; Add (copy of the default type's template, or a picked .docx); field reference. **Settings → People**. Both are Settings tabs, not sections of Workspaces (the list got long). The meeting header has a type picker; New Recording / Import preselect the default type; the Minutes tab names the template it will use.
+- **People memory** (`person`, migration 0003, per workspace — each workspace is one company and its own database): name, job title, organisation, other spellings. Matching folds case, accents, đ and spacing. Every summary run gets the list (≤ 80) with the owner's notes, and afterwards attendees get the remembered spelling/title/organisation, and action owners / decided by / who can answer the remembered spelling (Action items text refreshed). The Summary tab's **Attendees** editor saves to the minutes and email and, with *Remember* (default on), teaches it: an existing person is updated (an empty title or organisation never wipes a remembered one; an accent-less retyping keeps the remembered spelling), the model's spelling is kept as "also heard as", new names are added. Settings → People: edit, find, merge ("same person as…"), forget.
+- Migrations: a migration file is frozen the moment any run may have applied it — 0003 was edited after a dev run and the checksum mismatch aborted the app at launch; it was restored byte-for-byte. Schema changes go into a new migration. And one workspace failing to open/migrate is logged and skipped, never fatal to the app.
+- Memory safety: only added/changed attendee rows teach it; a person is matched by the saved name only (never renamed through the model's spelling); a spelling can belong to one person only (else: merge); names, titles and spellings are cleaned (no control characters or `<>`, capped) because they enter the prompt, where they are labelled reference only.
+- Not done: alias replacement inside free text (Overview etc.) — the prompt list covers most of it; summary structure/email format per type (P1.4).
+
+---
+
+## D-027 — Pick the text model; manage the minutes template
+_2026-10-24_
+
+**Decision** (user-approved, "go + model picker"):
+- **Text model is selectable.** `ollama::model()` reads a process-wide selection loaded at launch from the app setting `ollama_model` (default `qwen3.5:9b`). Settings → Models → Text model lists every model Ollama has (size, "Writes summaries"), with Use for summaries / Update (re-pull) / Remove (localhost `/api/delete`, waits for the AI queue so it can't pull a model from under a summary; the selected model can't be removed), Download another by name (validated `[A-Za-z0-9._:/-]`), and Free memory now. Selecting checks the model is installed and unloads the old one. `NUM_CTX` stays 32 768 for every model (Qwen 3.x supports it); a model that can't think fails Deep re-run with Ollama's own message. CLAUDE.md's "model `qwen3.5:9b`" is now the default, not the only option.
+- **Minutes template per workspace**, still one file (`brand/templates/meeting-minutes/template.docx`, else the bundled starter by slug) — `document_template` stays unused until meeting types (P1.4) need several. Settings → Workspaces → Minutes templates: state (Starter / Custom · changed date), **Edit in Word** (copies the starter into the workspace first, so the bundle is never edited), **Replace…** (a picked .docx is checked first and only then copied in; the old custom one goes to the Trash), Reveal in Finder, **Reset to starter** (custom → Trash), and a field reference generated from the export model.
+- **Template check** (`modules/meetings/template.rs`): lists the `{{fields}}` (split runs merged), flags unknown ones (they come out empty) and unused top-level fields, and fills the file once with sample data so an unclosed `{{#block}}` is caught before it replaces a working template. Shown for the current template too, so edits made in Word are re-checked.
+
+---
+
 ## D-026 — Ship: icon, onboarding, notifications, backup, logs, build
 _2026-10-24_
 

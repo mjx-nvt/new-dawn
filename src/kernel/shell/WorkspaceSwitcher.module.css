@@ -11,6 +11,8 @@
   text-align: left;
 }
 .badge:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.badge:focus-visible,
+.option:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 
 .mark {
   display: grid;
@@ -25,6 +27,13 @@
   font-weight: 700;
 }
 
+/* The workspace logo replaces the letter mark when the brand has one. */
+.logo {
+  flex: none;
+  max-width: 132px;
+  max-height: 24px;
+}
+
 .badgeName {
   flex: 1;
   min-width: 0;
@@ -37,12 +46,19 @@
 
 .chevron { color: var(--ink-3); }
 
+.compact {
+  justify-content: center;
+  height: 36px;
+  padding: 0;
+}
+
 .popover {
   position: absolute;
   z-index: 10;
   top: calc(100% + var(--space-1));
   left: 0;
   right: 0;
+  min-width: 220px; /* wider than the icon rail */
   display: flex;
   flex-direction: column;
   padding: var(--space-1);

@@ -1,39 +1,57 @@
+/* System-Settings shape: glass sidebar of panes, solid content on the right. */
 .window {
   display: grid;
+  grid-template-columns: 200px 1fr;
   grid-template-rows: 52px 1fr;
   height: 100%;
   background: var(--shell-scrim);
 }
 
-.strip {
+/* The title-bar strip: traffic lights live here; drags the window. */
+.strip { grid-column: 1 / -1; }
+
+.sidebar {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 var(--space-4) 0 88px; /* clear the traffic lights */
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 0;
+  padding: 0 var(--space-2) var(--space-4);
+  overflow: hidden auto;
 }
 
-.tabs {
+.group {
   display: flex;
+  flex-direction: column;
   gap: 2px;
 }
 
-.tab {
+.groupLabel {
+  padding: 0 var(--space-3) var(--space-1);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.item {
   display: flex;
   align-items: center;
-  height: 28px;
+  height: 30px;
   padding: 0 var(--space-3);
   border-radius: var(--radius-control);
-  color: var(--ink-2);
-  font-size: var(--t-sm);
-  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--t-md);
   transition: background 150ms ease-out;
 }
-.tab:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 
 .active,
 .active:hover {
   background: var(--brand-100);
   color: var(--brand-700);
+  font-weight: 600;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -46,6 +64,19 @@
 
 .content {
   min-height: 0;
-  padding: var(--space-5);
   border-top: 0.5px solid var(--hair);
+  border-left: 0.5px solid var(--hair);
+  border-top-left-radius: var(--radius-window);
+}
+
+.pane {
+  max-width: 760px;
+  padding: var(--space-6);
+}
+
+.paneTitle {
+  margin-bottom: var(--space-5);
+  font-size: var(--t-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }

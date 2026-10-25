@@ -3,8 +3,10 @@ import { getOnboardingDone } from "./kernel/bridge/onboarding";
 import type { SettingsTab } from "./kernel/bridge/settings";
 import AppLayout from "./kernel/shell/AppLayout";
 import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/MeetingPage";
-import MeetingsPage from "./modules/meetings/MeetingsPage";
+import MeetingsPage, { type MeetingsSearch } from "./modules/meetings/MeetingsPage";
+import { SORTS, STATUS_FILTERS, WHEN_FILTERS } from "./modules/meetings/listing";
 import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboarding/WelcomePage";
+import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupStep } from "./modules/tenant-setup/TenantSetupPage";
 import SettingsPage, { SETTINGS_TABS } from "./modules/workspace-settings/SettingsPage";
@@ -28,9 +30,13 @@ const indexRoute = createRoute({
 const meetingsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/meetings",
-  validateSearch: (search: Record<string, unknown>): { import?: true; q?: string } => ({
+  validateSearch: (search: Record<string, unknown>): MeetingsSearch => ({
     ...(search.import === true ? { import: true as const } : {}),
     ...(typeof search.q === "string" && search.q ? { q: search.q } : {}),
+    ...(STATUS_FILTERS.includes(search.status as never) && search.status !== "all" ? { status: search.status as MeetingsSearch["status"] } : {}),
+    ...(typeof search.type === "string" && search.type ? { type: search.type } : {}),
+    ...(WHEN_FILTERS.includes(search.when as never) && search.when !== "all" ? { when: search.when as MeetingsSearch["when"] } : {}),
+    ...(SORTS.includes(search.sort as never) && search.sort !== "newest" ? { sort: search.sort as MeetingsSearch["sort"] } : {}),
   }),
   component: MeetingsPage,
   staticData: { title: "Meetings" },
@@ -45,6 +51,16 @@ const meetingRoute = createRoute({
   }),
   component: MeetingPage,
   staticData: { title: "Meeting", breadcrumb: "Meetings" },
+});
+
+const workspaceRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/workspace",
+  validateSearch: (search: Record<string, unknown>): { tab: WorkspaceTab } => ({
+    tab: WORKSPACE_TABS.find((t) => t.id === search.tab)?.id ?? "overview",
+  }),
+  component: WorkspacePage,
+  staticData: { title: "Workspace" },
 });
 
 const setupRoute = createRoute({
@@ -86,7 +102,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

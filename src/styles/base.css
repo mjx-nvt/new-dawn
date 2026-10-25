@@ -27,6 +27,8 @@ input, textarea { font: inherit; color: inherit; user-select: text; }
 
 /* Content area paints over the glass so reading surfaces stay calm. */
 .content-root {
+  /* Layouts inside respond to this panel's width (sidebar open or not), not the window's. */
+  container: content / inline-size;
   height: 100%;
   background: color-mix(in srgb, var(--canvas) 92%, transparent);
   overflow: auto;

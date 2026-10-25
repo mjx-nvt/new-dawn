@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "New Dawn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "co.majorisdigital.newdawn",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -17,7 +17,7 @@
         "title": "New Dawn",
         "width": 1180,
         "height": 760,
-        "minWidth": 960,
+        "minWidth": 760,
         "minHeight": 600,
         "center": true,
         "transparent": true,
@@ -25,7 +25,7 @@
         "hiddenTitle": true,
         "trafficLightPosition": {
           "x": 18,
-          "y": 18
+          "y": 28
         }
       }
     ],
@@ -36,6 +36,7 @@
         "scope": [
           "$APPDATA/workspaces/*/recordings/**",
           "$APPDATA/workspaces/*/exports/**",
+          "$APPDATA/workspaces/*/brand/**",
           "$RESOURCE/**"
         ]
       }
@@ -63,6 +64,15 @@
       "entitlements": "entitlements.plist",
       "signingIdentity": "-",
       "hardenedRuntime": true
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/mjx-nvt/new-dawn-releases/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU3QTQ5OUNBQThFM0U2RjIKUldUeTV1T295cG1rNXp5bUx2QUovL0s2YVhKYVhpWjR0YVhNVE55WUNZNFE5WUZhTUlCWHVLYk0K"
     }
   }
 }

@@ -12,6 +12,7 @@ import {
 } from "../../kernel/bridge/models";
 import type { AppError } from "../../kernel/bridge/unwrap";
 import styles from "./ModelsPanel.module.css";
+import TextModels from "./TextModels";
 
 const MB = 1024 * 1024;
 
@@ -26,10 +27,16 @@ export function SpeechModels() {
   return <ModelList models={models.data ?? []} progress={progress} errors={errors} loading={models.isPending} />;
 }
 
-/** Settings → Models: download, resume, cancel and delete the local Whisper and VAD models. */
+/** Settings → Models: the text model (Ollama) and the local Whisper and VAD models. */
 export default function ModelsPanel() {
   return (
     <>
+      <section className="section">
+        <h2 className="sectionTitle">Text model</h2>
+        <p className="sectionSubtitle">Writes the summaries, through Ollama on this Mac</p>
+        <TextModels />
+      </section>
+
       <section className="section">
         <h2 className="sectionTitle">Speech model</h2>
         <p className="sectionSubtitle">Whisper transcribes recordings on this Mac; turbo is the default</p>

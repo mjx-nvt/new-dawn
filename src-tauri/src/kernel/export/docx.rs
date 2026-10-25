@@ -570,6 +570,54 @@ fn is_fillable(name: &str) -> bool {
         || (name.starts_with("word/footer") && name.ends_with(".xml"))
 }
 
+/// Every `{{…}}` tag in the template's body, headers and footers (after merging split runs),
+/// without the `#`/`/` of block markers, sorted and de-duplicated.
+pub fn placeholders(template: &Path) -> Result<Vec<String>> {
+    fn paragraphs(nodes: &mut [Node], out: &mut Vec<String>) {
+        for node in nodes {
+            if let Node::Element(el) = node {
+                if el.name == "w:p" {
+                    out.push(text_of(el));
+                } else {
+                    paragraphs(&mut el.children, out);
+                }
+            }
+        }
+    }
+    let mut archive = zip::ZipArchive::new(
+        File::open(template).with_context(|| format!("opening {}", template.display()))?,
+    )
+    .context("the file is not a valid .docx")?;
+    let mut tags = std::collections::BTreeSet::new();
+    for index in 0..archive.len() {
+        let mut entry = archive.by_index(index)?;
+        let name = entry.name()?.into_owned();
+        if !is_fillable(&name) {
+            continue;
+        }
+        let mut xml = String::new();
+        entry
+            .read_to_string(&mut xml)
+            .with_context(|| format!("reading {name}"))?;
+        let mut nodes = parse(xml.strip_prefix('\u{feff}').unwrap_or(&xml))?;
+        merge_all(&mut nodes);
+        let mut texts = Vec::new();
+        paragraphs(&mut nodes, &mut texts);
+        for text in texts {
+            let mut rest = text.as_str();
+            while let Some(open) = rest.find("{{") {
+                let Some(close) = rest[open..].find("}}") else {
+                    break;
+                };
+                let tag = rest[open + 2..open + close].trim();
+                tags.insert(tag.trim_start_matches(['#', '/']).trim().to_owned());
+                rest = &rest[open + close + 2..];
+            }
+        }
+    }
+    Ok(tags.into_iter().filter(|t| !t.is_empty()).collect())
+}
+
 /// Fills `template` with `data` and writes the result to `out` atomically (temp file + rename).
 pub fn render(template: &Path, data: &Value, out: &Path) -> Result<()> {
     let mut archive = zip::ZipArchive::new(

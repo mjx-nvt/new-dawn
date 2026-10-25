@@ -90,6 +90,103 @@ pub fn minutes(input: &MinutesInput) -> Value {
     data
 }
 
+/// Template data for a made-up meeting (one item in every list, transcript included): used to
+/// check a template and to list the fields it can use.
+pub fn sample() -> Value {
+    use crate::kernel::ai::whisper::Language;
+    use crate::modules::meetings::MeetingStatus;
+    use crate::modules::meetings::summarise::{
+        ActionItem, Attendee, Decision, OpenIssue, Section, Topic,
+    };
+    let meeting = Meeting {
+        id: String::new(),
+        meeting_type_id: None,
+        title: "Sample meeting".into(),
+        held_on: "2026-01-02T03:00:00.000Z".into(),
+        language: Language::En,
+        audio_path: None,
+        duration_ms: Some(3_600_000),
+        status: MeetingStatus::Summarised,
+        notes_md: None,
+        created_at: String::new(),
+        updated_at: String::new(),
+    };
+    let doc = SummaryDoc {
+        sections: vec![Section {
+            kind: SectionKind::Overview,
+            title: "Overview".into(),
+            markdown: "Overview.".into(),
+            edited: false,
+        }],
+        attendees: vec![Attendee {
+            name: "Name".into(),
+            organisation: "Organisation".into(),
+            title: "Title".into(),
+            attendance: "Present".into(),
+        }],
+        discussion: vec![Topic {
+            topic: "Topic".into(),
+            points: vec!["Point".into()],
+        }],
+        decisions: vec![Decision {
+            text: "Decision".into(),
+            ..Decision::default()
+        }],
+        action_items: vec![ActionItem {
+            owner: "Owner".into(),
+            item: "Task".into(),
+            due: "Friday".into(),
+        }],
+        open_issues: vec![OpenIssue {
+            issue: "Question".into(),
+            ..OpenIssue::default()
+        }],
+        next_focus: "Next".into(),
+        ..SummaryDoc::default()
+    };
+    let start = DateTime::parse_from_rfc3339("2026-01-02T10:00:00+07:00").expect("valid date");
+    minutes(&MinutesInput {
+        meeting: &meeting,
+        doc: &doc,
+        start,
+        meeting_type: Some("Partner call"),
+        day_seq: 1,
+        transcript: Some("Transcript."),
+    })
+}
+
+/// A field a template can use: a value, or a list (`{{#name}}…{{/name}}`) with its own fields.
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+pub struct TemplateField {
+    pub name: String,
+    pub list: bool,
+    pub children: Vec<TemplateField>,
+}
+
+/// The fields of `sample()`, alphabetical.
+pub fn fields() -> Vec<TemplateField> {
+    fn of(value: &Value) -> Vec<TemplateField> {
+        let Some(map) = value.as_object() else {
+            return Vec::new();
+        };
+        map.iter()
+            .map(|(name, v)| {
+                let children = v
+                    .as_array()
+                    .and_then(|a| a.first())
+                    .map(of)
+                    .unwrap_or_default();
+                TemplateField {
+                    name: name.clone(),
+                    list: v.is_array(),
+                    children,
+                }
+            })
+            .collect()
+    }
+    of(&sample())
+}
+
 fn or(value: &str, fallback: &str) -> String {
     let value = value.trim();
     (if value.is_empty() { fallback } else { value }).to_owned()

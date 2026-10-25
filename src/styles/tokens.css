@@ -9,12 +9,12 @@
   --font: 'Be Vietnam Pro', -apple-system, system-ui, sans-serif;
 
   /* Text sizes */
-  --t-xs: 11px;
-  --t-sm: 12.5px;
-  --t-md: 13.5px;
-  --t-lg: 15.5px;
-  --t-xl: 20px;
-  --t-2xl: 28px;
+  --t-xs: 11.5px;
+  --t-sm: 13px;
+  --t-md: 14.5px;
+  --t-lg: 17px;
+  --t-xl: 22px;
+  --t-2xl: 30px;
 
   /* Spacing rhythm */
   --space-1: 4px;
@@ -23,6 +23,8 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
 
   /* Light appearance */
   --ink: #0B1220;

@@ -1,20 +1,60 @@
 .toolbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 280px) minmax(0, 1fr);
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   padding: 0 var(--space-4);
 }
 
-/* Sidebar collapsed: the traffic lights now sit over the toolbar. */
+/* Sidebar hidden: the traffic lights now sit over the toolbar. */
 .clearLights { padding-left: 88px; }
+
+.lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.history {
+  display: flex;
+  flex: none;
+}
+
+.navButton {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  transition: background 150ms ease-out;
+}
+.navButton:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.navButton:disabled { color: var(--ink-3); opacity: .5; }
+.navButton:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 
 .titleBlock {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   min-width: 0;
-  pointer-events: none; /* let drags through to the toolbar */
+  pointer-events: none; /* clicks fall through to the toolbar's drag region */
+}
+
+.searchForm { min-width: 0; }
+
+.trail {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+/* Narrow (sidebar pinned open in a small window): the record pill keeps its full width and
+   search takes what's left, instead of the pill sliding over the search field. */
+@container shell (max-width: 640px) {
+  .toolbar { grid-template-columns: auto minmax(100px, 1fr) auto; }
+  .breadcrumb { display: none; }
 }
 
 .breadcrumb {
@@ -31,7 +71,7 @@
 }
 
 .search {
-  width: 280px;
+  width: 100%;
   height: 28px;
   padding: 0 var(--space-3);
   border: 0.5px solid var(--hair);

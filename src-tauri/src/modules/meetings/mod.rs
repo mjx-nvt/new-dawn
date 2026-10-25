@@ -5,9 +5,10 @@ pub mod email;
 pub mod minutes;
 pub mod review;
 pub mod summarise;
+pub mod template;
 pub mod transcribe;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::Serialize;
 use specta::Type;
 use sqlx::SqlitePool;
@@ -68,6 +69,31 @@ pub async fn meeting_types(pool: &SqlitePool) -> Result<Vec<MeetingTypeSummary>>
     )
     .fetch_all(pool)
     .await?)
+}
+
+/// Changes (or clears) a meeting's type; the next minutes export uses its template.
+pub async fn set_type(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    type_id: Option<&str>,
+) -> Result<Meeting> {
+    if let Some(type_id) = type_id {
+        let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM meeting_type WHERE id = ?")
+            .bind(type_id)
+            .fetch_optional(pool)
+            .await?;
+        if exists.is_none() {
+            bail!(AppError::not_found("No such meeting type"));
+        }
+    }
+    sqlx::query(
+        "UPDATE meeting SET meeting_type_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+    )
+    .bind(type_id)
+    .bind(meeting_id)
+    .execute(pool)
+    .await?;
+    get(pool, meeting_id).await
 }
 
 /// One search result: the meeting, plus where the words were found in its transcript or summary.

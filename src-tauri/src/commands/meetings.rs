@@ -7,6 +7,7 @@ use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::modules::meetings::review;
 use crate::modules::meetings::summarise::SummaryJobs;
+use crate::modules::meetings::template;
 use crate::modules::meetings::transcribe::{self, ImportRequest, TranscriptionJobs};
 use crate::modules::meetings::{self, Meeting, MeetingHit, MeetingTypeSummary, TranscriptSegment};
 
@@ -33,10 +34,22 @@ pub async fn search_meetings(
 #[tauri::command]
 #[specta::specta]
 pub async fn list_meeting_types(
-    hub: State<'_, WorkspaceHub>,
+    app: AppHandle,
     slug: String,
 ) -> Result<Vec<MeetingTypeSummary>, AppError> {
-    Ok(meetings::meeting_types(&hub.pool(&slug)?).await?)
+    Ok(template::summaries(&app, &slug).await?)
+}
+
+/// Changes (or clears) a meeting's type.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_meeting_type(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    type_id: Option<String>,
+) -> Result<Meeting, AppError> {
+    Ok(meetings::set_type(&hub.pool(&slug)?, &meeting_id, type_id.as_deref()).await?)
 }
 
 #[tauri::command]

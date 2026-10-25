@@ -1,0 +1,14 @@
+.tabs { margin-top: var(--space-6); }
+.tabs button { height: 28px; padding: 0 var(--space-4); }
+
+.panel {
+  max-width: 820px;
+  margin-top: var(--space-6);
+}
+
+.name { width: 280px; }
+
+.slot {
+  min-height: 120px;
+  border-radius: var(--radius-card);
+}

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMeetingTypes, type Language } from "../../kernel/bridge/meetings";
 import { useWorkspaces } from "../../kernel/bridge/workspaces";
 import { LANGUAGE_LABEL } from "./format";
@@ -18,6 +19,19 @@ interface Props {
 export default function MeetingFields(props: Props) {
   const { data: workspaces } = useWorkspaces();
   const types = useMeetingTypes(props.slug);
+  const { typeId, onTypeChange, onLanguageChange } = props;
+
+  // A new meeting starts with the workspace's default type (once per workspace; "None" stays).
+  const preset = useRef("");
+  useEffect(() => {
+    const fallback = types.data?.find((t) => t.is_default);
+    if (!fallback || preset.current === props.slug) return;
+    preset.current = props.slug;
+    if (!typeId) {
+      onTypeChange(fallback.id);
+      onLanguageChange(fallback.language);
+    }
+  }, [types.data, props.slug, typeId, onTypeChange, onLanguageChange]);
 
   return (
     <>

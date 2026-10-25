@@ -1,13 +1,54 @@
 .header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
 }
 
-.search {
-  margin-top: var(--space-4);
-  max-width: 480px;
+/* Filter bar: status · type · when … sort */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.filter { display: inline-flex; }
+
+.select {
+  width: auto;
+  height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+.spacer { flex: 1; }
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.clear {
+  color: var(--brand-text);
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+/* A date group: "Today", "Last week", "September 2026"… */
+.group { margin-top: var(--space-6); }
+
+.groupTitle {
+  margin-bottom: var(--space-3);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 .error {
@@ -19,15 +60,16 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   color: var(--ink);
-  transition: border-color 150ms ease-out;
+  transition: border-color 150ms ease-out, background 150ms ease-out;
 }
 .row:hover { border-color: var(--ink-3); }
 
@@ -41,14 +83,20 @@
 
 .title {
   font-size: var(--t-lg);
-  font-weight: 700;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.meta {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
 /* Ghost slot: shape only, so .ghostCard supplies the dashed border. */
 .slot {
-  min-height: 64px;
+  min-height: 72px;
   border-radius: var(--radius-card);
 }

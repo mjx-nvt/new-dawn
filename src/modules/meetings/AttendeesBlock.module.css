@@ -1,0 +1,86 @@
+.block { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink-2);
+  user-select: text;
+}
+.list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+
+.name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.slot {
+  min-height: 56px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Wide: headings and each person's inputs sit directly in the table grid. */
+.headings,
+.person { display: contents; }
+
+/* Narrow: one card per person, name across the top; no column headings. */
+@container content (max-width: 640px) {
+  .grid { grid-template-columns: 1fr; }
+  .headings { display: none; }
+  .person {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 0.5px solid var(--hair);
+    border-radius: var(--radius-card);
+  }
+  .person > :first-child { grid-column: 1 / -1; }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.remember {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.grow { flex: 1; }
+
+.error {
+  font-size: var(--t-sm);
+  color: var(--status-negative);
+}

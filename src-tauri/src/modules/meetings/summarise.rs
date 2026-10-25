@@ -21,6 +21,7 @@ use crate::events::{SummaryFinished, SummaryProgress};
 use crate::kernel::ai::ollama::{self, Message, NUM_CTX, Request, TextSession};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::people::{self, Person};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -328,6 +329,33 @@ struct RawSection {
 /// Maps the model's JSON onto the structure (by position, then title), fills gaps with "Not
 /// discussed", and writes the Key points / Decisions / Action items / Open questions sections
 /// from the structured lists (Key points and Open questions fall back to the model's markdown).
+/// "- **Owner** — task — *due*" lines (the format review.rs reads back).
+fn action_items_markdown(items: &[ActionItem]) -> String {
+    items
+        .iter()
+        .map(|a| format!("- **{}** — {} — *{}*", a.owner, a.item, a.due))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Applies the people memory to a fresh summary (names, titles, organisations) and refreshes the
+/// Action items text, which shows the owners.
+fn apply_people(doc: &mut SummaryDoc, people: &[Person], language: Language) {
+    people::correct(doc, people);
+    let markdown = action_items_markdown(&doc.action_items);
+    for section in doc
+        .sections
+        .iter_mut()
+        .filter(|s| s.kind == SectionKind::ActionItems)
+    {
+        section.markdown = if markdown.is_empty() {
+            not_discussed(language).to_owned()
+        } else {
+            markdown.clone()
+        };
+    }
+}
+
 fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryDoc {
     let by_title: HashMap<String, &RawSection> = raw
         .sections
@@ -365,12 +393,7 @@ fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryD
                     .map(|d| format!("- {}", d.text))
                     .collect::<Vec<_>>()
                     .join("\n"),
-                SectionKind::ActionItems => raw
-                    .action_items
-                    .iter()
-                    .map(|a| format!("- **{}** — {} — *{}*", a.owner, a.item, a.due))
-                    .collect::<Vec<_>>()
-                    .join("\n"),
+                SectionKind::ActionItems => action_items_markdown(&raw.action_items),
                 _ => found
                     .map(|s| s.markdown.trim().to_owned())
                     .unwrap_or_default(),
@@ -483,9 +506,15 @@ async fn summarise_text(
     let system = system_prompt(structure, language);
     let budget = input_budget(deep).saturating_sub(estimate_tokens(notes));
     if estimate_tokens(text) <= budget {
-        match ask(session, &system, "transcript", &with_notes(text, notes), deep, cancel, |t| {
-            report(SummaryStage::Writing, 1, 1, t)
-        })
+        match ask(
+            session,
+            &system,
+            "transcript",
+            &with_notes(text, notes),
+            deep,
+            cancel,
+            |t| report(SummaryStage::Writing, 1, 1, t),
+        )
         .await
         {
             Ok(raw) => return Ok(shape(raw, structure, language)),
@@ -504,9 +533,15 @@ async fn summarise_text(
     let parts = chunks.len() as u32;
     let mut partials = Vec::with_capacity(chunks.len());
     for (i, chunk) in chunks.iter().enumerate() {
-        let raw = ask(session, &system, "transcript", &with_notes(chunk, notes), deep, cancel, |t| {
-            report(SummaryStage::Writing, i as u32 + 1, parts, t)
-        })
+        let raw = ask(
+            session,
+            &system,
+            "transcript",
+            &with_notes(chunk, notes),
+            deep,
+            cancel,
+            |t| report(SummaryStage::Writing, i as u32 + 1, parts, t),
+        )
         .await?;
         partials.push(shape(raw, structure, language));
     }
@@ -704,7 +739,23 @@ async fn run(
         } else {
             None
         };
-        let notes = meeting.notes_md.as_deref().unwrap_or_default().trim();
+        // The people memory goes in with the owner's notes: correct spellings and roles.
+        let people = people::list(&pool).await?;
+        let mut notes = meeting
+            .notes_md
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_owned();
+        if !people.is_empty() {
+            notes.push_str(&format!(
+                "\n\nKnown people — reference only: they may not be in this meeting. List someone \
+                 as an attendee only if the transcript mentions them; when you do, use this spelling, \
+                 title and organisation:\n{}",
+                people::prompt_block(&people)
+            ));
+        }
+        let notes = notes.trim();
         let structure = default_structure(meeting.language);
         let session = ollama::session(app, pool.clone(), Some(&meeting.id)).await?;
         if cancel.load(Ordering::Relaxed) {
@@ -721,8 +772,10 @@ async fn run(
             &report,
         )
         .await?;
+        let model_name = session.model().to_owned();
         drop(session);
         doc.generated_at = generated_at;
+        apply_people(&mut doc, &people, meeting.language);
         if let Some(previous) = &previous {
             review::keep_edits(&mut doc, previous);
         }
@@ -740,7 +793,7 @@ async fn run(
             &serde_json::to_string(&doc)?,
             &subject,
             &body,
-            Some(ollama::MODEL),
+            Some(&model_name),
             doc.sections.iter().any(|s| s.edited),
         )
         .await?;

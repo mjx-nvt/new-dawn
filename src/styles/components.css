@@ -4,11 +4,11 @@
    the brand's --button-shape; colours come from tokens only.
    ───────────────────────────────────────────────────────────── */
 
-/* Page + section rhythm */
-.page { max-width: 880px; }
+/* Page + section rhythm — the page uses the panel's width; prose limits its own measure. */
+.page { width: 100%; }
 
 .eyebrow {
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
   font-size: var(--t-xs);
   font-weight: 700;
   letter-spacing: .1em;
@@ -19,53 +19,52 @@
 .pageTitle {
   font-size: var(--t-2xl);
   font-weight: 700;
-  line-height: 1.1;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 
 .pageMeta {
   margin-top: var(--space-2);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: var(--t-sm);
+  font-weight: 500;
   color: var(--ink-2);
 }
 
-.section { margin-top: var(--space-5); }
+.section { margin-top: var(--space-7); }
+.section:first-child { margin-top: 0; }
 
+/* Sentence-case section titles (the uppercase eyebrow is the only shouting left). */
 .sectionTitle {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font-size: var(--t-lg);
+  font-weight: 600;
+  letter-spacing: -0.005em;
 }
 
 .sectionSubtitle {
-  margin-top: 2px;
-  margin-bottom: var(--space-3);
-  font-size: var(--t-sm);
-  font-style: italic;
+  margin-top: var(--space-1);
+  margin-bottom: var(--space-4);
+  font-size: var(--t-md);
   color: var(--ink-2);
 }
 
 .fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-3) var(--space-5);
+  gap: var(--space-4) var(--space-6);
 }
-@media (max-width: 959px) { .fields { grid-template-columns: 1fr; } }
+@container content (max-width: 640px) { .fields { grid-template-columns: 1fr; } }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   min-width: 0;
 }
 
 .fieldLabel {
-  font-size: var(--t-xs);
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
 }
 
 .fieldValue {
@@ -77,8 +76,65 @@
 
 .fieldHint {
   font-size: var(--t-sm);
+  line-height: 1.5;
   color: var(--ink-3);
 }
+
+/* Inset grouped list (System Settings): one card, rows separated by hairlines,
+   label on the left, control on the right. */
+.group {
+  overflow: hidden;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.groupRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-4);
+  border-top: 0.5px solid var(--hair);
+}
+.groupRow:first-child { border-top: 0; }
+
+.rowText {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.rowLabel {
+  font-size: var(--t-md);
+  font-weight: 500;
+}
+
+.rowHint {
+  margin-top: 2px;
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.rowControl {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+/* A column of groups (and their titles) with Settings-page rhythm. */
+.groupTitle {
+  margin: var(--space-6) 0 var(--space-2) var(--space-1);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.groupTitle:first-child { margin-top: 0; }
 
 .card {
   padding: var(--space-4);
@@ -133,8 +189,25 @@ textarea.input {
 .btnSecondary { background: var(--brand-100); color: var(--brand-700); }
 .btnSecondary:hover:not(:disabled) { background: var(--brand-200); }
 
+/* The brand's button styles (tokens.json `button.primary` / `button.secondary`), set as data
+   attributes on .content-root by applyBrand. Defaults above are filled / soft. */
+[data-btn-primary="soft"] .btnPrimary { background: var(--brand-100); color: var(--brand-700); }
+[data-btn-primary="soft"] .btnPrimary:hover:not(:disabled) { background: var(--brand-200); }
+[data-btn-primary="outline"] .btnPrimary { background: transparent; box-shadow: inset 0 0 0 0.5px var(--brand); color: var(--brand-text); }
+[data-btn-primary="outline"] .btnPrimary:hover:not(:disabled) { background: var(--brand-50); }
+[data-btn-secondary="outline"] .btnSecondary { background: transparent; box-shadow: inset 0 0 0 0.5px var(--brand); color: var(--brand-text); }
+[data-btn-secondary="outline"] .btnSecondary:hover:not(:disabled) { background: var(--brand-50); }
+[data-btn-secondary="ghost"] .btnSecondary { background: transparent; color: var(--ink-2); }
+[data-btn-secondary="ghost"] .btnSecondary:hover:not(:disabled) { background: var(--surface-2); }
+
 .btnGhost { color: var(--ink-2); }
 .btnGhost:hover:not(:disabled) { background: var(--surface-2); }
+
+/* Destructive: red text; the confirm step (`.btnDangerFilled`) is a red fill. */
+.btnDanger { color: var(--status-negative); }
+.btnDanger:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 10%, transparent); }
+.btnDangerFilled { background: var(--status-negative); color: var(--on-brand); }
+.btnDangerFilled:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 85%, black); }
 
 @media (prefers-color-scheme: dark) {
   .btnSecondary { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
@@ -157,7 +230,8 @@ textarea.input {
   font-size: var(--t-sm);
   font-weight: 600;
 }
-.segmented button[aria-pressed="true"] {
+.segmented button[aria-pressed="true"],
+.segmented button[aria-selected="true"] {
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 0 0 0.5px var(--hair);
@@ -167,7 +241,7 @@ textarea.input {
 .chip {
   display: inline-flex;
   align-items: center;
-  height: 20px;
+  height: 22px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-chip);
   background: var(--surface-2);
@@ -180,6 +254,35 @@ textarea.input {
 @media (prefers-color-scheme: dark) {
   .chipBrand { background: color-mix(in srgb, var(--brand-400) 22%, transparent); color: var(--brand-200); }
 }
+
+/* Popover menu (the ⋯ button): a glass list of actions. */
+.menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: var(--space-1);
+  border-radius: var(--radius-modal);
+  animation: sheetIn 150ms ease-out;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  font-size: var(--t-md);
+  text-align: left;
+  white-space: nowrap;
+}
+.menuItem:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.menuItem:disabled { opacity: .4; }
+.menuItemDanger { color: var(--status-negative); }
+.menuSeparator { height: 0.5px; margin: var(--space-1) var(--space-2); background: var(--hair); }
 
 /* Modal sheet: a native <dialog> shown with showModal() (top layer, focus trap, Esc) on glass. */
 .sheet {

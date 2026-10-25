@@ -16,6 +16,8 @@ pub enum SettingsTab {
     Workspaces,
     Models,
     Converters,
+    Backup,
+    Storage,
     About,
 }
 
@@ -24,6 +26,8 @@ impl SettingsTab {
         match self {
             Self::General => "general",
             Self::Workspaces => "workspaces",
+            Self::Backup => "backup",
+            Self::Storage => "storage",
             Self::Models => "models",
             Self::Converters => "converters",
             Self::About => "about",
@@ -46,13 +50,17 @@ pub fn open_settings(app: &AppHandle, tab: SettingsTab) -> Result<()> {
         WebviewUrl::App(format!("settings?tab={}", tab.as_str()).into()),
     )
     .title("Settings")
-    .inner_size(720.0, 520.0)
-    .resizable(false)
+    .inner_size(860.0, 560.0)
+    .min_inner_size(600.0, 420.0)
+    .resizable(true)
     .maximizable(false)
     .transparent(true)
     .title_bar_style(TitleBarStyle::Overlay)
     .hidden_title(true)
-    .traffic_light_position(LogicalPosition::new(18.0, 18.0))
+    // tao's y is the title-bar strip's height minus a button's, not the buttons' top: 28
+    // centres them in our 52 pt bar (18 left them ~10 pt high). Keep in step with
+    // tauri.conf.json (main window).
+    .traffic_light_position(LogicalPosition::new(18.0, 28.0))
     .build()?;
 
     let target = window.clone();
