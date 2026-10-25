@@ -9,9 +9,12 @@
   flex-direction: column;
   gap: var(--space-1);
   flex: 1;
+  min-width: 0; /* inputs have a wide intrinsic size; let the fields shrink to the 500 px pane */
 }
 
 .input {
+  width: 100%;
+  min-width: 0;
   height: 32px;
   padding: 0 var(--space-3);
   border: 0.5px solid var(--hair);

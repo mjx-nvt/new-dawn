@@ -2,6 +2,18 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-034 — Red means Record (and destructive), one record control; Settings is a fixed window
+_2026-10-25_
+
+**Decision** (user: "three kinds of record button; use one; record is critical and should follow the common rule of red"):
+- One `.btnRecord` style — red fill, white dot and label — for the toolbar Record button and the dialog's Start recording; the sidebar entry was removed (toolbar + ⌘R are the way in). Red is reserved for record and destructive actions; orange stays the app's primary for everything else.
+- The ⋯ popover follows macOS menu geometry and uses the system accent for the hovered row, like native menus — the one place the accent colour appears as a fill.
+- The Settings window is 780 × 580 and not resizable, like System Settings: one layout, no responsive branches.
+- **A terminated web content process reloads itself.** macOS kills WKWebView content processes under memory pressure (likely here: Whisper + Qwen + the webview on 16 GB); WebKit respawns an empty one and the window stays grey until something reloads it. `tauri::Builder::on_web_content_process_terminate` → `webview.reload()`, with a warning in the log. This was the "blank window" seen in dev and in the installed 0.3.0.
+- Spacing moved up one step across the shared classes (panel 40, sections 48, cards 24, rows 16/24) after the user found the app too compact; pages must keep using the shared classes rather than their own numbers.
+
+---
+
 ## D-033 — Majoris Design System on an Apple glass shell; the workspace brand is for documents only
 _2026-10-25_
 

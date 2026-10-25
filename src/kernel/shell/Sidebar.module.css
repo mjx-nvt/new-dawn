@@ -69,9 +69,6 @@
   white-space: nowrap;
 }
 
-.recording,
-.recording > svg { color: var(--status-negative); }
-
 /* Icon-only rail: items become centred squares; labels live in tooltips. */
 /* visible: the workspace popover is wider than the rail. */
 .rail { padding: 0 var(--space-3) var(--space-3); overflow: visible; }

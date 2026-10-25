@@ -24,13 +24,13 @@
 }
 
 .pageMeta {
-  margin-top: var(--space-2);
+  margin-top: var(--space-3);
   font-size: var(--t-sm);
   font-weight: 500;
   color: var(--ink-2);
 }
 
-.section { margin-top: var(--space-7); }
+.section { margin-top: var(--space-8); }
 .section:first-child { margin-top: 0; }
 
 /* Sentence-case section titles (the uppercase eyebrow is the only shouting left). */
@@ -41,8 +41,8 @@
 }
 
 .sectionSubtitle {
-  margin-top: var(--space-1);
-  margin-bottom: var(--space-4);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-5);
   font-size: var(--t-md);
   color: var(--ink-2);
 }
@@ -50,7 +50,7 @@
 .fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--space-4) var(--space-6);
+  gap: var(--space-5) var(--space-6);
 }
 @container content (max-width: 640px) { .fields { grid-template-columns: 1fr; } }
 
@@ -93,9 +93,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3) var(--space-4);
-  min-height: 52px;
-  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3) var(--space-5);
+  min-height: 56px;
+  padding: var(--space-4) var(--space-5);
   border-top: 0.5px solid var(--hair);
 }
 .groupRow:first-child { border-top: 0; }
@@ -129,7 +129,7 @@
 
 /* A column of groups (and their titles) with Settings-page rhythm. */
 .groupTitle {
-  margin: var(--space-6) 0 var(--space-2) var(--space-1);
+  margin: var(--space-7) 0 var(--space-3) var(--space-1);
   font-size: var(--t-sm);
   font-weight: 600;
   color: var(--ink-2);
@@ -137,7 +137,7 @@
 .groupTitle:first-child { margin-top: 0; }
 
 .card {
-  padding: var(--space-4);
+  padding: var(--space-5);
   border: 0.5px solid var(--hair);
   border-radius: var(--radius-card);
   background: var(--surface);
@@ -214,8 +214,12 @@ select.input:disabled { opacity: .5; }
 /* Destructive: red text; the confirm step (`.btnDangerFilled`) is a red fill. */
 .btnDanger { color: var(--status-negative); }
 .btnDanger:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 10%, transparent); }
-.btnDangerFilled { background: var(--status-negative); color: var(--on-primary); }
-.btnDangerFilled:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 85%, black); }
+.btnDangerFilled,
+.btnRecord { background: var(--status-negative); color: var(--on-primary); }
+.btnDangerFilled:hover:not(:disabled),
+.btnRecord:hover:not(:disabled) { background: color-mix(in srgb, var(--status-negative) 85%, black); }
+/* Record is red everywhere (the toolbar button, the start button); red otherwise means destructive. */
+.btnRecord > .recordDot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 
 /* AI marker: a sparkle and the one gradient in the app, on every action Whisper or Qwen performs.
    Primary → gradient fill; others → gradient hairline ring. aria-busy animates it while running. */
@@ -301,7 +305,8 @@ select.input:disabled { opacity: .5; }
 }
 .chipPrimary { background: var(--primary-tint); color: var(--on-primary-tint); }
 
-/* Popover menu (the ⋯ button): a glass list of actions. */
+/* Popover menu (the ⋯ button): the shape of a macOS menu — glass, 5 px inset, 13 px rows,
+   the system accent as the hover fill (what native menus use), hairline separators. */
 .menu {
   position: absolute;
   z-index: 20;
@@ -309,26 +314,28 @@ select.input:disabled { opacity: .5; }
   right: 0;
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  padding: var(--space-1);
-  border-radius: var(--radius-modal);
+  min-width: 180px;
+  padding: 5px;
+  border-radius: 10px;
   animation: sheetIn 150ms ease-out;
 }
 .menuItem {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 30px;
-  padding: 0 var(--space-3);
-  border-radius: var(--radius-control);
-  font-size: var(--t-md);
+  width: 100%;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: var(--t-sm);
   text-align: left;
   white-space: nowrap;
 }
-.menuItem:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.menuItem:hover:not(:disabled),
+.menuItem:focus-visible { background: var(--focus); color: var(--on-focus); outline: none; }
 .menuItem:disabled { opacity: .4; }
 .menuItemDanger { color: var(--status-negative); }
-.menuSeparator { height: 0.5px; margin: var(--space-1) var(--space-2); background: var(--hair); }
+.menuSeparator { height: 0.5px; margin: 5px 10px; background: var(--hair); }
 
 /* Modal sheet: a native <dialog> shown with showModal() (top layer, focus trap, Esc) on glass. */
 .sheet {
@@ -348,8 +355,8 @@ select.input:disabled { opacity: .5; }
 .sheetBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5);
+  gap: var(--space-5);
+  padding: var(--space-6);
 }
 
 .sheetHeading {
@@ -360,7 +367,8 @@ select.input:disabled { opacity: .5; }
 .sheetActions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-2);
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .formError {

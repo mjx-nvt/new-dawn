@@ -20,8 +20,8 @@ export default function RecordPill({ onStart }: { onStart: () => void }) {
 
   if (phase === "idle") {
     return (
-      <button type="button" className={styles.pill} onClick={onStart}>
-        <span className={styles.dot} />
+      <button type="button" className="btn btnRecord btnCompact" onClick={onStart}>
+        <span className="recordDot" />
         Record
       </button>
     );

@@ -96,11 +96,12 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
           </button>
           <button
             type="button"
-            className="btn btnPrimary"
+            className="btn btnRecord"
             disabled={!slug || !title.trim() || micBlocked || start.isPending}
             onClick={submit}
           >
-            {start.isPending ? "Starting…" : "● Start recording"}
+            <span className="recordDot" />
+            {start.isPending ? "Starting…" : "Start recording"}
           </button>
         </div>
       </div>

@@ -230,6 +230,17 @@ pub fn run() {
     export_bindings(&builder);
 
     tauri::Builder::default()
+        // macOS kills a WKWebView content process under memory pressure (Whisper, Qwen and the
+        // webview share the RAM); WebKit respawns an empty one and the window stays grey (D-034).
+        .on_web_content_process_terminate(|webview| {
+            tracing::warn!(
+                "web content process of window '{}' was terminated; reloading",
+                webview.label()
+            );
+            if let Err(err) = webview.reload() {
+                tracing::error!("could not reload '{}': {err}", webview.label());
+            }
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())

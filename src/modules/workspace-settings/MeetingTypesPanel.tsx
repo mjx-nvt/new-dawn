@@ -30,9 +30,9 @@ export default function MeetingTypesPanel({ slug }: { slug: string }) {
 
   return (
     <>
-      <section className={settings.section}>
-        <h2 className={settings.sectionTitle}>Meeting types</h2>
-        <p className={settings.sectionSubtitle}>Each type fills its own Word template; a meeting's type picks the minutes it gets</p>
+      <section className="section">
+        <h2 className="sectionTitle">Meeting types</h2>
+        <p className="sectionSubtitle">Each type fills its own Word template; a meeting's type picks the minutes it gets</p>
         {types.error && <p className={styles.error}>{types.error.message}</p>}
         <div className={styles.list}>
           {types.data?.length
@@ -194,9 +194,9 @@ function AddType({ slug }: { slug: string }) {
   }
 
   return (
-    <section className={settings.section}>
-      <h2 className={settings.sectionTitle}>Add a meeting type</h2>
-      <p className={settings.sectionSubtitle}>Starts as a copy of the default type's template, or a Word file you choose</p>
+    <section className="section">
+      <h2 className="sectionTitle">Add a meeting type</h2>
+      <p className="sectionSubtitle">Starts as a copy of the default type's template, or a Word file you choose</p>
       <form
         className={styles.addForm}
         onSubmit={(e) => {
@@ -262,7 +262,7 @@ function CheckSummary({ check }: { check: TemplateCheck }) {
 function FieldReference() {
   const fields = useTemplateFields();
   return (
-    <section className={settings.section}>
+    <section className="section">
       <details className={styles.reference}>
         <summary>Fields a template can use</summary>
         <p className="fieldHint">

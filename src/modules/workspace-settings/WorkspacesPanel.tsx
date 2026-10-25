@@ -51,9 +51,9 @@ export default function WorkspacesPanel() {
 
   return (
     <>
-      <section className={settings.section}>
-        <h2 className={settings.sectionTitle}>New workspace</h2>
-        <p className={settings.sectionSubtitle}>Creates the folder and its database</p>
+      <section className="section">
+        <h2 className="sectionTitle">New workspace</h2>
+        <p className="sectionSubtitle">Creates the folder and its database</p>
         <form className={styles.form} onSubmit={submit}>
           <label className={styles.field}>
             <span className={settings.label}>Name</span>
@@ -78,9 +78,9 @@ export default function WorkspacesPanel() {
         {create.error && <p className={styles.error}>{create.error.message}</p>}
       </section>
 
-      <section className={settings.section}>
-        <h2 className={settings.sectionTitle}>All workspaces</h2>
-        <p className={settings.sectionSubtitle}>Archived workspaces keep their data but their database is closed</p>
+      <section className="section">
+        <h2 className="sectionTitle">All workspaces</h2>
+        <p className="sectionSubtitle">Archived workspaces keep their data but their database is closed</p>
         {workspaces.error && <p className={styles.error}>{workspaces.error.message}</p>}
         <div className={styles.list}>
           {workspaces.data?.length

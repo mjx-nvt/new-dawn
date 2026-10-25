@@ -50,9 +50,9 @@ pub fn open_settings(app: &AppHandle, tab: SettingsTab) -> Result<()> {
         WebviewUrl::App(format!("settings?tab={}", tab.as_str()).into()),
     )
     .title("Settings")
-    .inner_size(860.0, 560.0)
-    .min_inner_size(600.0, 420.0)
-    .resizable(true)
+    // Fixed like System Settings: the panes are laid out for exactly this size.
+    .inner_size(780.0, 580.0)
+    .resizable(false)
     .maximizable(false)
     .transparent(true)
     .title_bar_style(TitleBarStyle::Overlay)

@@ -46,13 +46,6 @@ export const MeetingsIcon = () => (
   </Icon>
 );
 
-export const RecordIcon = () => (
-  <Icon>
-    <circle cx="8" cy="8" r="6" />
-    <circle cx="8" cy="8" r="2.6" fill="currentColor" stroke="none" />
-  </Icon>
-);
-
 export const WorkspaceIcon = () => (
   <Icon>
     <path d="M2.5 14V3.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V14M10.5 7h2a1 1 0 0 1 1 1v6M2 14h12M5 5.5h2M5 8.5h2M5 11.5h2" />

@@ -62,13 +62,10 @@
   border-top-left-radius: var(--radius-window);
 }
 
-.pane {
-  max-width: 760px;
-  padding: var(--space-6);
-}
+.pane { padding: var(--space-7); }
 
 .paneTitle {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-6);
   font-size: var(--t-xl);
   font-weight: 700;
   letter-spacing: -0.01em;

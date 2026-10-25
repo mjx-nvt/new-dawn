@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { openSettings } from "../bridge/settings";
-import { CodeIcon, CollapseIcon, MeetingsIcon, RecordIcon, SettingsIcon, WorkspaceIcon } from "./icons";
+import { CodeIcon, CollapseIcon, MeetingsIcon, SettingsIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -10,15 +10,12 @@ interface Props {
   /** The 76 pt rail: icons with tooltips, no labels. */
   iconsOnly: boolean;
   onToggleIcons: () => void;
-  onRecord: () => void;
-  recording: boolean;
-  stopping: boolean;
   switcherOpen: boolean;
   onSwitcherOpenChange: (open: boolean) => void;
 }
 
 /** Transparent sidebar — native glass shows through. The top strip holds the traffic lights. */
-export default function Sidebar({ hidden, iconsOnly, onToggleIcons, onRecord, recording, stopping, switcherOpen, onSwitcherOpenChange }: Props) {
+export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen, onSwitcherOpenChange }: Props) {
   // In the rail the label stays for screen readers; the tooltip shows it on hover.
   const label = (text: string, icon: ReactNode) => (
     <>
@@ -38,15 +35,6 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, onRecord, re
         <Link to="/meetings" search={{}} className={styles.item} activeProps={{ className: styles.active }} title={tip("Meetings")}>
           {label("Meetings", <MeetingsIcon />)}
         </Link>
-        <button
-          type="button"
-          className={recording ? `${styles.item} ${styles.recording}` : styles.item}
-          title={tip(recording ? "Stop recording (⌘R)" : "New recording (⌘R)")}
-          disabled={stopping}
-          onClick={onRecord}
-        >
-          {label(recording ? "Stop recording" : "Record", <RecordIcon />)}
-        </button>
         <Link
           to="/workspace"
           search={{ tab: "overview" }}

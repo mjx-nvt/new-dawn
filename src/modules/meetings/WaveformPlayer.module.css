@@ -1,13 +1,13 @@
 /* A glass strip: play · waveform · time · ±10 s · speed. Sticks under the tabs while reading. */
 .player {
   position: sticky;
-  top: calc(-1 * var(--space-6));
+  top: 0; /* the content panel is the scroller; its padding scrolls away, so 0 is its top edge */
   z-index: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-card);
 }

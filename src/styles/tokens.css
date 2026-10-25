@@ -41,6 +41,7 @@
 
   /* System accent for selection and focus rings (never the primary) */
   --focus: AccentColor;
+  --on-focus: #FFFFFF;                     /* text on the accent fill (menus), as native menus do for every accent */
 
   /* Window / panel geometry (Golden Gate: one radius) */
   --radius-window: 12px;                   /* keep in sync with WINDOW_RADIUS in src-tauri/src/kernel/glass.rs */

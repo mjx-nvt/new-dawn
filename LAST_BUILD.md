@@ -1,4 +1,20 @@
-# Last Build — Majoris design system on the Apple glass shell (parts 1–4) · release 0.3.0
+# Last Build — Breathing room, a real menu, one red Record, fixed Settings window · release 0.3.1
+_2026-10-25_
+
+## Release 0.3.1
+- Bumped because the installed 0.3.0 can go blank (see "Blank windows" below); 0.3.1 reloads a terminated web content process. Published from the local signed build (CI still needs the `TAURI_SIGNING_PRIVATE_KEY` secret, see the 0.3.0 notes).
+- Architect review: no must-fixes left — the sticky player strip uses `top: 0` (the panel is the scroller; its padding scrolls away), `--on-focus` token for menu text on the accent, the Settings panes use the global section classes (the duplicated ones in `Settings.module.css` are gone), `RecordIcon` deleted, the Workspaces form lets its inputs shrink so it fits the 500 px pane. Verified by screenshot: Meetings, meeting (summary with the ⋯ and Re-run menus open, transcript), Settings → Workspaces / Storage / Models at 780 × 580.
+
+## What changed
+- **Spacing** (user: "no spacing between elements, too compact"): content panel padding 32 → 40; sections 48 apart; cards 24 padding; grouped rows 16/24 with 56 min-height; field grids 20/32; page meta 12 below the title; tabs 40 above / 24 below; filters 40 below the header with 12 gaps; date groups 40 apart; the summary's two columns 48 apart, aside cards 24 apart; sheets 32 padding with 24 gaps and 12 between actions; Settings panes 40 padding, titles 32 below. All through the shared classes and tokens — no page got bespoke numbers.
+- **⋯ menu** is now shaped like a macOS menu: 5 px inset, 24 px rows, 13 px text, 10 px side padding, hover/keyboard focus = the system accent fill with white text (what native menus use), hairline separators, 180 px minimum. Re-run ▾ uses the same.
+- **One red Record control**: `.btnRecord` (red fill, white dot + label; red otherwise means destructive) for the toolbar button when idle and the dialog's Start recording. The sidebar Record item is gone — the toolbar button and ⌘R are the way in; while recording the toolbar shows dot · elapsed · meters · pause · ■ as before.
+- **Settings window is fixed** at 780 × 580 and not resizable (System Settings), so the panes are laid out for one size.
+- **Blank windows, found and fixed.** The grey windows seen in dev — and in the installed 0.3.0 (its content process was sitting at 7 MB, an empty respawn, with both its windows blank) — are WebKit terminating the web content process (memory pressure: Whisper and Qwen share 16 GB with it) and nothing reloading the page. The app now handles Tauri's `on_web_content_process_terminate` by logging and reloading that webview (`lib.rs`). Verified by killing the dev app's WebContent process: the window comes back by itself. The `CrashScreen` and the early error logger stay for the other kind of failure.
+
+---
+
+# Majoris design system on the Apple glass shell (parts 1–4) · release 0.3.0
 _2026-10-25_
 
 ## Release 0.3.0

@@ -25,9 +25,9 @@ export default function PeoplePanel({ slug }: { slug: string }) {
 
   return (
     <>
-      <section className={settings.section}>
-        <h2 className={settings.sectionTitle}>People</h2>
-        <p className={settings.sectionSubtitle}>
+      <section className="section">
+        <h2 className="sectionTitle">People</h2>
+        <p className="sectionSubtitle">
           Remembered from the attendees you correct; every new summary uses these spellings, titles and organisations
         </p>
         <div className={styles.toolbar}>
@@ -153,9 +153,9 @@ function AddPerson({ slug }: { slug: string }) {
     </label>
   );
   return (
-    <section className={settings.section}>
-      <h2 className={settings.sectionTitle}>Add a person</h2>
-      <p className={settings.sectionSubtitle}>For people you meet often, before they appear in a meeting</p>
+    <section className="section">
+      <h2 className="sectionTitle">Add a person</h2>
+      <p className="sectionSubtitle">For people you meet often, before they appear in a meeting</p>
       <form
         className={styles.row}
         onSubmit={(e) => {

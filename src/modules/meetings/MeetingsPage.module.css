@@ -11,8 +11,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-6);
+  gap: var(--space-3);
+  margin-top: var(--space-7);
 }
 
 .filter { display: inline-flex; }
@@ -34,10 +34,10 @@
 }
 
 /* A date group: "Today", "Last week", "September 2026"… */
-.group { margin-top: var(--space-6); }
+.group { margin-top: var(--space-7); }
 
 .groupTitle {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
   font-size: var(--t-lg);
   font-weight: 600;
   letter-spacing: -0.005em;

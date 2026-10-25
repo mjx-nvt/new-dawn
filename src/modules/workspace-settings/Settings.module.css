@@ -1,21 +1,4 @@
-/* Shared by the Settings panes. Section and field rules match the global ones in
-   components.css (sentence case, Apple spacing); kept here for the panes that import them. */
-.section { margin-top: var(--space-7); }
-.section:first-child { margin-top: 0; }
-
-.sectionTitle {
-  font-size: var(--t-lg);
-  font-weight: 600;
-  letter-spacing: -0.005em;
-}
-
-.sectionSubtitle {
-  margin-top: var(--space-1);
-  margin-bottom: var(--space-4);
-  font-size: var(--t-md);
-  color: var(--ink-2);
-}
-
+/* Shared by the Settings panes (section classes are the global ones in components.css). */
 .fields {
   display: grid;
   grid-template-columns: 1fr 1fr;

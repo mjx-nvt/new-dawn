@@ -125,9 +125,6 @@ export default function AppLayout() {
         hidden={collapsed}
         iconsOnly={iconsOnly && !collapsed}
         onToggleIcons={toggleIcons}
-        onRecord={toggleRecording}
-        recording={!!recorder && recorder.phase !== "idle"}
-        stopping={recorder?.phase === "stopping"}
         switcherOpen={switcherOpen}
         onSwitcherOpenChange={setSwitcherOpen}
       />

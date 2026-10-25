@@ -6,9 +6,9 @@ export default function ConvertersPanel() {
   const converters = useConverters();
 
   return (
-    <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>PDF converters</h2>
-      <p className={styles.sectionSubtitle}>Tried in this order; the first that works makes the PDF</p>
+    <section className="section">
+      <h2 className="sectionTitle">PDF converters</h2>
+      <p className="sectionSubtitle">Tried in this order; the first that works makes the PDF</p>
       <div className={styles.fields}>
         {converters.data
           ? converters.data.map((c) => (

@@ -3,9 +3,9 @@
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
-  gap: var(--space-7);
+  gap: var(--space-8);
   align-items: start;
-  margin-top: var(--space-6);
+  margin-top: var(--space-5);
 }
 @container content (max-width: 960px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
@@ -19,7 +19,7 @@
 .aside {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
   min-width: 0;
 }
 
