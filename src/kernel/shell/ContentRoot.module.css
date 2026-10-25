@@ -7,6 +7,3 @@
   border-top-left-radius: var(--radius-window);
 }
 
-@media (max-width: 999px) {
-  .root { padding: var(--space-5) var(--space-4); }
-}

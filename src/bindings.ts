@@ -93,6 +93,14 @@ export const commands = {
 	setAgentGuide: (slug: string, agent: Agent, text: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_guide", { slug, agent, text })),
 	resetAgentGuide: (slug: string, agent: Agent) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("reset_agent_guide", { slug, agent })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
+	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
+	/**  Adds (no id) or updates a term by hand. */
+	saveVocabularyTerm: (slug: string, term: TermInput_Deserialize) => typedError<Term, AppError>(__TAURI_INVOKE("save_vocabulary_term", { slug, term })),
+	deleteVocabularyTerm: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_vocabulary_term", { slug, id })),
+	/**  What Whisper is told before the next transcription (the title is a placeholder). */
+	whisperPromptPreview: (slug: string) => typedError<string, AppError>(__TAURI_INVOKE("whisper_prompt_preview", { slug })),
+	/**  Undoes the vocabulary's correction of one transcript line. */
+	restoreTranscriptSegment: (slug: string, meetingId: string, seq: number) => typedError<null, AppError>(__TAURI_INVOKE("restore_transcript_segment", { slug, meetingId, seq })),
 	/**  Adds (no id) or updates a remembered person. */
 	savePerson: (slug: string, person: PersonInput_Deserialize) => typedError<Person, AppError>(__TAURI_INVOKE("save_person", { slug, person })),
 	deletePerson: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_person", { slug, id })),
@@ -131,7 +139,7 @@ export const commands = {
 	openPrivacySettings: (systemAudio: boolean) => typedError<null, AppError>(__TAURI_INVOKE("open_privacy_settings", { systemAudio })),
 	listMeetings: (slug: string) => typedError<Meeting_Serialize[], AppError>(__TAURI_INVOKE("list_meetings", { slug })),
 	getMeeting: (slug: string, id: string) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("get_meeting", { slug, id })),
-	getTranscript: (slug: string, meetingId: string) => typedError<TranscriptSegment[], AppError>(__TAURI_INVOKE("get_transcript", { slug, meetingId })),
+	getTranscript: (slug: string, meetingId: string) => typedError<TranscriptSegment_Serialize[], AppError>(__TAURI_INVOKE("get_transcript", { slug, meetingId })),
 	/**  The recording's peaks for the player (cached beside the recording after the first call). */
 	getWaveform: (slug: string, meetingId: string) => typedError<Waveform, AppError>(__TAURI_INVOKE("get_waveform", { slug, meetingId })),
 	/**  Copies the audio into the workspace, creates the meeting and starts transcription. */
@@ -938,6 +946,14 @@ export type SummaryProgress = {
 	part: number,
 	parts: number,
 	tokens: number,
+	/**
+	 *  What a call at this stage usually takes, from past runs (0 = no history yet): for the
+	 *  time-left estimate.
+	 */
+	expected_ms: number,
+	expected_tokens: number,
+	/**  What the stages after this one usually take (names check, cover note). */
+	later_ms: number,
 };
 
 export type SummaryStage = "queued" | "writing" | "merging" | 
@@ -1040,6 +1056,29 @@ export type TemplateInfo_Serialize = {
 	check: TemplateCheck_Serialize | null,
 };
 
+export type Term = {
+	id: string,
+	term: string,
+	heard_as: string[],
+	/**  "learned" (from transcript corrections) or "manual". */
+	source: string,
+	updated_at: string,
+};
+
+export type TermInput = TermInput_Serialize | TermInput_Deserialize;
+
+export type TermInput_Deserialize = {
+	id?: string | null,
+	term: string,
+	heard_as: string[],
+};
+
+export type TermInput_Serialize = {
+	id: string | null,
+	term: string,
+	heard_as: string[],
+};
+
 /**  One agenda item / topic and what was said about it. */
 export type Topic = Topic_Serialize | Topic_Deserialize;
 
@@ -1055,11 +1094,24 @@ export type Topic_Serialize = {
 	points: string[],
 };
 
-export type TranscriptSegment = {
+export type TranscriptSegment = TranscriptSegment_Serialize | TranscriptSegment_Deserialize;
+
+export type TranscriptSegment_Deserialize = {
 	seq: number,
 	start_ms: number,
 	end_ms: number,
 	text: string,
+	/**  What Whisper wrote, when the vocabulary corrected this line (D-036). */
+	raw_text?: string | null,
+};
+
+export type TranscriptSegment_Serialize = {
+	seq: number,
+	start_ms: number,
+	end_ms: number,
+	text: string,
+	/**  What Whisper wrote, when the vocabulary corrected this line (D-036). */
+	raw_text: string | null,
 };
 
 /**  A transcription job ended: `error` is None on success; code `cancelled` when stopped. */

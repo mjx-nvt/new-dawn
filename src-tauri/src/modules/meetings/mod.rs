@@ -55,6 +55,8 @@ pub struct TranscriptSegment {
     pub start_ms: u32,
     pub end_ms: u32,
     pub text: String,
+    /// What Whisper wrote, when the vocabulary corrected this line (D-036).
+    pub raw_text: Option<String>,
 }
 
 /// Just enough of a meeting type for pickers (full editing arrives with tenant setup, P1.4).
@@ -421,7 +423,7 @@ pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
 }
 
 pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<TranscriptSegment>> {
-    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
+    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
         .bind(meeting_id)
         .fetch_all(pool)
         .await?)
@@ -429,10 +431,12 @@ pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<Trans
 
 /// Replaces the meeting's transcript and marks it transcribed, in one transaction.
 /// Delete + insert (never REPLACE) so the FTS triggers stay correct (D-012).
+/// `raw` holds, per line, what Whisper wrote when the vocabulary corrected it (may be empty).
 pub async fn save_transcript(
     pool: &SqlitePool,
     meeting_id: &str,
     segments: &[Segment],
+    raw: &[Option<String>],
     duration_ms: u32,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
@@ -441,13 +445,14 @@ pub async fn save_transcript(
         .execute(&mut *tx)
         .await?;
     for (seq, segment) in segments.iter().enumerate() {
-        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text) VALUES (?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind(new_id())
             .bind(meeting_id)
             .bind(seq as u32)
             .bind(segment.start_ms)
             .bind(segment.end_ms)
             .bind(&segment.text)
+            .bind(raw.get(seq).cloned().flatten())
             .execute(&mut *tx)
             .await?;
     }
@@ -515,6 +520,7 @@ mod tests {
                     seg(65_000, "Tiếng Việt: the sandbox framework is published"),
                     seg(70_000, "Đồng ý với đối tác"),
                 ],
+                &[],
                 75_000,
             )
             .await

@@ -69,7 +69,7 @@ DM Sans via `@fontsource-variable/dm-sans` (`opsz.css` + `opsz-italic.css`, vari
 ## Forms and actions (System Settings shape)
 - **Grouped lists** `.group` > `.groupRow` (`.rowText` with `.rowLabel` + `.rowHint`, `.rowControl` on the right); `.groupTitle` above a group. Use for every settings pane.
 - **One primary action** per screen state (`.btnPrimary`); secondary actions in a `⋯` `MenuButton` (`.menu` glass popover). Destructive actions are red: `.btnDanger` (text) and the `DangerButton` component for two-step confirms (red fill on the confirm step), `.menuItemDanger` in menus.
-- **Pages fill the panel** (`.page` has no max-width); prose limits its own measure (`max-width: 76ch`). Wide meeting pages use two columns (content + a 340 px aside) via `@container content (min-width: 961px)`.
+- **Pages fill the panel** (`.page` has no max-width); prose limits its own measure (`max-width: 76ch`). The Summary tab is always two columns (summary + a 400 pt aside); the Notes card is first in the aside and `position: sticky` (`.notesPinned`, `--shadow-raised`), the aside stretches to the summary's height so it stays pinned.
 - Settings window (app-only): **fixed 780 × 580, not resizable** (System Settings); a glass sidebar of panes on the left (200 px, grouped App / AI on this Mac), the pane on the right with a 22/700 title. A workspace's own settings (Overview, Brand, Meeting types, People) are the Workspace page in the main window, as a segmented control.
 
 ## Ghost classes (every dossier stylesheet includes them)
@@ -82,7 +82,7 @@ DM Sans via `@fontsource-variable/dm-sans` (`opsz.css` + `opsz-italic.css`, vari
 Field sections always render every label; list sections render real items or 2–3 ghost cards. Omit a section only when the data *cannot* exist for that entity type.
 
 ## Section rhythm
-Content panel padding 40 (`--space-7`; 24/16 below 1000 px). Sections 48 apart (`.section`), subtitle 8 below the title and 24 above the content. Cards 24 padding. Grouped rows 16/24 padding, 56 min-height; `.groupTitle` 40 above / 12 below. Field grids 24 × 32. Tabs (`.segmented` under a page header) 40 above, 24 below. Sheets 32 padding, 24 gaps, 12 between actions. Settings panes 40 padding, title 32 below. Use these classes; never hand-tune a page's spacing.
+Content panel padding 40 (`--space-7`). The main window is at least 1180 pt wide (D-036). Sections 48 apart (`.section`), subtitle 8 below the title and 24 above the content. Cards 24 padding. Grouped rows 16/24 padding, 56 min-height; `.groupTitle` 40 above / 12 below. Field grids 24 × 32. Tabs (`.segmented` under a page header) 40 above, 24 below. Sheets 32 padding, 24 gaps, 12 between actions. Settings panes 40 padding, title 32 below. Use these classes; never hand-tune a page's spacing.
 Group divider: eyebrow "Group A · Name" + hairline; 40 px above, 24 px below. Field grid: 2 columns, 1 column when the content panel is ≤ 640 px wide. `.content-root` is a size container named `content`: write responsive rules as `@container content (…)` so they follow the panel (sidebar open or not), not the window. Cards: `--radius-card`, 0.5 px `--hair` border, `--surface` background, 24 px padding.
 
 ## Buttons (Apple capsules, 14.5 / 500)
@@ -91,6 +91,9 @@ Group divider: eyebrow "Group A · Name" + hairline; 40 px above, 24 px below. F
 - `.btnGhost`: transparent, `--ink-2` text, hover `--surface-2`.
 - `.btnDanger` / `.btnDangerFilled`: red text / red fill (two-step confirm via `DangerButton`).
 All: radius `--button-shape` (pill), press `scale(.97)`, height 28 px (compact) / 32 px (default); focus ring `0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent)`. Segmented controls are a pill of pills (`--surface-2` track, `--surface` selected segment).
+
+## Progress
+Every AI job shows `AiProgress` (`modules/meetings/AiProgress.tsx`): a 4 pt bar (sweeping when there's no estimate yet), then "<stage> · m:ss · about N min left". `TranscriptionBar` (from Whisper's %), `SummaryBar` (token rate vs `expected_tokens`, or `expected_ms` before the first token). No spinner-only states for AI work.
 
 ## Agents
 Every AI task is an agent with a guide (`modules/agents.rs`): Summary, Naming, Email, Minutes. A prompt = the guide (workspace file or bundled default) + the fixed part the code needs. Tag the Ollama session with `.for_agent("<id>")` so Workspace → Agents shows the last run. Never put the JSON shape or data-fence rules in the guide text.
@@ -111,7 +114,7 @@ One control: `.btn.btnRecord` (red `--status-negative` fill, white; a `.recordDo
 `MenuButton` → `.glass.menu`: macOS menu geometry — 5 px inset, 10 px radius, rows 24 px / 13 px / 10 px side padding / 5 px radius, hover and keyboard focus = `--focus` (system accent) fill with white text, `.menuSeparator` hairline with 5 px / 10 px margins, min-width 180. Danger rows red text.
 
 ## Sidebar & toolbar
-Sidebar 240 px, transparent (native glass behind); **icon rail 76 px** (icons + tooltips, workspace mark only) and hidden are the other states. Default "auto": rail below a 1000 px window, labels above; ⟨⟨/⟩⟩ at the bottom and ⌃⌘S pick one (remembered per Mac), ⌥⌘S hides. Icons are inline SVG in `kernel/shell/icons.tsx` (16 pt, 1.6 stroke, currentColor). Items 28 px tall, radius `--radius-control`, 12 px side padding; active item `--primary-100` background with `--primary-800` text, weight 500 (dark: `--primary-400` at 22 % over the glass / `--primary-200` text). Workspace badge at the top: the workspace logo alone when the pack has one (name as tooltip), else a 20 px letter mark; click opens the switcher popover (`.glass`). Section labels 11/700 uppercase `--ink-3`.
+Sidebar 240 px, transparent (native glass behind); **icon rail 76 px** (icons + tooltips, workspace mark only) and hidden are the other states. Default "auto": rail below a 1280 pt window, labels above; ⟨⟨/⟩⟩ at the bottom and ⌃⌘S pick one (remembered per Mac), ⌥⌘S hides. Icons are inline SVG in `kernel/shell/icons.tsx` (16 pt, 1.6 stroke, currentColor). Items 28 px tall, radius `--radius-control`, 12 px side padding; active item `--primary-100` background with `--primary-800` text, weight 500 (dark: `--primary-400` at 22 % over the glass / `--primary-200` text). Workspace badge at the top: the workspace logo alone when the pack has one (name as tooltip), else a 20 px letter mark; click opens the switcher popover (`.glass`). Section labels 11/700 uppercase `--ink-3`.
 Toolbar 52 px, unified, transparent, `data-tauri-drag-region="deep"`; left: back/forward (‹ ›, ⌘[ / ⌘]) + page title 15.5/600 + breadcrumb (hidden when narrow); centre: search field (⌘K, a capsule); right: Record control — ● pill (`--status-negative` dot, elapsed `mm:ss`, 5-bar level meter), becomes ■ while recording. Traffic lights sit inside the toolbar's left padding.
 
 ## Drawer (AI companion)

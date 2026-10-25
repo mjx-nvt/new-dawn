@@ -45,6 +45,7 @@ mod modules {
     pub mod agents;
     pub mod meetings;
     pub mod people;
+    pub mod vocabulary;
 }
 
 mod recorder {
@@ -71,6 +72,7 @@ mod commands {
     pub mod templates;
     pub mod window;
     pub mod workspace;
+    pub mod vocabulary;
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -135,6 +137,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::agents::set_agent_guide,
             commands::agents::reset_agent_guide,
             commands::people::list_people,
+            commands::vocabulary::list_vocabulary,
+            commands::vocabulary::save_vocabulary_term,
+            commands::vocabulary::delete_vocabulary_term,
+            commands::vocabulary::whisper_prompt_preview,
+            commands::vocabulary::restore_transcript_segment,
             commands::people::save_person,
             commands::people::delete_person,
             commands::people::merge_people,

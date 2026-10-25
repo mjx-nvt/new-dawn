@@ -451,6 +451,7 @@ async fn ask(
     cancel: &AtomicBool,
     mut on_token: impl FnMut(u32),
 ) -> Result<RawDoc> {
+    on_token(0); // the stage is shown while the model reads the prompt, before its first token
     // The meeting text can't close (or open) our data tags.
     let text = text.replace('<', "‹").replace('>', "›");
     let mut messages = vec![
@@ -735,9 +736,26 @@ async fn run(
     cancel: Arc<AtomicBool>,
 ) -> Result<usize> {
     let previous = meeting.status;
+    // What each stage usually takes, for the time-left estimate in the UI.
+    let typical = [
+        agents::typical(&pool, "summary").await,
+        agents::typical(&pool, "naming").await,
+        agents::typical(&pool, "email").await,
+    ];
     let report = {
         let (app, slug, meeting_id) = (app.clone(), slug.to_owned(), meeting.id.clone());
         move |stage, part, parts, tokens| {
+            let (expected_ms, expected_tokens) = match stage {
+                SummaryStage::Naming => typical[1],
+                SummaryStage::Email => typical[2],
+                _ => typical[0],
+            };
+            // What still follows this stage (the names check, the cover note).
+            let later_ms = match stage {
+                SummaryStage::Email => 0,
+                SummaryStage::Naming => typical[2].0,
+                _ => typical[1].0 + typical[2].0,
+            };
             let event = SummaryProgress {
                 workspace_slug: slug.clone(),
                 meeting_id: meeting_id.clone(),
@@ -745,6 +763,9 @@ async fn run(
                 part,
                 parts,
                 tokens,
+                expected_ms,
+                expected_tokens,
+                later_ms,
             };
             let _ = event.emit(&app);
         }
@@ -1156,6 +1177,7 @@ mod live_tests {
                 start_ms: n as u32 * 9_000,
                 end_ms: n as u32 * 9_000 + 8_000,
                 text: t.into(),
+                raw_text: None,
             })
             .collect();
         let root = std::env::temp_dir().join(format!("newdawn-sum-{}", uuid::Uuid::now_v7()));

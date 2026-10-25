@@ -23,6 +23,8 @@ export type MeetingHit = MeetingHit_Serialize;
 export interface TranscriptionProgress {
   stage: Stage;
   percent: number;
+  /** When this job first reported (ms since epoch), for the time-left estimate. */
+  startedAt: number;
 }
 
 const AUDIO_EXTENSIONS = ["m4a", "mp4", "aac", "mp3", "wav", "aif", "aiff", "caf", "flac", "ogg"];
@@ -108,8 +110,9 @@ export function useTranscriptionSync() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const onProgress = events.transcriptionProgress.listen(({ payload }) => {
-      const first = !queryClient.getQueryData(keys.progress(payload.meeting_id));
-      queryClient.setQueryData(keys.progress(payload.meeting_id), { stage: payload.stage, percent: payload.percent });
+      const prior = queryClient.getQueryData<TranscriptionProgress | null>(keys.progress(payload.meeting_id));
+      const first = !prior;
+      queryClient.setQueryData(keys.progress(payload.meeting_id), { stage: payload.stage, percent: payload.percent, startedAt: prior && prior.stage !== "queued" ? prior.startedAt : Date.now() });
       if (first) {
         queryClient.setQueryData(keys.error(payload.meeting_id), null);
         void queryClient.invalidateQueries({ queryKey: keys.meetings(payload.workspace_slug) });
@@ -175,6 +178,21 @@ export function useUpdateSegment(slug: string, meetingId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ seq, text }: { seq: number; text: string }) => unwrap(commands.updateTranscriptSegment(slug, meetingId, seq, text)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.transcript(slug, meetingId) });
+      void queryClient.invalidateQueries({ queryKey: ["summary", slug, meetingId] });
+      void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+      void queryClient.invalidateQueries({ queryKey: ["vocabulary", slug] }); // a correction may have taught it
+      void queryClient.invalidateQueries({ queryKey: ["whisper-prompt", slug] });
+    },
+  });
+}
+
+/** Undoes the vocabulary's correction of one line (back to what Whisper wrote). */
+export function useRestoreSegment(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (seq: number) => unwrap(commands.restoreTranscriptSegment(slug, meetingId, seq)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.transcript(slug, meetingId) });
       void queryClient.invalidateQueries({ queryKey: ["summary", slug, meetingId] });

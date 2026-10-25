@@ -14,7 +14,11 @@ import { unwrap } from "./unwrap";
 export type SummaryView = SummaryView_Serialize;
 export type { SummaryStage };
 
-export type SummaryProgress = Omit<SummaryProgressEvent, "meeting_id" | "workspace_slug">;
+export type SummaryProgress = Omit<SummaryProgressEvent, "meeting_id" | "workspace_slug"> & {
+  /** When this stage (or part) began, and when its first token arrived (ms since epoch). */
+  stageStartedAt: number;
+  firstTokenAt: number | null;
+};
 
 const keys = {
   summary: (slug: string, id: string) => ["summary", slug, id] as const,
@@ -46,13 +50,22 @@ export function useSummarySync() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const onProgress = events.summaryProgress.listen(({ payload }) => {
-      const first = !queryClient.getQueryData(keys.progress(payload.meeting_id));
-      queryClient.setQueryData(keys.progress(payload.meeting_id), {
+      const prior = queryClient.getQueryData<SummaryProgress | null>(keys.progress(payload.meeting_id));
+      const first = !prior;
+      const now = Date.now();
+      const sameStep = !!prior && prior.stage === payload.stage && prior.part === payload.part && prior.parts === payload.parts;
+      const progress: SummaryProgress = {
         stage: payload.stage,
         part: payload.part,
         parts: payload.parts,
         tokens: payload.tokens,
-      });
+        expected_ms: payload.expected_ms,
+        expected_tokens: payload.expected_tokens,
+        later_ms: payload.later_ms,
+        stageStartedAt: sameStep ? prior.stageStartedAt : now,
+        firstTokenAt: sameStep && prior.firstTokenAt ? prior.firstTokenAt : payload.tokens > 0 ? now : null,
+      };
+      queryClient.setQueryData(keys.progress(payload.meeting_id), progress);
       if (first) {
         queryClient.setQueryData(keys.error(payload.meeting_id), null);
         void queryClient.invalidateQueries({ queryKey: ["meeting", payload.workspace_slug, payload.meeting_id] });

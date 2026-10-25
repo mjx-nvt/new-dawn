@@ -1,7 +1,9 @@
 /* A glass strip: play · waveform · time · ±10 s · speed. Sticks under the tabs while reading. */
 .player {
   position: sticky;
-  top: 0; /* the content panel is the scroller; its padding scrolls away, so 0 is its top edge */
+  /* WebKit measures sticky offsets inside the scroller's padding (40 pt), so this is the
+     panel's top edge (verified by screenshot; `top: 0` left a 40 pt band of text above it). */
+  top: calc(-1 * var(--space-7));
   z-index: 1;
   display: flex;
   flex-wrap: wrap;

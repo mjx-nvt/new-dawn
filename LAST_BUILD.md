@@ -1,4 +1,22 @@
-# Last Build — Agents: guides, highlights, naming check, cover-note email · release 0.4.0
+# Last Build — Vocabulary that steers Whisper, two-column summary, progress with time left · release 0.5.0
+_2026-10-25_
+
+## What changed
+- **Your corrections now improve future transcripts** (D-036). Fix a name or term in a transcript line and it's learned (Workspace → **Vocabulary**: "WiredScore — misheard as Wired Score", Learned). Every new transcription (and Transcribe again) tells Whisper the meeting title, your people and your terms before it starts, then replaces the known mishearings in the result; those lines show **Corrected** (hover = what Whisper heard) with **Undo**, and the Transcript tab says how many lines were corrected. Confirmed names and attendee edits feed it through the people memory. Terms can be added and edited by hand; the tab shows exactly what Whisper is told.
+- **Summary tab**: always two columns (wider 400 pt right column); **Your notes** first and pinned while you scroll the summary; Email and Attendees below it scroll. Window minimum 1180 pt (default 1360 × 820); the sidebar becomes the icon rail below 1280 pt.
+- **Progress with time left** for every AI job: transcription ("Transcribing · 46 % · 1:12 · about 1 min left") and summary → names check → cover note, each with its own bar and estimate from the live token rate and past runs (`ai_log`); a sweeping bar until there's an estimate. Also on the Meetings list rows.
+- Migration 0006 (vocabulary table, `transcript_segment.raw_text`), additive — migration-safety: SAFE.
+- Architect review — must-fixes applied: transcript replacements match the **exact spelling** only (an alias like "Long" can't turn "a long time" into "a Hoàng Long time"; summaries still match any case), and capitalisation-only edits are never learned. Should-fixes applied: a learned pair must be a *respelling* (close once accents/spaces are folded — "Duke"→"Đức" yes, "the client"→"Acme" no); a hand edit clears the line's Undo; Undo is refused during transcription and points to Vocabulary to stop a bad correction; Whisper's originals are saved in the transcript's own transaction; lines where Whisper echoes its prompt ("People: … Terms: …") are dropped; group entries ("Richard and Harry") stay out of the prompt; the summary bar shows the stage while the model reads the prompt and its time left includes the names check and cover note; transcription time starts after the queue; Reduce Motion shows a faint full bar instead of a 30 % stub; the pinned card's shadow shows in dark mode.
+- Not done: Rewrite email has no progress bar (it's a ~20 s call; the button says "Writing…"); a long meeting leaks ~700 bytes per speech segment through whisper-rs's `set_initial_prompt` (documented ceiling).
+
+## Manual steps
+1. Install 0.5.0 (Settings → About → Check for updates). The window opens wider.
+2. In a transcript, fix a misheard name (e.g. "Duke" → "Đức") → Workspace → Vocabulary shows it as Learned → **Transcribe again** on a meeting → the line shows **Corrected**.
+3. Write a summary and watch the progress card's time left.
+
+---
+
+# Agents: guides, highlights, naming check, cover-note email · release 0.4.0
 _2026-10-25_
 
 ## Release 0.4.0

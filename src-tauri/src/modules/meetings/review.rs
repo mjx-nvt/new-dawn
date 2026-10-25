@@ -263,8 +263,17 @@ pub async fn update_segment(
             "The meeting is being transcribed — edit it when it's done"
         ));
     }
-    let done = sqlx::query(
-        "UPDATE transcript_segment SET text = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+    let old: Option<(String,)> = sqlx::query_as("SELECT text FROM transcript_segment WHERE meeting_id = ? AND seq = ?")
+        .bind(meeting_id)
+        .bind(seq)
+        .fetch_optional(pool)
+        .await?;
+    let Some((old,)) = old else {
+        bail!(AppError::not_found("No such transcript line"));
+    };
+    sqlx::query(
+        // A hand edit wins: the vocabulary's undo slot is cleared so Undo can't discard it.
+        "UPDATE transcript_segment SET text = ?, raw_text = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE meeting_id = ? AND seq = ?",
     )
     .bind(text)
@@ -272,8 +281,31 @@ pub async fn update_segment(
     .bind(seq)
     .execute(pool)
     .await?;
+    // A corrected name or term teaches the vocabulary, so the next transcript gets it right.
+    let pairs = crate::modules::vocabulary::word_diff(&old, text);
+    if !pairs.is_empty() {
+        let learned = crate::modules::vocabulary::learn(pool, &pairs).await?;
+        tracing::info!("transcript edit taught the vocabulary {learned} term(s)");
+    }
+    Ok(())
+}
+
+/// Puts back what Whisper wrote for a line the vocabulary corrected (nothing is learned).
+pub async fn restore_segment(pool: &SqlitePool, meeting_id: &str, seq: u32) -> Result<()> {
+    if super::get(pool, meeting_id).await?.status == MeetingStatus::Transcribing {
+        bail!(AppError::invalid("The meeting is being transcribed — edit it when it's done"));
+    }
+    let done = sqlx::query(
+        "UPDATE transcript_segment SET text = raw_text, raw_text = NULL, \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE meeting_id = ? AND seq = ? AND raw_text IS NOT NULL",
+    )
+    .bind(meeting_id)
+    .bind(seq)
+    .execute(pool)
+    .await?;
     if done.rows_affected() == 0 {
-        bail!(AppError::not_found("No such transcript line"));
+        bail!(AppError::not_found("This line wasn't corrected by the vocabulary"));
     }
     Ok(())
 }
@@ -515,7 +547,7 @@ mod tests {
                 end_ms: 1000,
                 text: "helo".into(),
             };
-            super::super::save_transcript(&pool, "m1", &[seg], 1000)
+            super::super::save_transcript(&pool, "m1", &[seg], &[], 1000)
                 .await
                 .unwrap();
             update_segment(&pool, "m1", 0, " hello Acme ")

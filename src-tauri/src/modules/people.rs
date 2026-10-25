@@ -323,7 +323,9 @@ struct Renamer {
 }
 
 impl Renamer {
-    fn new(pairs: &[(String, String)]) -> Option<Self> {
+    /// `any_case`: summaries (model text) match any case; spoken transcripts match the exact
+    /// spelling only, so an alias that is also a common word ("Long") never rewrites "a long time".
+    fn new(pairs: &[(String, String)], any_case: bool) -> Option<Self> {
         // Longest first; a spelling seen twice keeps its first (longest) target; targets map to
         // themselves so they're never rewritten.
         let mut rules: Vec<(String, String)> = pairs
@@ -355,7 +357,8 @@ impl Renamer {
             .map(|(from, _)| format!("({})", regex::escape(from)))
             .collect::<Vec<_>>()
             .join("|");
-        let re = regex::Regex::new(&format!("(?iu){alternation}")).ok()?;
+        let flags = if any_case { "(?iu)" } else { "(?u)" };
+        let re = regex::Regex::new(&format!("{flags}{alternation}")).ok()?;
         Some(Self { re, rules })
     }
 
@@ -394,11 +397,19 @@ impl Renamer {
 
 /// The same rename on free text (the stored email body).
 pub fn rename_in_text(text: &mut String, pairs: &[(String, String)]) -> usize {
-    Renamer::new(pairs).map_or(0, |r| r.fix(text))
+    Renamer::new(pairs, true).map_or(0, |r| r.fix(text))
+}
+
+/// Exact-spelling replacements on transcript lines (see `Renamer::new`); per line, whether it changed.
+pub fn rename_lines_exact(lines: &mut [String], pairs: &[(String, String)]) -> Vec<bool> {
+    match Renamer::new(pairs, false) {
+        Some(r) => lines.iter_mut().map(|l| r.fix(l) > 0).collect(),
+        None => vec![false; lines.len()],
+    }
 }
 
 pub fn rename_in_doc(doc: &mut SummaryDoc, pairs: &[(String, String)]) -> usize {
-    let Some(renamer) = Renamer::new(pairs) else {
+    let Some(renamer) = Renamer::new(pairs, true) else {
         return 0;
     };
     let mut count = 0;

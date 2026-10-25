@@ -50,7 +50,8 @@ function savePref(pref: SidebarPref) {
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false); // hidden entirely (⌥⌘S)
   const [pref, setPref] = useState<SidebarPref>(readPref);
-  const narrow = useMediaQuery("(max-width: 999px)");
+  // "Auto" shows the icon rail below 1280 pt so the summary keeps two roomy columns (D-036).
+  const narrow = useMediaQuery("(max-width: 1279px)");
   const iconsOnly = pref === "auto" ? narrow : pref === "icons";
   const history = useHistoryNav();
   const [switcherOpen, setSwitcherOpen] = useState(false);

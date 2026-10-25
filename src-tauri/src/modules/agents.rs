@@ -92,6 +92,25 @@ fn file(folder: &Path, agent: Agent) -> PathBuf {
         .join(format!("{}.md", agent.id()))
 }
 
+/// How long a call of `agent` usually takes and how many tokens it writes (mean of the last ten
+/// successful runs; 0 when there is no history). Feeds the progress estimate (D-036).
+pub async fn typical(pool: &SqlitePool, agent: &str) -> (u32, u32) {
+    let row: Result<(Option<f64>, Option<f64>), _> = sqlx::query_as(
+        "SELECT avg(duration_ms), avg(output_tokens) FROM (SELECT duration_ms, output_tokens FROM ai_log \
+         WHERE agent = ? AND status = 'ok' ORDER BY created_at DESC LIMIT 10)",
+    )
+    .bind(agent)
+    .fetch_one(pool)
+    .await;
+    match row {
+        Ok((ms, tokens)) => (ms.unwrap_or(0.0) as u32, tokens.unwrap_or(0.0) as u32),
+        Err(err) => {
+            tracing::warn!("could not read typical {agent} run: {err:#}");
+            (0, 0)
+        }
+    }
+}
+
 /// The guide in force: the workspace's file, else the default.
 pub fn guide(folder: &Path, agent: Agent) -> String {
     std::fs::read_to_string(file(folder, agent))

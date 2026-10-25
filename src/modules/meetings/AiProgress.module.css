@@ -1,0 +1,36 @@
+.progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.bar {
+  flex: 1 1 100%;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 220ms ease-out;
+}
+
+.meta { flex: none; font-variant-numeric: tabular-nums; }
+
+/* No estimate yet: a slow sweep instead of a frozen bar (none under reduced motion). */
+.indeterminate > span {
+  width: 30%;
+  animation: sweep 1.6s ease-in-out infinite;
+}
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+/* Reduce Motion: no sweep, and no stub that reads as "30 % done" — a faint full bar instead. */
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate > span { width: 100%; opacity: .35; }
+}

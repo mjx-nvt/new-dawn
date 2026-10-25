@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 use tokio::io::AsyncWriteExt;
 
+use crate::modules::vocabulary;
 use super::{Meeting, MeetingStatus, NewMeeting, audio};
 use crate::error::AppError;
 use crate::events::{TranscriptionFinished, TranscriptionProgress};
@@ -198,10 +199,14 @@ async fn run(
     super::set_status(&pool, &meeting.id, MeetingStatus::Transcribing).await?;
 
     let outcome: Result<()> = async {
+        // The workspace vocabulary guides Whisper and corrects the result (D-036).
+        let people = crate::modules::people::list(&pool).await?;
+        let terms = vocabulary::list(&pool).await?;
         let job = TranscribeJob {
             meeting_id: &meeting.id,
             language: meeting.language,
             cancel,
+            prompt: Some(vocabulary::whisper_prompt(&meeting.title, &people, &terms)),
         };
         let source = audio_path.clone();
         let transcript = whisper::transcribe(
@@ -213,13 +218,26 @@ async fn run(
         )
         .await?;
         progress(Stage::Saving, 97);
+        let mut transcript = transcript;
+        let prompt = vocabulary::whisper_prompt(&meeting.title, &people, &terms);
+        transcript.segments.retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));
+        let mut lines: Vec<String> = transcript.segments.iter().map(|s| s.text.clone()).collect();
+        let raw = vocabulary::correct_lines(&mut lines, &vocabulary::replacements(&people, &terms));
+        for (segment, line) in transcript.segments.iter_mut().zip(lines) {
+            segment.text = line;
+        }
         super::save_transcript(
             &pool,
             &meeting.id,
             &transcript.segments,
+            &raw,
             transcript.duration_ms,
         )
         .await?;
+        let corrected = raw.iter().filter(|r| r.is_some()).count();
+        if corrected > 0 {
+            tracing::info!("vocabulary corrected {corrected} line(s) of meeting {}", meeting.id);
+        }
         // The transcript is safe: the original can shrink now (D-031). Not fatal either.
         if let Err(err) =
             crate::kernel::storage::compress_meeting(&pool, &meeting.id, &audio_path).await

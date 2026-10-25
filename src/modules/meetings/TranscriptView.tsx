@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { audioUrl, useTranscript, useUpdateSegment, useWaveform, type Meeting, type TranscriptSegment } from "../../kernel/bridge/meetings";
+import { audioUrl, useRestoreSegment, useTranscript, useUpdateSegment, useWaveform, type Meeting, type TranscriptSegment } from "../../kernel/bridge/meetings";
 import { formatClock } from "./format";
 import styles from "./TranscriptView.module.css";
 import WaveformPlayer, { SKIP_MS } from "./WaveformPlayer";
@@ -17,6 +17,7 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
   const [editing, setEditing] = useState<number | null>(null);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const update = useUpdateSegment(slug, meeting.id);
+  const restore = useRestoreSegment(slug, meeting.id);
   const waveform = useWaveform(slug, meeting.id, !!meeting.audio_path);
   const segments = transcript.data ?? [];
   const locked = meeting.status === "transcribing";
@@ -102,6 +103,14 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
           {update.error.message}
         </p>
       )}
+      {segments.some((s) => s.raw_text) && (
+        <p className={`fieldHint ${styles.vocab}`}>
+          {(() => {
+            const n = segments.filter((s) => s.raw_text).length;
+            return `${n} ${n === 1 ? "line was" : "lines were"} corrected from the workspace vocabulary. Hover “Corrected” to see what Whisper heard.`;
+          })()}
+        </p>
+      )}
       {segments.length ? (
         <ol className={styles.rows} ref={list}>
           {segments.map((s) => {
@@ -128,6 +137,16 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
                 ) : (
                   <div className={styles.line}>
                     <p className={styles.text}>{s.text}</p>
+                    {s.raw_text && (
+                      <span className={styles.corrected}>
+                        <span className="chip chipPrimary" title={`Whisper heard: ${s.raw_text}`}>
+                          Corrected
+                        </span>
+                        <button type="button" className="btn btnGhost btnCompact" disabled={locked || restore.isPending} title={`Back to: ${s.raw_text} — to stop this correction, remove the spelling in Workspace → Vocabulary`} onClick={() => restore.mutate(s.seq)}>
+                          Undo
+                        </button>
+                      </span>
+                    )}
                     <button
                       type="button"
                       className={`btn btnGhost btnCompact ${styles.edit}`}

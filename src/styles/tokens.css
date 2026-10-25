@@ -51,6 +51,7 @@
   --radius-control: 8px;
   --radius-modal: 14px;
   --button-shape: var(--radius-pill);      /* Apple: controls are capsules */
+  --shadow-raised: 0 8px 24px rgba(15, 23, 42, 0.10);  /* a card floating over content (Majoris shadow-lg) */
   --chevron: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="%2364748B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M3 4.5l3 3 3-3"/%3E%3C/svg%3E');
 
   /* ── Primary — Majoris Orange. Fills at 500, hover 600, pressed 700. ── */
@@ -101,6 +102,7 @@
     --glass-tint: rgba(28, 31, 38, 0.55);
     --shell-scrim: rgba(0, 0, 0, 0.4);
     --primary-text: var(--primary-400);
+    --shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.45);
     --primary-tint: rgba(251, 146, 60, 0.22);       /* primary-400 at 22 %: a literal, not color-mix — see the note above */
     --primary-tint-soft: rgba(251, 146, 60, 0.14);  /* primary-400 at 14 % */
     --on-primary-tint: var(--primary-200);

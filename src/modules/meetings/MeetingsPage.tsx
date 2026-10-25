@@ -19,7 +19,8 @@ import {
   type WhenFilter,
 } from "./listing";
 import styles from "./MeetingsPage.module.css";
-import ProgressBar from "./ProgressBar";
+import { SummaryBar, TranscriptionBar } from "./AiProgress";
+import { useSummaryProgress } from "../../kernel/bridge/summary";
 import Snippet from "./Snippet";
 import StatusChip from "./StatusChip";
 
@@ -179,6 +180,7 @@ interface RowProps {
 
 function MeetingRow({ meeting, snippet, atMs }: RowProps) {
   const progress = useTranscriptionProgress(meeting.id);
+  const summaryProgress = useSummaryProgress(meeting.id);
   return (
     <Link
       to="/meetings/$meetingId"
@@ -194,7 +196,8 @@ function MeetingRow({ meeting, snippet, atMs }: RowProps) {
           {atMs != null && ` · match at ${formatClock(atMs)}`}
         </p>
         {snippet && <Snippet text={snippet} />}
-        {progress && <ProgressBar progress={progress} label={meeting.title} />}
+        {progress && <TranscriptionBar progress={progress} title={meeting.title} />}
+        {!progress && summaryProgress && <SummaryBar progress={summaryProgress} title={meeting.title} />}
       </div>
       <StatusChip status={meeting.status} />
     </Link>

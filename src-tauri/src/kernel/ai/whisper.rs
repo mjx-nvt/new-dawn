@@ -65,6 +65,8 @@ pub struct TranscribeJob<'a> {
     pub meeting_id: &'a str,
     pub language: Language,
     pub cancel: Arc<AtomicBool>,
+    /// Names and terms that bias Whisper's spelling (the workspace vocabulary, D-036).
+    pub prompt: Option<String>,
 }
 
 pub struct Transcript {
@@ -95,6 +97,7 @@ pub async fn transcribe(
     let started = Instant::now();
 
     let (app_for_job, cancel, language) = (app.clone(), job.cancel.clone(), job.language);
+    let prompt = job.prompt.clone().filter(|p| !p.trim().is_empty());
     let result = tokio::task::spawn_blocking(move || -> Result<Transcript> {
         progress(Stage::Decoding, 5);
         let samples = prepare()?;
@@ -112,6 +115,7 @@ pub async fn transcribe(
             &vad_path,
             &samples,
             language,
+            prompt.as_deref(),
             &cancel,
             |done| progress(Stage::Transcribing, 20 + (done * 75.0) as u32),
         )?;
@@ -240,15 +244,18 @@ impl WhisperEngine {
     /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
     /// `transcribe()` gateway above instead, which adds the queue and `ai_log`.
     /// `progress` gets 0.0–1.0; `cancel` is checked between and inside segments.
+    #[allow(clippy::too_many_arguments)]
     pub(in crate::kernel::ai) fn transcribe(
         &self,
         model: SpeechModel<'_>,
         vad_model: &Path,
         samples: &[f32],
         language: Language,
+        prompt: Option<&str>,
         cancel: &Arc<AtomicBool>,
         mut progress: impl FnMut(f32),
     ) -> Result<Vec<Segment>> {
+        let prompt = prompt.map(|p| p.replace('\0', " "));
         let threads = std::thread::available_parallelism().map_or(8, |n| n.get().min(8)) as i32;
         let speech = detect_speech(vad_model, samples, threads)?;
 
@@ -287,6 +294,11 @@ impl WhisperEngine {
             });
             params.set_n_threads(threads);
             params.set_language(Some(language.code()));
+            if let Some(prompt) = &prompt {
+                // ponytail: whisper-rs never frees this CString (~700 bytes per speech segment, a
+                // few hundred KB for a long meeting); upstream fix or one FullParams per job if it matters.
+                params.set_initial_prompt(prompt);
+            }
             params.set_translate(false);
             params.set_no_timestamps(false);
             params.set_suppress_blank(true);
@@ -493,6 +505,7 @@ mod tests {
                 &vad,
                 &samples[..2 * super::SAMPLE_RATE],
                 Language::En,
+                None,
                 &cancel,
                 |_| {},
             )
@@ -500,7 +513,7 @@ mod tests {
         let load = t.elapsed();
         let t = std::time::Instant::now();
         let segments = engine
-            .transcribe(speech(), &vad, &samples, Language::En, &cancel, |_| {})
+            .transcribe(speech(), &vad, &samples, Language::En, None, &cancel, |_| {})
             .unwrap();
         let run = t.elapsed();
         let audio_s = samples.len() as f64 / super::SAMPLE_RATE as f64;
@@ -571,6 +584,7 @@ mod tests {
                 &vad,
                 &samples,
                 Language::En,
+                None,
                 &Arc::new(AtomicBool::new(false)),
                 |_| {},
             )
@@ -598,7 +612,7 @@ mod tests {
             setter.store(true, std::sync::atomic::Ordering::Relaxed);
         });
         let err = engine
-            .transcribe(model(), &vad, &samples, Language::En, &flag, |_| {})
+            .transcribe(model(), &vad, &samples, Language::En, None, &flag, |_| {})
             .unwrap_err();
         stopper.join().unwrap();
         assert!(super::is_cancelled(&err), "{err:#}");
@@ -618,7 +632,7 @@ mod tests {
                 status: meetings::MeetingStatus::Recorded,
             };
             meetings::create(&pool, new).await.unwrap();
-            meetings::save_transcript(&pool, &id, &segments, (samples.len() / 16) as u32)
+            meetings::save_transcript(&pool, &id, &segments, &[], (samples.len() / 16) as u32)
                 .await
                 .unwrap();
             assert_eq!(

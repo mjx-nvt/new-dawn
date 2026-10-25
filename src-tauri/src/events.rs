@@ -90,6 +90,12 @@ pub struct SummaryProgress {
     pub part: u32,
     pub parts: u32,
     pub tokens: u32,
+    /// What a call at this stage usually takes, from past runs (0 = no history yet): for the
+    /// time-left estimate.
+    pub expected_ms: u32,
+    pub expected_tokens: u32,
+    /// What the stages after this one usually take (names check, cover note).
+    pub later_ms: u32,
 }
 
 /// A summary job ended: `error` is None on success; code `cancelled` when stopped.

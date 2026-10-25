@@ -5,6 +5,7 @@ import AgentsPanel from "../workspace-settings/AgentsPanel";
 import BrandPanel from "../workspace-settings/BrandPanel";
 import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
 import PeoplePanel from "../workspace-settings/PeoplePanel";
+import VocabularyPanel from "../workspace-settings/VocabularyPanel";
 import styles from "./WorkspacePage.module.css";
 
 const route = getRouteApi("/shell/workspace");
@@ -14,6 +15,7 @@ export const WORKSPACE_TABS = [
   { id: "brand", label: "Brand" },
   { id: "types", label: "Meeting types" },
   { id: "people", label: "People" },
+  { id: "vocabulary", label: "Vocabulary" },
   { id: "agents", label: "Agents" },
 ] as const;
 
@@ -53,6 +55,8 @@ export default function WorkspacePage() {
           <MeetingTypesPanel slug={slug} />
         ) : tab === "agents" ? (
           <AgentsPanel slug={slug} />
+        ) : tab === "vocabulary" ? (
+          <VocabularyPanel slug={slug} />
         ) : (
           <PeoplePanel slug={slug} />
         )}

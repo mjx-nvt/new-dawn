@@ -91,7 +91,7 @@ fn names_in(doc: &SummaryDoc) -> Vec<(String, String, String)> {
 }
 
 /// Edit distance on folded text (names are short; no crate needed).
-fn distance(a: &str, b: &str) -> usize {
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut prev: Vec<usize> = (0..=b.len()).collect();

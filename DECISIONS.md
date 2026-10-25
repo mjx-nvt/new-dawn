@@ -2,6 +2,18 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-036 — Corrections steer Whisper (vocabulary); a fixed two-column summary; progress with time left
+_2026-10-25_
+
+**Decision** (user: "is there any way the adjustments I make could feed back to Whisper for a better transcript later on — I really need this"; "notes on top, pinned; email and attendees scroll"; "a progress indicator so I know how much time is needed"):
+- **Whisper can't be retrained here; it can be steered.** Each transcription gets an *initial prompt* (whisper.cpp `initial_prompt`, ~220 tokens): the meeting title, the people memory's names (recent first) and the workspace vocabulary's terms — this biases spelling. Right after Whisper, **known mishearings are replaced** (vocabulary mishearing → term, people "also heard as" → name; whole words, the same renamer as the summary; aliases under three letters skipped). What Whisper wrote is kept per line (`transcript_segment.raw_text`) so each correction shows "Corrected" with **Undo**.
+- **Learning is deterministic**: a transcript line edit is diffed word by word (LCS); a changed run of ≤4 words becomes mishearing → term only if the new run looks like a name or term (capital, digit or non-ASCII letter), so wording edits aren't learned. Name confirmations and attendee edits already teach the people memory, which feeds both the prompt and the replacements. Summary prose edits are not learned (too ambiguous).
+- **Workspace → Vocabulary** shows what Whisper is told, lists terms (Learned / Added) with their mishearings, add / edit / remove. Migration 0006 (additive: `vocabulary` table, `transcript_segment.raw_text`).
+- **Layout**: the main window is at least 1180 pt; the Summary tab is always two columns (400 pt aside); Notes first and sticky; the auto icon rail starts below 1280 pt. WebKit insets sticky offsets by the scroller's padding, so pinned elements use `top: calc(-1 * var(--space-7))` (verified by screenshot).
+- **Progress**: one bar with elapsed and "about N min left" for transcription (from Whisper's percentage) and for summary / naming / email (live token rate against the agent's typical output from `ai_log`, or its typical duration before the first token; elapsed only with no history).
+
+---
+
 ## D-035 — Agents with editable guides; highlights from the owner's notes; the naming step asks
 _2026-10-25_
 

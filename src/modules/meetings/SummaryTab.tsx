@@ -19,6 +19,7 @@ import {
 } from "../../kernel/bridge/summary";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
+import { SummaryBar } from "./AiProgress";
 import AttendeesBlock from "./AttendeesBlock";
 import NamesSheet from "./NamesSheet";
 import { formatWhen } from "./format";
@@ -28,7 +29,7 @@ import styles from "./SummaryTab.module.css";
 const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Next steps", "Open questions"];
 
 /** Executive summary: the sections on the left (editable), and on the right what goes with
- *  them — the email, who attended, your notes. Stacks on a narrow panel. */
+ *  them — your notes (pinned while you scroll), the email, who attended. */
 export default function SummaryTab({ slug, meeting }: { slug: string; meeting: Meeting }) {
   const summary = useSummary(slug, meeting.id);
   const progress = useSummaryProgress(meeting.id);
@@ -85,12 +86,12 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
       </div>
 
       <aside className={styles.aside}>
+        <div className={`card ${styles.asideCard} ${styles.notesPinned}`}>
+          <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
+        </div>
         <EmailCard slug={slug} meeting={meeting} view={view ?? undefined} busy={busy} />
         <div className={`card ${styles.asideCard}`}>
           <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />
-        </div>
-        <div className={`card ${styles.asideCard}`}>
-          <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
         </div>
       </aside>
     </div>
@@ -121,21 +122,15 @@ function OllamaCard({ running, model }: { running: boolean; model: string }) {
 }
 
 function ProgressCard({ meetingId, progress }: { meetingId: string; progress: SummaryProgress | null | undefined }) {
-  const label =
-    !progress || progress.stage === "queued"
-      ? "Waiting for the previous AI job"
-      : progress.stage === "naming"
-        ? "Summary written · checking the names"
-        : progress.stage === "email"
-          ? "Summary written · writing the cover note"
-          : progress.stage === "merging"
-            ? `Merging parts${progress.parts > 1 ? ` · ${progress.part} of ${progress.parts}` : ""}`
-            : `Writing${progress.parts > 1 ? ` part ${progress.part} of ${progress.parts}` : ""}`;
   return (
-    <div className={`card ${styles.notice}`}>
-      <div>
-        <p className={styles.noticeTitle}>Summarising{progress && progress.tokens > 0 ? ` · ${progress.tokens} tokens` : "…"}</p>
-        <p className="fieldHint">{label}. You'll get a notification when it's ready.</p>
+    <div className={`card ${styles.notice} ${styles.progressCard}`}>
+      <div className={styles.progressBody}>
+        <p className={`${styles.noticeTitle} aiMark`}>
+          <SparkleIcon />
+          Summarising
+        </p>
+        {progress ? <SummaryBar progress={progress} /> : <p className="fieldHint">Starting…</p>}
+        <p className="fieldHint">You'll get a notification when it's ready; you can leave this page.</p>
       </div>
       <button type="button" className="btn btnGhost btnCompact" onClick={() => void cancelSummary(meetingId)}>
         Cancel

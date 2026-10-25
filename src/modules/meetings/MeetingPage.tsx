@@ -19,7 +19,7 @@ import MenuButton from "../../kernel/shell/MenuButton";
 import { formatClock, formatWhen, LANGUAGE_LABEL } from "./format";
 import styles from "./MeetingPage.module.css";
 import MinutesTab from "./MinutesTab";
-import ProgressBar from "./ProgressBar";
+import { TranscriptionBar } from "./AiProgress";
 import StatusChip from "./StatusChip";
 import SummaryTab from "./SummaryTab";
 import TranscriptView from "./TranscriptView";
@@ -185,7 +185,7 @@ export default function MeetingPage() {
               Cancel
             </button>
           </div>
-          {progress ? <ProgressBar progress={progress} label={m?.title} /> : <p className="fieldHint">Waiting for the job to report progress</p>}
+          {progress ? <TranscriptionBar progress={progress} title={m?.title} /> : <p className="fieldHint">Waiting for the job to report progress</p>}
           <p className="fieldHint">You'll be notified when the transcript is ready.</p>
         </div>
       )}
