@@ -70,9 +70,9 @@ mod commands {
     pub mod storage;
     pub mod summary;
     pub mod templates;
+    pub mod vocabulary;
     pub mod window;
     pub mod workspace;
-    pub mod vocabulary;
 }
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -103,6 +103,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::cancel_summary,
             commands::summary::confirm_names,
             commands::summary::rewrite_email,
+            commands::summary::apply_corrections,
             commands::summary::dismiss_names,
             commands::summary::update_summary_section,
             commands::summary::copy_summary_email,
@@ -231,7 +232,11 @@ fn init_logging() -> Option<WorkerGuard> {
     tracing_subscriber::registry()
         .with(filter())
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::fmt::layer().with_ansi(false).with_writer(writer))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(writer),
+        )
         .init();
     Some(guard)
 }
@@ -359,7 +364,10 @@ pub fn run() {
                         tauri::async_runtime::block_on(hub.close_all());
                     }
                     if let Some(guard) = app.try_state::<std::sync::Mutex<Option<WorkerGuard>>>() {
-                        guard.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+                        guard
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .take();
                     }
                 }
                 // Dock icon clicked while the main window is hidden.

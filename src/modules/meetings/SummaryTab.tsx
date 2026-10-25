@@ -7,6 +7,7 @@ import {
   useCopyEmail,
   useDismissNames,
   useOllamaStatus,
+  useApplyCorrections,
   useOpenInMail,
   useRewriteEmail,
   useSummarise,
@@ -19,7 +20,8 @@ import {
 } from "../../kernel/bridge/summary";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
-import { SummaryBar } from "./AiProgress";
+import AiProgress, { SummaryBar, useNow } from "./AiProgress";
+import { useAgents } from "../../kernel/bridge/agents";
 import AttendeesBlock from "./AttendeesBlock";
 import NamesSheet from "./NamesSheet";
 import { formatWhen } from "./format";
@@ -92,6 +94,9 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
         <EmailCard slug={slug} meeting={meeting} view={view ?? undefined} busy={busy} />
         <div className={`card ${styles.asideCard}`}>
           <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />
+        </div>
+        <div className={`card ${styles.asideCard}`}>
+          <CorrectionsCard slug={slug} meetingId={meeting.id} canRun={transcribed && ollamaReady && !busy} />
         </div>
       </aside>
     </div>
@@ -348,6 +353,7 @@ const FORMAT_HINT: Partial<Record<SectionKind, string>> = {
   key_points: "“- **Topic**”, then “  - point” lines under it",
   decisions: "One “- ” line per decision",
   action_items: "“- **Owner** — task — *due*”, one per line",
+  next_steps: "“- [ ] ” one step per line; “- [x] ” when done",
   open_questions: "One “- ” line per question",
 };
 
@@ -392,6 +398,15 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
             </button>
           </div>
         </div>
+      ) : kind === "next_steps" && toTasks(markdown).length > 0 ? (
+        <>
+          <TaskList markdown={markdown} locked={locked || update.isPending} onChange={(next) => update.mutate({ index, markdown: next })} />
+          {update.error && (
+            <p className={styles.error} role="alert">
+              {update.error.message}
+            </p>
+          )}
+        </>
       ) : html.trim() ? (
         // Rendered in Rust by pulldown-cmark with raw HTML escaped and links/images reduced to
         // text (email::to_html, tested), so it carries no markup the model could inject.
@@ -400,6 +415,99 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
         <p className="ghostText">Not yet captured</p>
       )}
     </div>
+  );
+}
+
+interface Task {
+  line: number;
+  done: boolean;
+  text: string;
+}
+
+/** "- [ ] text", "- [x] text", and plain "- text" bullets (older summaries) as tasks. */
+function toTasks(markdown: string): Task[] {
+  return markdown.split("\n").flatMap((raw, line) => {
+    const m = raw.match(/^[-*]\s+(?:\[( |x|X)\]\s+)?(.+)$/); // top-level lines only
+    return m ? [{ line, done: !!m[1] && m[1] !== " ", text: m[2].replace(/\*\*/g, "") }] : [];
+  });
+}
+
+/** Next steps as a to-do list: ticking a step saves the section ("- [x] …"). */
+function TaskList({ markdown, locked, onChange }: { markdown: string; locked: boolean; onChange: (markdown: string) => void }) {
+  const tasks = toTasks(markdown);
+  const toggle = (task: Task) => {
+    const lines = markdown.split("\n");
+    lines[task.line] = `- [${task.done ? " " : "x"}] ${lines[task.line].replace(/^\s*[-*]\s+(?:\[( |x|X)\]\s+)?/, "")}`;
+    onChange(lines.join("\n"));
+  };
+  return (
+    <ul className={styles.tasks}>
+      {tasks.map((t) => (
+        <li key={t.line}>
+          <label className={t.done ? `${styles.task} ${styles.taskDone}` : styles.task}>
+            <input type="checkbox" checked={t.done} disabled={locked} onChange={() => toggle(t)} />
+            <span>{t.text}</span>
+          </label>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CorrectionsProgress({ startedAt, typical }: { startedAt: number; typical: number | null }) {
+  const now = useNow();
+  return <AiProgress name="Applying corrections" label="Applying corrections" fraction={null} startedAt={startedAt} etaMs={typical != null ? Math.max(0, typical - (now - startedAt)) : null} />;
+}
+
+/** Corrections (D-037): names, titles, terms or facts that are wrong. The corrections agent
+ *  patches the summary, the email and the transcript — no full re-run — and remembers the
+ *  people and terms for the next transcript. */
+function CorrectionsCard({ slug, meetingId, canRun }: { slug: string; meetingId: string; canRun: boolean }) {
+  const [draft, setDraft] = useState("");
+  const [startedAt, setStartedAt] = useState(0);
+  const apply = useApplyCorrections(slug, meetingId);
+  const agents = useAgents(slug);
+  const typical = agents.data?.find((a) => a.agent === "corrections")?.last_run?.duration_ms ?? null;
+  const done = apply.data;
+  return (
+    <>
+      <p className={`${styles.asideTitle} aiMark`}>
+        <SparkleIcon />
+        Corrections
+      </p>
+      <textarea
+        className="input"
+        rows={4}
+        value={draft}
+        aria-label="Corrections"
+        placeholder={"Duke is Đức – APD, Marina Center\nWired Score → WiredScore\nThe go-live was 10 Oct, not 15 Oct"}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      {apply.isPending ? (
+        <CorrectionsProgress startedAt={startedAt} typical={typical} />
+      ) : (
+        <p className="fieldHint">
+          {apply.error
+            ? apply.error.message
+            : done
+              ? `Done: ${done.summary_changes} change${done.summary_changes === 1 ? "" : "s"} in the summary${done.sections_rewritten ? ` (${done.sections_rewritten} section${done.sections_rewritten === 1 ? "" : "s"} rewritten)` : ""}, ${done.transcript_lines} transcript line${done.transcript_lines === 1 ? "" : "s"}; remembered ${done.people_remembered} ${done.people_remembered === 1 ? "person" : "people"} and ${done.terms_learned} term${done.terms_learned === 1 ? "" : "s"}.`
+              : "Fixes the summary, email and transcript without a re-run, and remembers the names and terms for the next transcript."}
+        </p>
+      )}
+      <button
+        type="button"
+        className="btn btnCompact btnAi"
+        aria-busy={apply.isPending || undefined}
+        disabled={!canRun || !draft.trim() || apply.isPending}
+        onClick={() => {
+          setStartedAt(Date.now());
+          apply.mutate(draft, { onSuccess: () => setDraft("") });
+        }}
+      >
+        <SparkleIcon />
+        {apply.isPending ? "Applying…" : "Apply corrections"}
+      </button>
+    </>
   );
 }
 

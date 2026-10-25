@@ -334,7 +334,11 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
         tracing::warn!("could not queue transcription: {err:#}");
     }
     let meeting = meetings::get(&pool, &meeting_id).await?;
-    let next = if queued.is_ok() { " — transcribing" } else { "" };
+    let next = if queued.is_ok() {
+        " — transcribing"
+    } else {
+        ""
+    };
     notify::show(
         app,
         "Recording stopped",

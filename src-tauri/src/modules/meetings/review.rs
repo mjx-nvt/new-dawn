@@ -263,11 +263,12 @@ pub async fn update_segment(
             "The meeting is being transcribed — edit it when it's done"
         ));
     }
-    let old: Option<(String,)> = sqlx::query_as("SELECT text FROM transcript_segment WHERE meeting_id = ? AND seq = ?")
-        .bind(meeting_id)
-        .bind(seq)
-        .fetch_optional(pool)
-        .await?;
+    let old: Option<(String,)> =
+        sqlx::query_as("SELECT text FROM transcript_segment WHERE meeting_id = ? AND seq = ?")
+            .bind(meeting_id)
+            .bind(seq)
+            .fetch_optional(pool)
+            .await?;
     let Some((old,)) = old else {
         bail!(AppError::not_found("No such transcript line"));
     };
@@ -293,7 +294,9 @@ pub async fn update_segment(
 /// Puts back what Whisper wrote for a line the vocabulary corrected (nothing is learned).
 pub async fn restore_segment(pool: &SqlitePool, meeting_id: &str, seq: u32) -> Result<()> {
     if super::get(pool, meeting_id).await?.status == MeetingStatus::Transcribing {
-        bail!(AppError::invalid("The meeting is being transcribed — edit it when it's done"));
+        bail!(AppError::invalid(
+            "The meeting is being transcribed — edit it when it's done"
+        ));
     }
     let done = sqlx::query(
         "UPDATE transcript_segment SET text = raw_text, raw_text = NULL, \
@@ -305,7 +308,9 @@ pub async fn restore_segment(pool: &SqlitePool, meeting_id: &str, seq: u32) -> R
     .execute(pool)
     .await?;
     if done.rows_affected() == 0 {
-        bail!(AppError::not_found("This line wasn't corrected by the vocabulary"));
+        bail!(AppError::not_found(
+            "This line wasn't corrected by the vocabulary"
+        ));
     }
     Ok(())
 }

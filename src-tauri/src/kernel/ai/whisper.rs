@@ -513,7 +513,15 @@ mod tests {
         let load = t.elapsed();
         let t = std::time::Instant::now();
         let segments = engine
-            .transcribe(speech(), &vad, &samples, Language::En, None, &cancel, |_| {})
+            .transcribe(
+                speech(),
+                &vad,
+                &samples,
+                Language::En,
+                None,
+                &cancel,
+                |_| {},
+            )
             .unwrap();
         let run = t.elapsed();
         let audio_s = samples.len() as f64 / super::SAMPLE_RATE as f64;

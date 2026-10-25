@@ -2,6 +2,16 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-037 — A corrections agent instead of name lists in the notes; detailed summaries; next steps as tasks
+_2026-10-25_
+
+**Decision** (user: "Transcribe again doesn't work; re-run with notes isn't smart and seems token-limited; next steps should be a to-do list; instead of putting names in my notes I want a box that updates the summary *and* the transcript without a full re-run"):
+- **Transcribe again** accepted only Recorded / Failed / Transcribed meetings, so a summarised meeting was refused. It now accepts Summarised too (then re-summarises, keeping edits). Verified live on the test meeting.
+- **Summary**: the answer budget goes from 6k to 14k tokens (18k deep) — the transcript part then gets ~16k before being summarised in parts; the instructions and the default summary guide ask for detail (3–8 sentences per topic, who/what/figures/reasons). A lenient JSON reader (`summarise::lenient`) turns nulls, numbers and stray objects into the expected text, after a notes re-run failed on a type mismatch. **Next steps** are `- [ ]` tasks, shown as a tickable list (ticking saves the section; older bullet lists show as tasks too); ☐/☑ in exported documents.
+- **Corrections agent** (`modules/meetings/corrections.rs`, guide `agents/corrections.md`): the owner writes what is wrong; one Qwen call returns exact replacements, people (title, organisation, wrong spellings) and, for facts, rewritten sections. Applied to the summary (renamer, any case), the email, and the **transcript** (exact spelling, three letters or more — the pairs are written by the model, so the D-036 rule holds; Whisper's text kept for Undo), then the people memory learns the people and the vocabulary learns only *respellings* (a corrected fact such as "15 Oct → 10 Oct" fixes this meeting, never future transcripts), and pending name suspects it resolves disappear. The Corrections card sits under Attendees; Notes stay for what to highlight.
+
+---
+
 ## D-036 — Corrections steer Whisper (vocabulary); a fixed two-column summary; progress with time left
 _2026-10-25_
 

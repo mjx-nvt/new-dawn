@@ -365,7 +365,8 @@ impl Renamer {
     /// Whole-word replacements in `text`; returns how many changed something.
     fn fix(&self, text: &mut String) -> usize {
         // The regex crate has no look-around: whole-word is checked by hand on the neighbours.
-        let edge = |c: char| !c.is_alphanumeric() && !unicode_normalization::char::is_combining_mark(c);
+        let edge =
+            |c: char| !c.is_alphanumeric() && !unicode_normalization::char::is_combining_mark(c);
         let mut count = 0;
         let mut out = String::with_capacity(text.len());
         let mut last = 0;

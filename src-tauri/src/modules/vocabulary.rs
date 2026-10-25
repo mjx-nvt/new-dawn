@@ -107,22 +107,29 @@ pub async fn save(pool: &SqlitePool, input: TermInput) -> Result<Term> {
             id
         }
     };
-    let row: Row = sqlx::query_as("SELECT id, term, heard_as_json, source, updated_at FROM vocabulary WHERE id = ?")
-        .bind(&id)
-        .fetch_one(pool)
-        .await?;
+    let row: Row = sqlx::query_as(
+        "SELECT id, term, heard_as_json, source, updated_at FROM vocabulary WHERE id = ?",
+    )
+    .bind(&id)
+    .fetch_one(pool)
+    .await?;
     Ok(row.into())
 }
 
 fn duplicate(e: sqlx::Error) -> anyhow::Error {
     match &e {
-        sqlx::Error::Database(d) if d.is_unique_violation() => AppError::invalid("That term is already in the vocabulary").into(),
+        sqlx::Error::Database(d) if d.is_unique_violation() => {
+            AppError::invalid("That term is already in the vocabulary").into()
+        }
         _ => e.into(),
     }
 }
 
 pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
-    sqlx::query("DELETE FROM vocabulary WHERE id = ?").bind(id).execute(pool).await?;
+    sqlx::query("DELETE FROM vocabulary WHERE id = ?")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -139,7 +146,8 @@ pub async fn learn(pool: &SqlitePool, pairs: &[(String, String)]) -> Result<usiz
         .await?;
         match row {
             Some(row) => {
-                let mut existing: Vec<String> = serde_json::from_str(&row.heard_as_json).unwrap_or_default();
+                let mut existing: Vec<String> =
+                    serde_json::from_str(&row.heard_as_json).unwrap_or_default();
                 if existing.iter().any(|h| h.eq_ignore_ascii_case(heard)) {
                     continue;
                 }
@@ -175,7 +183,12 @@ pub async fn preview(pool: &SqlitePool) -> Result<String> {
 /// plain sentence each, within ~700 characters (Whisper reads about 220 tokens of prompt).
 pub fn whisper_prompt(title: &str, people: &[Person], terms: &[Term]) -> String {
     const MAX: usize = 700;
-    let safe = |s: &str| s.replace(['\0', '<', '>'], " ").split_whitespace().collect::<Vec<_>>().join(" ");
+    let safe = |s: &str| {
+        s.replace(['\0', '<', '>'], " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let mut out = String::new();
     let title = safe(title);
     if !title.is_empty() {
@@ -189,7 +202,15 @@ pub fn whisper_prompt(title: &str, people: &[Person], terms: &[Term]) -> String 
                 continue;
             }
             let extra = item.chars().count() + 2;
-            if out.chars().count() + label.len() + list.iter().map(|s: &String| s.chars().count() + 2).sum::<usize>() + extra > MAX {
+            if out.chars().count()
+                + label.len()
+                + list
+                    .iter()
+                    .map(|s: &String| s.chars().count() + 2)
+                    .sum::<usize>()
+                + extra
+                > MAX
+            {
                 break;
             }
             list.push(item);
@@ -207,7 +228,9 @@ pub fn whisper_prompt(title: &str, people: &[Person], terms: &[Term]) -> String 
     let names = recent
         .iter()
         .map(|p| p.name.clone())
-        .filter(|n| n.chars().count() <= 40 && !n.contains(" and ") && !n.to_lowercase().contains(" team"))
+        .filter(|n| {
+            n.chars().count() <= 40 && !n.contains(" and ") && !n.to_lowercase().contains(" team")
+        })
         .collect();
     add_list("People", names);
     add_list("Terms", terms.iter().map(|t| t.term.clone()).collect());
@@ -245,7 +268,26 @@ pub fn echoes_prompt(line: &str, prompt: &str) -> bool {
     let prompt = people::fold(prompt);
     line.chars().count() >= 12
         && (prompt.contains(line.trim_end_matches('.'))
-            || ["meeting:", "people:", "terms:"].iter().filter(|k| line.contains(*k)).count() >= 2)
+            || ["meeting:", "people:", "terms:"]
+                .iter()
+                .filter(|k| line.contains(*k))
+                .count()
+                >= 2)
+}
+
+/// A different spelling of the same thing — what the vocabulary may learn: not a capitalisation
+/// change ("the" → "The"), not a rewrite ("the client" → "Acme"; close once accents and spaces
+/// are folded), not a fact (the digits stay the same: "15 Oct" → "10 Oct" is not a spelling).
+pub fn is_respelling(from: &str, to: &str) -> bool {
+    let (f, t) = (people::fold(from), people::fold(to));
+    let close =
+        crate::modules::meetings::naming::distance(&f.replace(' ', ""), &t.replace(' ', "")) * 2
+            <= f.chars().count().max(t.chars().count());
+    let digits = |s: &str| s.chars().filter(char::is_ascii_digit).collect::<String>();
+    from.to_lowercase() != to.to_lowercase()
+        && close
+        && digits(from) == digits(to)
+        && to.chars().any(char::is_alphabetic)
 }
 
 fn word(token: &str) -> &str {
@@ -256,13 +298,25 @@ fn word(token: &str) -> &str {
 /// four words, kept only when the new run looks like a name or term (a capital letter, a digit
 /// or a letter outside ASCII) — ordinary wording edits are not learned.
 pub fn word_diff(old: &str, new: &str) -> Vec<(String, String)> {
-    let a: Vec<&str> = old.split_whitespace().map(word).filter(|w| !w.is_empty()).collect();
-    let b: Vec<&str> = new.split_whitespace().map(word).filter(|w| !w.is_empty()).collect();
+    let a: Vec<&str> = old
+        .split_whitespace()
+        .map(word)
+        .filter(|w| !w.is_empty())
+        .collect();
+    let b: Vec<&str> = new
+        .split_whitespace()
+        .map(word)
+        .filter(|w| !w.is_empty())
+        .collect();
     // LCS table over words.
     let mut lcs = vec![vec![0u16; b.len() + 1]; a.len() + 1];
     for i in (0..a.len()).rev() {
         for j in (0..b.len()).rev() {
-            lcs[i][j] = if a[i] == b[j] { lcs[i + 1][j + 1] + 1 } else { lcs[i + 1][j].max(lcs[i][j + 1]) };
+            lcs[i][j] = if a[i] == b[j] {
+                lcs[i + 1][j + 1] + 1
+            } else {
+                lcs[i + 1][j].max(lcs[i][j + 1])
+            };
         }
     }
     let (mut i, mut j) = (0, 0);
@@ -273,15 +327,10 @@ pub fn word_diff(old: &str, new: &str) -> Vec<(String, String)> {
         if (1..=4).contains(&ra.len()) && (1..=4).contains(&rb.len()) {
             let from = ra.join(" ");
             let to = rb.join(" ");
-            let looks_like_term = to.chars().any(|c| c.is_uppercase() || c.is_ascii_digit() || (c.is_alphabetic() && !c.is_ascii()));
-            // A respelling, not a rewrite: capitalisation alone isn't learned ("the" → "The"), and
-            // the two must sound alike — close once folded ("Duke" → "Đức", "Wired Score" →
-            // "WiredScore"), not "the client" → "Acme".
-            let (f, t) = (people::fold(&from), people::fold(&to));
-            let close = crate::modules::meetings::naming::distance(&f.replace(' ', ""), &t.replace(' ', ""))
-                * 2
-                <= f.chars().count().max(t.chars().count());
-            if looks_like_term && from.to_lowercase() != to.to_lowercase() && close && to.chars().any(char::is_alphabetic) {
+            let looks_like_term = to.chars().any(|c| {
+                c.is_uppercase() || c.is_ascii_digit() || (c.is_alphabetic() && !c.is_ascii())
+            });
+            if looks_like_term && is_respelling(&from, &to) {
                 pairs.push((from, to));
             }
         }
@@ -324,14 +373,31 @@ mod tests {
     #[test]
     fn learns_term_replacements_but_not_wording() {
         assert_eq!(
-            word_diff("Email sent to June of Wired Score Singapore.", "Email sent to June of WiredScore Singapore."),
+            word_diff(
+                "Email sent to June of Wired Score Singapore.",
+                "Email sent to June of WiredScore Singapore."
+            ),
             vec![("Wired Score".to_owned(), "WiredScore".to_owned())]
         );
-        assert_eq!(word_diff("So, Duke and I agreed", "So, Đức and I agreed"), vec![("Duke".to_owned(), "Đức".to_owned())]);
-        assert!(word_diff("we have to take care of it", "we must take care of it").is_empty(), "plain wording isn't a term");
+        assert_eq!(
+            word_diff("So, Duke and I agreed", "So, Đức and I agreed"),
+            vec![("Duke".to_owned(), "Đức".to_owned())]
+        );
+        assert!(
+            word_diff("we have to take care of it", "we must take care of it").is_empty(),
+            "plain wording isn't a term"
+        );
         assert!(word_diff("same text", "same text").is_empty());
-        assert!(word_diff("the meeting started", "The meeting started").is_empty(), "capitalisation isn't learned");
-        assert!(word_diff("we told the client today", "we told Acme today").is_empty(), "a rewrite isn't a respelling");
+        assert!(!is_respelling("15 Oct", "10 Oct"), "a fact, not a spelling");
+        assert!(is_respelling("suy âm", "siêu âm"));
+        assert!(
+            word_diff("the meeting started", "The meeting started").is_empty(),
+            "capitalisation isn't learned"
+        );
+        assert!(
+            word_diff("we told the client today", "we told Acme today").is_empty(),
+            "a rewrite isn't a respelling"
+        );
     }
 
     #[test]
@@ -345,15 +411,37 @@ mod tests {
         }];
         let people = vec![person("Đức", &["Duke", "Du"])];
         let pairs = replacements(&people, &terms);
-        assert!(!pairs.iter().any(|(f, _)| f == "Du"), "too short to replace safely");
-        let mut lines = vec!["Duke met Wired Score.".to_owned(), "Nothing here.".to_owned(), "a duke of wired score".to_owned()];
+        assert!(
+            !pairs.iter().any(|(f, _)| f == "Du"),
+            "too short to replace safely"
+        );
+        let mut lines = vec![
+            "Duke met Wired Score.".to_owned(),
+            "Nothing here.".to_owned(),
+            "a duke of wired score".to_owned(),
+        ];
         let raw = correct_lines(&mut lines, &pairs);
         assert_eq!(lines[0], "Đức met WiredScore.");
-        assert_eq!(lines[2], "a duke of wired score", "exact spelling only in speech");
-        assert_eq!(raw, vec![Some("Duke met Wired Score.".to_owned()), None, None]);
-        assert!(echoes_prompt("People: Đức. Terms: WiredScore.", "Meeting: x. People: Đức. Terms: WiredScore."));
-        assert!(!echoes_prompt("We met Đức about WiredScore today.", "Meeting: x. People: Đức. Terms: WiredScore."));
+        assert_eq!(
+            lines[2], "a duke of wired score",
+            "exact spelling only in speech"
+        );
+        assert_eq!(
+            raw,
+            vec![Some("Duke met Wired Score.".to_owned()), None, None]
+        );
+        assert!(echoes_prompt(
+            "People: Đức. Terms: WiredScore.",
+            "Meeting: x. People: Đức. Terms: WiredScore."
+        ));
+        assert!(!echoes_prompt(
+            "We met Đức about WiredScore today.",
+            "Meeting: x. People: Đức. Terms: WiredScore."
+        ));
         let prompt = whisper_prompt("Weekly <meeting>", &people, &terms);
-        assert_eq!(prompt, "Meeting: Weekly meeting. People: Đức. Terms: WiredScore.");
+        assert_eq!(
+            prompt,
+            "Meeting: Weekly meeting. People: Đức. Terms: WiredScore."
+        );
     }
 }

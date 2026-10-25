@@ -18,12 +18,18 @@ pub enum Agent {
     Naming,
     Email,
     Minutes,
+    Corrections,
 }
 
 impl Agent {
     /// The agents that talk to the model. The minutes are filled from the summary by rules
     /// and the Word template (D-024), so `Minutes` has no guide to edit.
-    pub const ALL: [Agent; 3] = [Agent::Summary, Agent::Naming, Agent::Email];
+    pub const ALL: [Agent; 4] = [
+        Agent::Summary,
+        Agent::Naming,
+        Agent::Email,
+        Agent::Corrections,
+    ];
 
     pub fn id(self) -> &'static str {
         match self {
@@ -31,6 +37,7 @@ impl Agent {
             Agent::Naming => "naming",
             Agent::Email => "email",
             Agent::Minutes => "minutes",
+            Agent::Corrections => "corrections",
         }
     }
 
@@ -40,15 +47,25 @@ impl Agent {
             Agent::Naming => "Naming",
             Agent::Email => "Email",
             Agent::Minutes => "Minutes",
+            Agent::Corrections => "Corrections",
         }
     }
 
     pub fn description(self) -> &'static str {
         match self {
-            Agent::Summary => "Writes the executive summary from the transcript and your notes, right after transcription.",
-            Agent::Naming => "Checks the people in a new summary against the people memory and asks you to confirm the doubtful ones.",
-            Agent::Email => "Writes the cover note that goes with the minutes: key points, decisions, actions.",
+            Agent::Summary => {
+                "Writes the executive summary from the transcript and your notes, right after transcription."
+            }
+            Agent::Naming => {
+                "Checks the people in a new summary against the people memory and asks you to confirm the doubtful ones."
+            }
+            Agent::Email => {
+                "Writes the cover note that goes with the minutes: key points, decisions, actions."
+            }
             Agent::Minutes => "Fills the Word template from the summary.",
+            Agent::Corrections => {
+                "Applies what you tell it is wrong to the summary, email and transcript, and remembers the names and terms."
+            }
         }
     }
 
@@ -59,6 +76,7 @@ impl Agent {
             Agent::Naming => include_str!("../../agents/naming.md"),
             Agent::Email => include_str!("../../agents/email.md"),
             Agent::Minutes => include_str!("../../agents/minutes.md"),
+            Agent::Corrections => include_str!("../../agents/corrections.md"),
         }
     }
 }

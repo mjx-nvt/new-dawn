@@ -88,7 +88,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         )?)
         .separator()
         .item(&item(app, "go-back", "Back", Some("CmdOrCtrl+["), true)?)
-        .item(&item(app, "go-forward", "Forward", Some("CmdOrCtrl+]"), true)?)
+        .item(&item(
+            app,
+            "go-forward",
+            "Forward",
+            Some("CmdOrCtrl+]"),
+            true,
+        )?)
         .separator()
         .fullscreen()
         .build()?;

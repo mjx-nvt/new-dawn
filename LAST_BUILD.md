@@ -1,4 +1,17 @@
-# Last Build — Notes above the summary, both columns pinned · release 0.5.1
+# Last Build — Transcribe again fixed, detailed summaries, to-do next steps, Corrections agent · release 0.6.0
+_2026-10-25_
+
+## What changed
+- **Transcribe again works on summarised meetings** (it was refused: the check only allowed Recorded / Failed / Transcribed). It uses the vocabulary and people, then re-summarises keeping your edits. Verified live twice on the short test meeting.
+- **More detailed summaries**: the summary may now be ~14k tokens long (was 6k); topics get 3–8 full sentences; the overview two or three paragraphs. A notes re-run that failed with "not the expected JSON" (a null where text was expected) can't fail that way any more — the reader repairs such answers.
+- **Next steps = a to-do list**: tick a step and it's saved; ☐/☑ in the minutes.
+- **Corrections** card under Attendees (sparkle): write what's wrong — "Duke is Đức – APD, Marina Center", "Wired Score → WiredScore", "go-live was 10 Oct, not 15" — and **Apply corrections**: the summary, email and transcript are fixed without a re-run (lines show Corrected + Undo), and the names/terms are remembered for the next transcript. A result line says what changed. Workspace → Agents lists the Corrections agent's guide. Verified live: "suy âm → siêu âm" fixed the transcript line, kept Whisper's text for Undo and taught the vocabulary (6 s).
+- Architect review — must-fix applied: a malformed corrections answer is reported without quoting any meeting text (D-026). Should-fixes applied: the vocabulary learns only respellings from corrections (never facts like "15 Oct → 10 Oct"); transcript lines are corrected by exact spelling (≥ 3 letters, as for automatic corrections); section rewrites come before the renames; data is re-read after waiting for the AI queue; no "transcript changed" banner right after a correction; the corrections time-left ticks; a refused tick on a to-do shows its error; only top-level bullets become tasks; a missing `sections` still triggers the repair round.
+- Note: the live tests changed the short test meeting "Nguyen Binh Khiem" (re-transcribed twice, now summarised; "siêu âm" in its transcript and vocabulary).
+
+---
+
+# Notes above the summary, both columns pinned · release 0.5.1
 _2026-10-25_
 
 - **Your notes** moved to the top of the summary column (above Highlights) and stay pinned while you scroll; long notes scroll inside the box (at most a quarter of the window) so the pinned card never covers the summary.

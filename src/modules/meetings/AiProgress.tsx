@@ -5,7 +5,7 @@ import { STAGE_LABEL } from "./format";
 import styles from "./AiProgress.module.css";
 
 /** Re-renders every second while mounted (elapsed / time left). */
-function useNow(): number {
+export function useNow(): number {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);

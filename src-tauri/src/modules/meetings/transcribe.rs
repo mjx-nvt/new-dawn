@@ -13,12 +13,12 @@ use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 use tokio::io::AsyncWriteExt;
 
-use crate::modules::vocabulary;
 use super::{Meeting, MeetingStatus, NewMeeting, audio};
 use crate::error::AppError;
 use crate::events::{TranscriptionFinished, TranscriptionProgress};
 use crate::kernel::ai::whisper::{self, Language, Progress, Segment, Stage, TranscribeJob};
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::vocabulary;
 
 /// Cancel flags of running jobs, by meeting id.
 #[derive(Default)]
@@ -110,7 +110,10 @@ pub async fn start(app: &AppHandle, slug: &str, meeting_id: &str) -> Result<()> 
     let meeting = super::get(&pool, meeting_id).await?;
     if !matches!(
         meeting.status,
-        MeetingStatus::Recorded | MeetingStatus::Failed | MeetingStatus::Transcribed
+        MeetingStatus::Recorded
+            | MeetingStatus::Failed
+            | MeetingStatus::Transcribed
+            | MeetingStatus::Summarised
     ) {
         bail!(AppError::invalid(
             "This meeting can't be transcribed right now"
@@ -220,7 +223,9 @@ async fn run(
         progress(Stage::Saving, 97);
         let mut transcript = transcript;
         let prompt = vocabulary::whisper_prompt(&meeting.title, &people, &terms);
-        transcript.segments.retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));
+        transcript
+            .segments
+            .retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));
         let mut lines: Vec<String> = transcript.segments.iter().map(|s| s.text.clone()).collect();
         let raw = vocabulary::correct_lines(&mut lines, &vocabulary::replacements(&people, &terms));
         for (segment, line) in transcript.segments.iter_mut().zip(lines) {
@@ -236,7 +241,10 @@ async fn run(
         .await?;
         let corrected = raw.iter().filter(|r| r.is_some()).count();
         if corrected > 0 {
-            tracing::info!("vocabulary corrected {corrected} line(s) of meeting {}", meeting.id);
+            tracing::info!(
+                "vocabulary corrected {corrected} line(s) of meeting {}",
+                meeting.id
+            );
         }
         // The transcript is safe: the original can shrink now (D-031). Not fatal either.
         if let Err(err) =

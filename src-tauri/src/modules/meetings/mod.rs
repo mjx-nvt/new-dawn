@@ -1,6 +1,7 @@
 //! Meetings in one workspace database. Pure data: callers get the pool from the hub.
 
 pub mod audio;
+pub mod corrections;
 pub mod email;
 pub mod mail;
 pub mod minutes;
@@ -358,7 +359,12 @@ pub async fn save_summary(
 }
 
 /// Saves the summary document only; the stored email stays as it is.
-pub async fn save_sections(pool: &SqlitePool, meeting_id: &str, sections_json: &str, edited: bool) -> Result<()> {
+pub async fn save_sections(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    sections_json: &str,
+    edited: bool,
+) -> Result<()> {
     sqlx::query(
         "UPDATE summary SET sections_json = ?, \
            edited_at = CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE edited_at END, \
@@ -373,7 +379,12 @@ pub async fn save_sections(pool: &SqlitePool, meeting_id: &str, sections_json: &
 }
 
 /// Saves the email (subject + Markdown body) of a summary.
-pub async fn save_email(pool: &SqlitePool, meeting_id: &str, subject: &str, body: &str) -> Result<()> {
+pub async fn save_email(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    subject: &str,
+    body: &str,
+) -> Result<()> {
     sqlx::query("UPDATE summary SET email_subject = ?, email_md = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE meeting_id = ?")
         .bind(subject)
         .bind(body)
@@ -385,7 +396,11 @@ pub async fn save_email(pool: &SqlitePool, meeting_id: &str, subject: &str, body
 
 /// Stores (or clears, with None) the naming agent's pending suspects for a summary. Deliberately
 /// leaves `updated_at` alone: this is the agent's working state, not a change to the summary.
-pub async fn set_naming(pool: &SqlitePool, meeting_id: &str, naming_json: Option<&str>) -> Result<()> {
+pub async fn set_naming(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    naming_json: Option<&str>,
+) -> Result<()> {
     sqlx::query("UPDATE summary SET naming_json = ? WHERE meeting_id = ?")
         .bind(naming_json)
         .bind(meeting_id)
@@ -427,6 +442,28 @@ pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<Trans
         .bind(meeting_id)
         .fetch_all(pool)
         .await?)
+}
+
+/// Sets a line's text from a correction, keeping what Whisper wrote (for Undo) unless a
+/// previous correction already kept it.
+pub async fn correct_segment(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    seq: u32,
+    text: &str,
+    whisper_text: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE transcript_segment SET text = ?, raw_text = coalesce(raw_text, ?), \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE meeting_id = ? AND seq = ?",
+    )
+    .bind(text)
+    .bind(whisper_text)
+    .bind(meeting_id)
+    .bind(seq)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Replaces the meeting's transcript and marks it transcribed, in one transaction.

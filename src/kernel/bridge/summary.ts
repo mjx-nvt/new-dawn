@@ -129,6 +129,21 @@ export function useDismissNames(slug: string, meetingId: string) {
   });
 }
 
+/** The corrections agent: applies what the owner says is wrong to the summary, email and
+ *  transcript, and remembers the people and terms (no full re-run). */
+export function useApplyCorrections(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => unwrap(commands.applyCorrections(slug, meetingId, text)),
+    onSuccess: (outcome) => {
+      if (outcome.view) queryClient.setQueryData(keys.summary(slug, meetingId), outcome.view);
+      for (const key of [["transcript", slug, meetingId], ["people", slug], ["vocabulary", slug], ["whisper-prompt", slug], ["agents", slug], ["meeting-search"]]) {
+        void queryClient.invalidateQueries({ queryKey: key });
+      }
+    },
+  });
+}
+
 /** Writes the cover note again with the email agent (waits for the AI queue; ~20 s). */
 export function useRewriteEmail(slug: string, meetingId: string) {
   const queryClient = useQueryClient();

@@ -34,6 +34,11 @@ export const commands = {
 	confirmNames: (slug: string, meetingId: string, decisions: NameDecision[]) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("confirm_names", { slug, meetingId, decisions })),
 	/**  Writes the cover note again with the email agent. */
 	rewriteEmail: (slug: string, meetingId: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("rewrite_email", { slug, meetingId })),
+	/**
+	 *  Applies the owner's corrections (names, titles, terms, facts) to the summary, email and
+	 *  transcript with the corrections agent, and remembers the people and terms (D-037).
+	 */
+	applyCorrections: (slug: string, meetingId: string, text: string) => typedError<CorrectionsOutcome_Serialize, AppError>(__TAURI_INVOKE("apply_corrections", { slug, meetingId, text })),
 	/**  Drops the pending list without changing anything. */
 	dismissNames: (slug: string, meetingId: string) => typedError<SummaryView_Serialize | null, AppError>(__TAURI_INVOKE("dismiss_names", { slug, meetingId })),
 	updateSummarySection: (slug: string, meetingId: string, index: number, markdown: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_summary_section", { slug, meetingId, index, markdown })),
@@ -180,7 +185,7 @@ export type ActionItem = {
 	due: string,
 };
 
-export type Agent = "summary" | "naming" | "email" | "minutes";
+export type Agent = "summary" | "naming" | "email" | "minutes" | "corrections";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -449,6 +454,28 @@ export type ConverterInfo_Serialize = {
 	name: string,
 	/**  Where the app was found; `None` when it isn't installed. */
 	path: string | null,
+};
+
+export type CorrectionsOutcome = CorrectionsOutcome_Serialize | CorrectionsOutcome_Deserialize;
+
+export type CorrectionsOutcome_Deserialize = {
+	/**  The summary after the changes (None when the meeting has no summary yet). */
+	view?: SummaryView_Deserialize | null,
+	summary_changes: number,
+	transcript_lines: number,
+	sections_rewritten: number,
+	people_remembered: number,
+	terms_learned: number,
+};
+
+export type CorrectionsOutcome_Serialize = {
+	/**  The summary after the changes (None when the meeting has no summary yet). */
+	view: SummaryView_Serialize | null,
+	summary_changes: number,
+	transcript_lines: number,
+	sections_rewritten: number,
+	people_remembered: number,
+	terms_learned: number,
 };
 
 export type Decision = {

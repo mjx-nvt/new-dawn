@@ -64,7 +64,9 @@ pub fn peaks(samples: &[f32], buckets: usize) -> Vec<u8> {
     (0..buckets)
         .map(|b| {
             let from = b * samples.len() / buckets;
-            let to = ((b + 1) * samples.len() / buckets).max(from + 1).min(samples.len());
+            let to = ((b + 1) * samples.len() / buckets)
+                .max(from + 1)
+                .min(samples.len());
             let peak = samples[from..to].iter().fold(0f32, |m, s| m.max(s.abs()));
             (peak.clamp(0.0, 1.0) * 255.0).round() as u8
         })

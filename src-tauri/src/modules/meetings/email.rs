@@ -5,12 +5,12 @@
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use anyhow::Result;
-use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, html};
 use super::summarise::{SectionKind, SummaryDoc};
 use crate::kernel::ai::ollama::{Message, Request, TextSession};
 use crate::kernel::ai::whisper::Language;
 use crate::modules::agents::{self, Agent};
+use anyhow::Result;
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd, html};
 
 pub struct EmailContext<'a> {
     pub workspace: &'a str,
@@ -22,7 +22,12 @@ pub struct EmailContext<'a> {
 
 /// `[Tenant] Title — 24 Oct 2026`.
 pub fn subject(ctx: &EmailContext) -> String {
-    format!("[{}] {} — {}", ctx.workspace, ctx.title, display_date(ctx.held_on))
+    format!(
+        "[{}] {} — {}",
+        ctx.workspace,
+        ctx.title,
+        display_date(ctx.held_on)
+    )
 }
 
 /// The cover note without the model: greeting, "the minutes are attached", key points (the
@@ -30,39 +35,77 @@ pub fn subject(ctx: &EmailContext) -> String {
 /// items, sign-off. Returns (subject, Markdown body).
 pub fn render(doc: &SummaryDoc, ctx: &EmailContext) -> (String, String) {
     let vi = ctx.language == Language::Vi;
-    let mut body = String::from(if vi { "Kính gửi anh chị,\n\n" } else { "Dear all,\n\n" });
-    body.push_str(&if vi {
-        format!("Biên bản cuộc họp *{}* ({}) được đính kèm. Những điểm chính:\n\n", ctx.title, display_date(ctx.held_on))
+    let mut body = String::from(if vi {
+        "Kính gửi anh chị,\n\n"
     } else {
-        format!("The minutes of *{}* ({}) are attached. Key points:\n\n", ctx.title, display_date(ctx.held_on))
+        "Dear all,\n\n"
+    });
+    body.push_str(&if vi {
+        format!(
+            "Biên bản cuộc họp *{}* ({}) được đính kèm. Những điểm chính:\n\n",
+            ctx.title,
+            display_date(ctx.held_on)
+        )
+    } else {
+        format!(
+            "The minutes of *{}* ({}) are attached. Key points:\n\n",
+            ctx.title,
+            display_date(ctx.held_on)
+        )
     });
     let mut points: Vec<String> = doc.highlights.iter().map(|h| format!("- {h}")).collect();
     for t in &doc.discussion {
-        let detail = t.points.iter().take(2).cloned().collect::<Vec<_>>().join(" ");
-        points.push(if detail.is_empty() { format!("- **{}**", t.topic) } else { format!("- **{}** — {detail}", t.topic) });
+        let detail = t
+            .points
+            .iter()
+            .take(2)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ");
+        points.push(if detail.is_empty() {
+            format!("- **{}**", t.topic)
+        } else {
+            format!("- **{}** — {detail}", t.topic)
+        });
     }
     if points.is_empty() {
-        if let Some(s) = doc.sections.iter().find(|s| s.kind == SectionKind::Overview) {
+        if let Some(s) = doc
+            .sections
+            .iter()
+            .find(|s| s.kind == SectionKind::Overview)
+        {
             points.push(s.markdown.trim().to_owned());
         }
     }
     body.push_str(&points.join("\n"));
     body.push_str("\n\n");
     if !doc.decisions.is_empty() {
-        body.push_str(if vi { "**Quyết định**\n\n" } else { "**Decisions**\n\n" });
+        body.push_str(if vi {
+            "**Quyết định**\n\n"
+        } else {
+            "**Decisions**\n\n"
+        });
         for d in &doc.decisions {
             body.push_str(&format!("- {}\n", d.text));
         }
         body.push('\n');
     }
     if !doc.action_items.is_empty() {
-        body.push_str(if vi { "**Việc cần làm**\n\n" } else { "**Action items**\n\n" });
+        body.push_str(if vi {
+            "**Việc cần làm**\n\n"
+        } else {
+            "**Action items**\n\n"
+        });
         for a in &doc.action_items {
             body.push_str(&format!("- **{}** — {} — *{}*\n", a.owner, a.item, a.due));
         }
         body.push('\n');
     }
-    body.push_str(if vi { "Trân trọng," } else { "Best regards," });
+    body.push_str(if vi {
+        "Trân trọng,"
+    } else {
+        "Best regards,"
+    });
     (subject(ctx), body)
 }
 
@@ -111,8 +154,14 @@ pub async fn compose(
         .complete(
             Request {
                 messages: vec![
-                    Message { role: "system", content: system },
-                    Message { role: "user", content: format!("<summary>\n{text}\n</summary>") },
+                    Message {
+                        role: "system",
+                        content: system,
+                    },
+                    Message {
+                        role: "user",
+                        content: format!("<summary>\n{text}\n</summary>"),
+                    },
                 ],
                 think: false,
                 max_tokens: 2_500,
@@ -121,7 +170,13 @@ pub async fn compose(
             |_| {},
         )
         .await?;
-    let body = answer.content.trim().trim_start_matches("```markdown").trim_start_matches("```").trim_end_matches("```").trim();
+    let body = answer
+        .content
+        .trim()
+        .trim_start_matches("```markdown")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
     if body.chars().count() < 40 {
         anyhow::bail!("the email answer was too short");
     }
@@ -151,7 +206,7 @@ fn display_date(iso: &str) -> String {
 pub fn to_html(markdown: &str) -> String {
     let parser = Parser::new_ext(
         markdown,
-        Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH,
+        Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS,
     )
     .filter_map(|event| match event {
         Event::Html(raw) | Event::InlineHtml(raw) => Some(Event::Text(raw)),
@@ -219,9 +274,14 @@ mod tests {
         };
         let (subject, body) = render(&doc(), &ctx);
         assert_eq!(subject, "[VIFC] Partner call — 4 Oct 2026");
-        assert!(body.starts_with("Dear all,\n\nThe minutes of *Partner call* (4 Oct 2026) are attached. Key points:"));
+        assert!(body.starts_with(
+            "Dear all,\n\nThe minutes of *Partner call* (4 Oct 2026) are attached. Key points:"
+        ));
         assert!(body.contains("**Minh** — circulate the agenda — *Friday*"));
-        assert!(!body.contains("Next steps"), "only key points, decisions and actions");
+        assert!(
+            !body.contains("Next steps"),
+            "only key points, decisions and actions"
+        );
         assert!(body.ends_with("Best regards,"));
         let (_, vi) = render(
             &doc(),

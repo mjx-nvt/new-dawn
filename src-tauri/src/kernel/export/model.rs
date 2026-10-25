@@ -226,8 +226,14 @@ pub fn datetime(start: DateTime<FixedOffset>, duration_ms: Option<u32>) -> Strin
 /// bullets as "• ", emphasis dropped.
 pub fn plain(markdown: &str) -> String {
     let mut out = String::new();
-    for event in Parser::new(markdown) {
+    for event in Parser::new_ext(markdown, pulldown_cmark::Options::ENABLE_TASKLISTS) {
         match event {
+            Event::TaskListMarker(done) => {
+                if out.ends_with("• ") {
+                    out.truncate(out.len() - "• ".len());
+                }
+                out.push_str(if done { "☑ " } else { "☐ " });
+            }
             Event::Text(text) | Event::Code(text) => out.push_str(&text),
             Event::SoftBreak => out.push(' '),
             Event::HardBreak
@@ -247,6 +253,14 @@ pub fn plain(markdown: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn task_items_read_as_boxes() {
+        assert_eq!(
+            plain("- [ ] send agenda\n- [x] book room"),
+            "☐ send agenda\n☑ book room"
+        );
+    }
     use crate::kernel::ai::whisper::Language;
     use crate::modules::meetings::MeetingStatus;
     use crate::modules::meetings::summarise::{

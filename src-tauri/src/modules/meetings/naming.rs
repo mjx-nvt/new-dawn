@@ -9,16 +9,16 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use specta::Type;
-use sqlx::SqlitePool;
 use super::summarise::{self, SummaryDoc, SummaryView};
 use super::{Meeting, TranscriptSegment};
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{Message, Request, TextSession};
 use crate::modules::agents::{self, Agent};
 use crate::modules::people::{self, AttendeeEdit, Person};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use sqlx::SqlitePool;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type, PartialEq)]
 pub struct NameSuspect {
@@ -54,7 +54,16 @@ pub struct NameDecision {
 }
 
 const GENERIC: &[&str] = &[
-    "unassigned", "not set", "management", "team", "all", "chair", "the chair", "everyone", "tbd", "n/a",
+    "unassigned",
+    "not set",
+    "management",
+    "team",
+    "all",
+    "chair",
+    "the chair",
+    "everyone",
+    "tbd",
+    "n/a",
 ];
 const MAX_SUSPECTS: usize = 12;
 
@@ -64,10 +73,15 @@ fn names_in(doc: &SummaryDoc) -> Vec<(String, String, String)> {
     let mut add = |name: &str, title: &str, org: &str| {
         let name = people::clean(name, 120);
         let key = people::fold(&name);
-        if key.is_empty() || GENERIC.contains(&key.as_str()) || !name.chars().any(char::is_alphabetic) {
+        if key.is_empty()
+            || GENERIC.contains(&key.as_str())
+            || !name.chars().any(char::is_alphabetic)
+        {
             return;
         }
-        let entry = seen.entry(key).or_insert_with(|| (name.clone(), String::new(), String::new()));
+        let entry = seen
+            .entry(key)
+            .or_insert_with(|| (name.clone(), String::new(), String::new()));
         if entry.1.is_empty() {
             entry.1 = title.to_owned();
         }
@@ -131,13 +145,21 @@ fn context_line(segments: &[TranscriptSegment], name: &str) -> String {
         .find(|s| s.text.to_lowercase().contains(&needle))
         .map(|s| {
             let text: String = s.text.chars().take(160).collect();
-            if s.text.chars().count() > 160 { format!("{text}…") } else { text }
+            if s.text.chars().count() > 160 {
+                format!("{text}…")
+            } else {
+                text
+            }
         })
         .unwrap_or_default()
 }
 
 /// The deterministic check: names not in the memory, and near-misses of remembered ones.
-pub fn candidates(doc: &SummaryDoc, people: &[Person], segments: &[TranscriptSegment]) -> Vec<NameSuspect> {
+pub fn candidates(
+    doc: &SummaryDoc,
+    people: &[Person],
+    segments: &[TranscriptSegment],
+) -> Vec<NameSuspect> {
     names_in(doc)
         .into_iter()
         .filter(|(name, _, _)| people::find(people, name).is_none())
@@ -146,10 +168,23 @@ pub fn candidates(doc: &SummaryDoc, people: &[Person], segments: &[TranscriptSeg
                 Some(p) => (
                     p.name.clone(),
                     format!("Close to {} in the people memory", p.name),
-                    if title.is_empty() { p.title.clone() } else { title },
-                    if organisation.is_empty() { p.organisation.clone() } else { organisation },
+                    if title.is_empty() {
+                        p.title.clone()
+                    } else {
+                        title
+                    },
+                    if organisation.is_empty() {
+                        p.organisation.clone()
+                    } else {
+                        organisation
+                    },
                 ),
-                None => (name.clone(), "Not in the people memory yet".to_owned(), title, organisation),
+                None => (
+                    name.clone(),
+                    "Not in the people memory yet".to_owned(),
+                    title,
+                    organisation,
+                ),
             };
             NameSuspect {
                 context: context_line(segments, &name),
@@ -195,7 +230,11 @@ pub async fn review(
     let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let names = names_in(doc);
     if names.is_empty() {
-        return NamingReview { suspects, checked_at, ai_checked: false };
+        return NamingReview {
+            suspects,
+            checked_at,
+            ai_checked: false,
+        };
     }
     let ai = ask(session, folder, meeting, &names, people, segments, cancel).await;
     let ai_checked = match ai {
@@ -205,7 +244,10 @@ pub async fn review(
                 if key.is_empty() || s.suggestion.trim().is_empty() {
                     continue;
                 }
-                match suspects.iter_mut().find(|x| people::fold(&x.heard_as) == key) {
+                match suspects
+                    .iter_mut()
+                    .find(|x| people::fold(&x.heard_as) == key)
+                {
                     Some(existing) => {
                         if existing.suggestion == existing.heard_as && s.suggestion != s.name {
                             existing.suggestion = people::clean(&s.suggestion, 120);
@@ -241,7 +283,11 @@ pub async fn review(
             false
         }
     };
-    NamingReview { suspects, checked_at, ai_checked }
+    NamingReview {
+        suspects,
+        checked_at,
+        ai_checked,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -263,14 +309,29 @@ async fn ask(
          - List only names the owner should confirm. An empty list is a fine answer."
     );
     let fence = |t: &str| t.replace('<', "‹").replace('>', "›");
-    let list: String = names.iter().map(|(n, t, o)| {
-        let role = [t.as_str(), o.as_str()].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(", ");
-        if role.is_empty() { format!("- {n}\n") } else { format!("- {n} — {role}\n") }
-    }).collect();
+    let list: String = names
+        .iter()
+        .map(|(n, t, o)| {
+            let role = [t.as_str(), o.as_str()]
+                .into_iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if role.is_empty() {
+                format!("- {n}\n")
+            } else {
+                format!("- {n} — {role}\n")
+            }
+        })
+        .collect();
     let mut lines = Vec::new();
     for (name, _, _) in names {
         let needle = name.to_lowercase();
-        for s in segments.iter().filter(|s| s.text.to_lowercase().contains(&needle)).take(3) {
+        for s in segments
+            .iter()
+            .filter(|s| s.text.to_lowercase().contains(&needle))
+            .take(3)
+        {
             let text: String = s.text.chars().take(200).collect();
             if !lines.contains(&text) {
                 lines.push(text);
@@ -291,8 +352,14 @@ async fn ask(
         .complete(
             Request {
                 messages: vec![
-                    Message { role: "system", content: system },
-                    Message { role: "user", content: user },
+                    Message {
+                        role: "system",
+                        content: system,
+                    },
+                    Message {
+                        role: "user",
+                        content: user,
+                    },
                 ],
                 think: false,
                 max_tokens: 2_000,
@@ -301,10 +368,17 @@ async fn ask(
             |_| {},
         )
         .await?;
-    let start = answer.content.find('{').context("no JSON in the naming answer")?;
-    let end = answer.content.rfind('}').context("no JSON in the naming answer")?;
-    let parsed: AiAnswer = serde_json::from_str(answer.content.get(start..=end).unwrap_or_default())
-        .context("the naming answer was not the expected JSON")?;
+    let start = answer
+        .content
+        .find('{')
+        .context("no JSON in the naming answer")?;
+    let end = answer
+        .content
+        .rfind('}')
+        .context("no JSON in the naming answer")?;
+    let parsed: AiAnswer =
+        serde_json::from_str(answer.content.get(start..=end).unwrap_or_default())
+            .context("the naming answer was not the expected JSON")?;
     Ok(parsed.suspects)
 }
 
@@ -318,7 +392,9 @@ pub async fn confirm(
 ) -> Result<SummaryView> {
     let meeting = super::get(pool, meeting_id).await?;
     if meeting.status == super::MeetingStatus::Summarising {
-        anyhow::bail!(AppError::invalid("A summary is being written — confirm names when it's done"));
+        anyhow::bail!(AppError::invalid(
+            "A summary is being written — confirm names when it's done"
+        ));
     }
     let mut current = summarise::view(pool, meeting_id)
         .await?
@@ -331,7 +407,8 @@ pub async fn confirm(
             title: people::clean(&d.title, 120),
             organisation: people::clean(&d.organisation, 120),
             attendance: String::new(),
-            heard_as: Some(people::clean(&d.heard_as, 120)).filter(|h| h != &people::clean(&d.name, 120)),
+            heard_as: Some(people::clean(&d.heard_as, 120))
+                .filter(|h| h != &people::clean(&d.name, 120)),
             changed: true,
         })
         .collect();
@@ -353,7 +430,10 @@ pub async fn confirm(
     people::correct(&mut current.doc, &known);
     // ponytail: `correct` re-applies memory spellings, so a name typed here that happens to be
     // another person's alias is rewritten to that person; skip `correct` for typed names if it bites.
-    tracing::info!("naming confirmed: {renamed} rename(s), {} remembered", edits.len());
+    tracing::info!(
+        "naming confirmed: {renamed} rename(s), {} remembered",
+        edits.len()
+    );
     summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
     super::set_naming(pool, meeting_id, None).await?;
     summarise::view(pool, meeting_id)
@@ -381,17 +461,36 @@ mod tests {
     fn flags_unknown_and_near_names_but_not_known_or_generic_ones() {
         let doc = SummaryDoc {
             attendees: vec![
-                Attendee { name: "Duke".into(), ..Attendee::default() },
-                Attendee { name: "Đỗ Minh".into(), ..Attendee::default() },
-                Attendee { name: "Mr. Foucault".into(), ..Attendee::default() },
+                Attendee {
+                    name: "Duke".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Đỗ Minh".into(),
+                    ..Attendee::default()
+                },
+                Attendee {
+                    name: "Mr. Foucault".into(),
+                    ..Attendee::default()
+                },
             ],
-            action_items: vec![ActionItem { owner: "Unassigned".into(), item: "x".into(), due: String::new() }],
+            action_items: vec![ActionItem {
+                owner: "Unassigned".into(),
+                item: "x".into(),
+                due: String::new(),
+            }],
             ..SummaryDoc::default()
         };
         let people = vec![person("Duc", &[]), person("Đỗ Minh", &["Minh"])];
         let found = candidates(&doc, &people, &[]);
-        let names: Vec<_> = found.iter().map(|s| (s.heard_as.as_str(), s.suggestion.as_str())).collect();
-        assert_eq!(names, vec![("Duke", "Duc"), ("Mr. Foucault", "Mr. Foucault")]);
+        let names: Vec<_> = found
+            .iter()
+            .map(|s| (s.heard_as.as_str(), s.suggestion.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            vec![("Duke", "Duc"), ("Mr. Foucault", "Mr. Foucault")]
+        );
         assert_eq!(found[0].title, "CEO"); // borrowed from the near person
         assert!(found[1].reason.contains("Not in the people memory"));
         assert_eq!(distance("duke", "duc"), 2);

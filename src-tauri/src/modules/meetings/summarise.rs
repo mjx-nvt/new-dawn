@@ -164,7 +164,7 @@ pub fn default_structure(language: Language) -> Vec<SectionSpec> {
             SectionKind::Overview,
             "Overview",
             "Tổng quan",
-            "One paragraph: purpose of the meeting, who took part, the main outcome.",
+            "Two or three paragraphs: purpose of the meeting, who took part, the main outcomes and figures, what is still open.",
         ),
         spec(
             SectionKind::KeyPoints,
@@ -188,7 +188,7 @@ pub fn default_structure(language: Language) -> Vec<SectionSpec> {
             SectionKind::NextSteps,
             "Next steps",
             "Bước tiếp theo",
-            "Bullets: follow-up meetings, dependencies, what happens next.",
+            "A to-do list: one \"- [ ] \" line per next step — what, who (if said), by when (if said) — e.g. \"- [ ] Send the WiredScore kickoff agenda — Harry — by Monday\". Follow-ups, meetings to set up, documents to get, decisions to chase.",
         ),
         spec(
             SectionKind::OpenQuestions,
@@ -237,7 +237,7 @@ fn system_prompt(guide: &str, structure: &[SectionSpec], language: Language) -> 
          - `sections` lists exactly these sections, in this order, with these titles:\n{sections}\
          - Section `markdown` uses short paragraphs and `-` bullets, no headings and no tables. If nothing was said for a section, write \"{none}\".\n\
          - `attendees`: everyone named as taking part; `organisation` and `title` (job title) only when stated, else \"\"; `attendance` \"Present\", or \"Absent\" when said to be absent.\n\
-         - `discussion`: one entry per agenda item or topic, in the order discussed; `topic` is a short title (2–5 words); `points` are short sentences with the substance, including figures, names and dates.\n\
+         - `discussion`: one entry per agenda item or topic, in the order discussed; `topic` is a short title (2–5 words); `points` are 3–8 full sentences each with the substance — who said what, figures, names, dates, reasons, concerns raised. Prefer more detail over less.\n\
          - `decisions`: only what was actually decided; `decided_by` as said, else \"\"; `condition` any condition or note, else \"\".\n\
          - `action_items`: one entry per task with `owner` (a person's name, or \"Unassigned\"), `item`, and `due` (as said, or \"Not set\").\n\
          - `open_issues`: questions raised but not answered; `who` can answer and `by` when, as said, else \"Not set\".\n\
@@ -255,7 +255,17 @@ fn parse_doc(answer: &str) -> Result<RawDoc> {
     let start = answer.find('{').context("no JSON object in the answer")?;
     let end = answer.rfind('}').context("no JSON object in the answer")?;
     // The serde message can quote the meeting text; logs (D-026) must not, so keep only where.
-    serde_json::from_str(answer.get(start..=end).unwrap_or_default()).map_err(|e| {
+    let mut value: serde_json::Value =
+        serde_json::from_str(answer.get(start..=end).unwrap_or_default()).map_err(|e| {
+            anyhow::anyhow!(
+                "the model's answer was not valid JSON ({:?} at line {}, column {})",
+                e.classify(),
+                e.line(),
+                e.column()
+            )
+        })?;
+    lenient(&mut value, false);
+    serde_json::from_value(value).map_err(|e| {
         anyhow::anyhow!(
             "the model's answer was not the expected JSON ({:?} at line {}, column {})",
             e.classify(),
@@ -265,6 +275,65 @@ fn parse_doc(answer: &str) -> Result<RawDoc> {
     })
 }
 
+/// Small models drift from the shape: `null` for "", numbers for text, an object where a
+/// sentence was asked for. Make every leaf a string and every list item that should be text a
+/// string, so one odd field doesn't fail the whole summary. `text_items`: inside a list of
+/// sentences (`points`, `highlights`).
+pub(crate) fn lenient(value: &mut serde_json::Value, text_items: bool) {
+    use serde_json::Value;
+    match value {
+        Value::Null => *value = Value::String(String::new()),
+        Value::Number(n) => *value = Value::String(n.to_string()),
+        Value::Bool(b) => *value = Value::String(b.to_string()),
+        Value::Object(map) if text_items => {
+            let joined = map
+                .values()
+                .filter_map(|v| match v {
+                    Value::String(s) => Some(s.clone()),
+                    Value::Number(n) => Some(n.to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" — ");
+            *value = Value::String(joined);
+        }
+        Value::Object(map) => {
+            for (key, v) in map.iter_mut() {
+                // A list field the model sent as a single string or object: wrap it.
+                let is_list = matches!(
+                    key.as_str(),
+                    "attendees"
+                        | "discussion"
+                        | "decisions"
+                        | "action_items"
+                        | "open_issues"
+                        | "points"
+                        | "highlights"
+                        | "replacements"
+                        | "people"
+                        | "heard_as"
+                );
+                if is_list && !v.is_array() {
+                    *v = match v.take() {
+                        Value::Null => Value::Array(Vec::new()),
+                        other => Value::Array(vec![other]),
+                    };
+                }
+                lenient(
+                    v,
+                    matches!(key.as_str(), "points" | "highlights" | "heard_as"),
+                );
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                lenient(item, text_items);
+            }
+        }
+        Value::String(_) => {}
+    }
+}
+
 /// No tokenize endpoint in Ollama 0.40: estimate conservatively (measured 4–5 chars/token for
 /// English and Vietnamese; 3 leaves margin). `context_overflow` from the gateway is the backstop.
 pub fn estimate_tokens(text: &str) -> u32 {
@@ -272,8 +341,11 @@ pub fn estimate_tokens(text: &str) -> u32 {
 }
 
 /// Tokens reserved for the answer (thinking included when `deep`).
+// A detailed summary of a long meeting runs to 6–9k tokens of JSON; leave it room (the user asked
+// for no visible cap). The transcript part then gets 32k − 14k − 2k ≈ 16k tokens before it is
+// summarised in parts.
 fn answer_budget(deep: bool) -> u32 {
-    if deep { 12_000 } else { 6_000 }
+    if deep { 18_000 } else { 14_000 }
 }
 
 /// Tokens the meeting text may use in one call: context minus the system prompt and the answer.
@@ -911,6 +983,22 @@ mod tests {
         assert_eq!(out.matches(NOTES_HEADING).count(), 1);
         assert!(out.ends_with(&format!("{NOTES_HEADING}\nChair: Tien")));
         assert_eq!(with_notes("x", ""), "x");
+    }
+
+    #[test]
+    fn tolerates_nulls_numbers_and_objects_where_text_was_asked() {
+        let doc = parse_doc(
+            r#"{"sections":[{"title":"Overview","markdown":null}],
+            "action_items":[{"owner":"Minh","item":"send","due":null}],
+            "discussion":[{"topic":"Budget","points":[{"point":"Approved","amount":1.2}]}],
+            "highlights":"Single highlight","next_focus":42}"#,
+        )
+        .unwrap();
+        assert_eq!(doc.action_items[0].due, "");
+        let point = &doc.discussion[0].points[0]; // key order follows serde_json's map
+        assert!(point.contains("Approved") && point.contains("1.2"));
+        assert_eq!(doc.highlights, vec!["Single highlight".to_owned()]);
+        assert_eq!(doc.next_focus, "42");
     }
 
     #[test]

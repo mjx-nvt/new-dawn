@@ -4,6 +4,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{self, OllamaStatus};
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::meetings::corrections::{self, CorrectionsOutcome};
 use crate::modules::meetings::naming::{self, NameDecision};
 use crate::modules::meetings::review;
 use crate::modules::meetings::summarise::{self, SummaryJobs, SummaryView};
@@ -45,6 +46,19 @@ pub async fn confirm_names(
 ) -> Result<SummaryView, AppError> {
     let workspace = hub.workspace(&slug).await?;
     Ok(naming::confirm(&hub.pool(&slug)?, &workspace.name, &meeting_id, &decisions).await?)
+}
+
+/// Applies the owner's corrections (names, titles, terms, facts) to the summary, email and
+/// transcript with the corrections agent, and remembers the people and terms (D-037).
+#[tauri::command]
+#[specta::specta]
+pub async fn apply_corrections(
+    app: AppHandle,
+    slug: String,
+    meeting_id: String,
+    text: String,
+) -> Result<CorrectionsOutcome, AppError> {
+    Ok(corrections::apply(&app, &slug, &meeting_id, &text).await?)
 }
 
 /// Drops the pending list without changing anything.
