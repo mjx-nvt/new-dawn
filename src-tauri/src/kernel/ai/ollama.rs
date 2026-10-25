@@ -335,6 +335,8 @@ pub struct TextSession<'a> {
     _turn: MutexGuard<'a, ()>,
     pool: SqlitePool,
     meeting_id: Option<String>,
+    /// Which agent is talking, for `ai_log` (D-035).
+    agent: Option<&'static str>,
     /// Fixed for the whole session (a pick in Settings waits for the queue anyway).
     model: String,
 }
@@ -367,6 +369,7 @@ pub async fn session<'a>(
         _turn: turn,
         pool,
         meeting_id: meeting_id.map(str::to_owned),
+        agent: None,
         model: ollama.model,
     })
 }
@@ -391,6 +394,7 @@ impl<'a> TextSession<'a> {
             _turn: turn,
             pool,
             meeting_id: None,
+            agent: None,
             model: model(),
         }
     }
@@ -400,6 +404,13 @@ impl TextSession<'_> {
     /// The model this session talks to.
     pub fn model(&self) -> &str {
         &self.model
+    }
+
+    /// Tags the calls that follow with the agent making them (one session can serve several
+    /// agents in a row, so the queue is held once and Whisper isn't reloaded in between).
+    pub fn for_agent(&mut self, agent: &'static str) -> &mut Self {
+        self.agent = Some(agent);
+        self
     }
 
     /// One streamed `/api/chat` call. `on_token` gets the running count of generated tokens.
@@ -437,6 +448,7 @@ impl TextSession<'_> {
         };
         let entry = AiLogEntry {
             kind: "complete",
+            agent: self.agent,
             model: &self.model,
             meeting_id: self.meeting_id.as_deref(),
             duration_ms: started.elapsed().as_millis() as u32,

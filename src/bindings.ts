@@ -27,10 +27,24 @@ export const commands = {
 	 */
 	summariseMeeting: (slug: string, meetingId: string, deep: boolean, keepEdits: boolean) => typedError<null, AppError>(__TAURI_INVOKE("summarise_meeting", { slug, meetingId, deep, keepEdits })),
 	cancelSummary: (meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_summary", { meetingId })),
+	/**
+	 *  Applies the owner's answers to the naming agent: renames everywhere, teaches the memory,
+	 *  clears the pending list.
+	 */
+	confirmNames: (slug: string, meetingId: string, decisions: NameDecision[]) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("confirm_names", { slug, meetingId, decisions })),
+	/**  Writes the cover note again with the email agent. */
+	rewriteEmail: (slug: string, meetingId: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("rewrite_email", { slug, meetingId })),
+	/**  Drops the pending list without changing anything. */
+	dismissNames: (slug: string, meetingId: string) => typedError<SummaryView_Serialize | null, AppError>(__TAURI_INVOKE("dismiss_names", { slug, meetingId })),
 	updateSummarySection: (slug: string, meetingId: string, index: number, markdown: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_summary_section", { slug, meetingId, index, markdown })),
 	/**  Puts the email on the clipboard as HTML, with the Markdown text as the plain-text fallback. */
 	copySummaryEmail: (slug: string, meetingId: string) => typedError<string, AppError>(__TAURI_INVOKE("copy_summary_email", { slug, meetingId })),
-	openSummaryInMail: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_summary_in_mail", { slug, meetingId })),
+	/**
+	 *  A new message in Mail with the cover note and the latest minutes export attached (Apple
+	 *  Events, like the PDF converters); `mailto:` when Mail can't be driven. Returns whether a
+	 *  file was attached.
+	 */
+	openSummaryInMail: (slug: string, meetingId: string) => typedError<boolean, AppError>(__TAURI_INVOKE("open_summary_in_mail", { slug, meetingId })),
 	ollamaStatus: () => typedError<OllamaStatus, AppError>(__TAURI_INVOKE("ollama_status")),
 	openOllamaApp: () => typedError<null, AppError>(__TAURI_INVOKE("open_ollama_app")),
 	/**
@@ -74,6 +88,10 @@ export const commands = {
 	trashOldRecordings: (slug: string, days: number) => typedError<number, AppError>(__TAURI_INVOKE("trash_old_recordings", { slug, days })),
 	/**  Saves corrected attendees; `remember` teaches the people memory (D-028). */
 	updateAttendees: (slug: string, meetingId: string, attendees: AttendeeEdit_Deserialize[], remember: boolean) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_attendees", { slug, meetingId, attendees, remember })),
+	listAgents: (slug: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("list_agents", { slug })),
+	/**  Saves the workspace's own guide for an agent; empty text restores the default. */
+	setAgentGuide: (slug: string, agent: Agent, text: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_guide", { slug, agent, text })),
+	resetAgentGuide: (slug: string, agent: Agent) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("reset_agent_guide", { slug, agent })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	/**  Adds (no id) or updates a remembered person. */
 	savePerson: (slug: string, person: PersonInput_Deserialize) => typedError<Person, AppError>(__TAURI_INVOKE("save_person", { slug, person })),
@@ -152,6 +170,53 @@ export type ActionItem = {
 	owner: string,
 	item: string,
 	due: string,
+};
+
+export type Agent = "summary" | "naming" | "email" | "minutes";
+
+export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
+
+export type AgentGuide_Deserialize = {
+	agent: Agent,
+	label: string,
+	description: string,
+	guide: string,
+	/**  The workspace has its own text (else the bundled default is shown). */
+	customised: boolean,
+	last_run?: AgentRun_Deserialize | null,
+};
+
+export type AgentGuide_Serialize = {
+	agent: Agent,
+	label: string,
+	description: string,
+	guide: string,
+	/**  The workspace has its own text (else the bundled default is shown). */
+	customised: boolean,
+	last_run: AgentRun_Serialize | null,
+};
+
+/**  The last finished call an agent made, from `ai_log`. */
+export type AgentRun = AgentRun_Serialize | AgentRun_Deserialize;
+
+/**  The last finished call an agent made, from `ai_log`. */
+export type AgentRun_Deserialize = {
+	model: string,
+	status: string,
+	duration_ms?: number | null,
+	prompt_tokens?: number | null,
+	output_tokens?: number | null,
+	created_at: string,
+};
+
+/**  The last finished call an agent made, from `ai_log`. */
+export type AgentRun_Serialize = {
+	model: string,
+	status: string,
+	duration_ms: number | null,
+	prompt_tokens: number | null,
+	output_tokens: number | null,
+	created_at: string,
 };
 
 /**
@@ -576,6 +641,36 @@ export type ModelState = { state: "missing" } |
 /**  A `.part` file from an interrupted or cancelled download; Download resumes it. */
 { state: "partial"; bytes: number } | { state: "downloading" } | { state: "ready" };
 
+/**  What the owner decided for one suspect. */
+export type NameDecision = {
+	heard_as: string,
+	/**  The name to use (confirmed suggestion or typed); same as `heard_as` = keep it. */
+	name: string,
+	title: string,
+	organisation: string,
+	/**  Teach the people memory this person / spelling. */
+	remember: boolean,
+};
+
+export type NameSuspect = {
+	/**  The spelling in the summary now. */
+	heard_as: string,
+	/**  What it should probably be (may equal `heard_as` for an unknown but plausible name). */
+	suggestion: string,
+	reason: string,
+	title: string,
+	organisation: string,
+	/**  A transcript line where the name appears. */
+	context: string,
+};
+
+export type NamingReview = {
+	suspects: NameSuspect[],
+	checked_at: string,
+	/**  The AI step ran (else the list is the deterministic check only). */
+	ai_checked: boolean,
+};
+
 /**  The Qwen download ended: `error` is None on success. */
 export type OllamaPullFinished = OllamaPullFinished_Serialize | OllamaPullFinished_Deserialize;
 
@@ -794,6 +889,8 @@ export type SummaryDoc_Deserialize = {
 	action_items: ActionItem[],
 	open_issues?: OpenIssue_Deserialize[],
 	next_focus?: string,
+	/**  What the owner flagged in their notes, each tied to what the meeting said (D-035). */
+	highlights?: string[],
 	/**  When the AI wrote it (ISO-8601 UTC); transcript edits after this mean it's out of date. */
 	generated_at?: string,
 };
@@ -810,6 +907,8 @@ export type SummaryDoc_Serialize = {
 	action_items: ActionItem[],
 	open_issues: OpenIssue_Serialize[],
 	next_focus: string,
+	/**  What the owner flagged in their notes, each tied to what the meeting said (D-035). */
+	highlights: string[],
 	/**  When the AI wrote it (ISO-8601 UTC); transcript edits after this mean it's out of date. */
 	generated_at: string,
 };
@@ -841,7 +940,11 @@ export type SummaryProgress = {
 	tokens: number,
 };
 
-export type SummaryStage = "queued" | "writing" | "merging";
+export type SummaryStage = "queued" | "writing" | "merging" | 
+/**  The naming agent is checking the people named. */
+"naming" | 
+/**  The email agent is writing the cover note. */
+"email";
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView = SummaryView_Serialize | SummaryView_Deserialize;
@@ -857,6 +960,8 @@ export type SummaryView_Deserialize = {
 	model?: string | null,
 	edited_at?: string | null,
 	updated_at: string,
+	/**  Names the naming agent wants confirmed (None once done). */
+	naming?: NamingReview | null,
 };
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
@@ -870,6 +975,8 @@ export type SummaryView_Serialize = {
 	model: string | null,
 	edited_at: string | null,
 	updated_at: string,
+	/**  Names the naming agent wants confirmed (None once done). */
+	naming: NamingReview | null,
 };
 
 export type SystemAudio = 

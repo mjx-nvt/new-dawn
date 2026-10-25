@@ -4,6 +4,7 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{self, OllamaStatus};
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::meetings::naming::{self, NameDecision};
 use crate::modules::meetings::review;
 use crate::modules::meetings::summarise::{self, SummaryJobs, SummaryView};
 use crate::modules::people::AttendeeEdit;
@@ -30,6 +31,33 @@ pub async fn summarise_meeting(
     keep_edits: bool,
 ) -> Result<(), AppError> {
     Ok(summarise::start(&app, &slug, &meeting_id, deep, keep_edits).await?)
+}
+
+/// Applies the owner's answers to the naming agent: renames everywhere, teaches the memory,
+/// clears the pending list.
+#[tauri::command]
+#[specta::specta]
+pub async fn confirm_names(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    decisions: Vec<NameDecision>,
+) -> Result<SummaryView, AppError> {
+    let workspace = hub.workspace(&slug).await?;
+    Ok(naming::confirm(&hub.pool(&slug)?, &workspace.name, &meeting_id, &decisions).await?)
+}
+
+/// Drops the pending list without changing anything.
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_names(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+) -> Result<Option<SummaryView>, AppError> {
+    let pool = hub.pool(&slug)?;
+    crate::modules::meetings::set_naming(&pool, &meeting_id, None).await?;
+    Ok(summarise::view(&pool, &meeting_id).await?)
 }
 
 #[tauri::command]
@@ -75,17 +103,28 @@ pub async fn copy_summary_email(
     Ok(subject)
 }
 
+/// Writes the cover note again with the email agent.
+#[tauri::command]
+#[specta::specta]
+pub async fn rewrite_email(
+    app: AppHandle,
+    slug: String,
+    meeting_id: String,
+) -> Result<SummaryView, AppError> {
+    Ok(summarise::rewrite_email(&app, &slug, &meeting_id).await?)
+}
+
+/// A new message in Mail with the cover note and the latest minutes export attached (Apple
+/// Events, like the PDF converters); `mailto:` when Mail can't be driven. Returns whether a
+/// file was attached.
 #[tauri::command]
 #[specta::specta]
 pub async fn open_summary_in_mail(
     hub: State<'_, WorkspaceHub>,
     slug: String,
     meeting_id: String,
-) -> Result<(), AppError> {
-    let (subject, plain, _) = summarise::email_parts(&hub.pool(&slug)?, &meeting_id).await?;
-    tauri_plugin_opener::open_url(summarise::mailto(&subject, &plain), None::<&str>)
-        .map_err(anyhow::Error::from)?;
-    Ok(())
+) -> Result<bool, AppError> {
+    Ok(summarise::open_in_mail(&hub.pool(&slug)?, &meeting_id).await?)
 }
 
 #[tauri::command]

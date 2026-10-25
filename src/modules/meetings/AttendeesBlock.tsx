@@ -41,7 +41,18 @@ export default function AttendeesBlock({
 }) {
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [inline, setInline] = useState<number | null>(null);
   const summarise = useSummarise();
+  const update = useUpdateAttendees(slug, meetingId);
+
+  // Click a name: edit it in place; Enter saves (and remembers), Esc leaves it.
+  const saveInline = (i: number, row: Row) => {
+    const list = attendees.map((a, j) => {
+      const r = j === i ? row : toRow(a);
+      return { name: r.name, title: r.title, organisation: r.organisation, attendance: r.attendance, heard_as: r.heardAs, changed: changed(r) };
+    });
+    update.mutate({ attendees: list.filter((a) => a.name.trim()), remember: true }, { onSuccess: () => { setInline(null); setSaved(true); } });
+  };
 
   return (
     <div className={styles.block}>
@@ -54,13 +65,21 @@ export default function AttendeesBlock({
 
       {attendees.length ? (
         <ul className={styles.list}>
-          {attendees.map((a, i) => (
-            <li key={i}>
-              <span className={styles.name}>{a.name}</span>
-              {[a.title, a.organisation].filter(Boolean).length > 0 && <span className={styles.role}>{[a.title, a.organisation].filter(Boolean).join(", ")}</span>}
-              {a.attendance && a.attendance !== "Present" && <span className="chip">{a.attendance}</span>}
-            </li>
-          ))}
+          {attendees.map((a, i) =>
+            inline === i ? (
+              <li key={i} className={styles.inline}>
+                <InlineEditor row={toRow(a)} saving={update.isPending} onCancel={() => setInline(null)} onSave={(row) => saveInline(i, row)} />
+              </li>
+            ) : (
+              <li key={i}>
+                <button type="button" className={styles.name} disabled={locked} title="Edit in place" onClick={() => setInline(i)}>
+                  {a.name}
+                </button>
+                {[a.title, a.organisation].filter(Boolean).length > 0 && <span className={styles.role}>{[a.title, a.organisation].filter(Boolean).join(", ")}</span>}
+                {a.attendance && a.attendance !== "Present" && <span className="chip">{a.attendance}</span>}
+              </li>
+            ),
+          )}
         </ul>
       ) : (
         <>
@@ -105,6 +124,33 @@ export default function AttendeesBlock({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** One attendee edited where it stands: name, title, organisation; Enter saves, Esc cancels. */
+function InlineEditor({ row, saving, onCancel, onSave }: { row: Row; saving: boolean; onCancel: () => void; onSave: (row: Row) => void }) {
+  const [draft, setDraft] = useState(row);
+  const keys = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") onCancel();
+    else if (e.key === "Enter" && !e.nativeEvent.isComposing && draft.name.trim()) onSave(draft);
+    else return;
+    e.preventDefault();
+  };
+  return (
+    <div className={styles.inlineFields}>
+      <input className="input" autoFocus aria-label="Name" placeholder="Name" value={draft.name} onKeyDown={keys} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+      <input className="input" aria-label="Job title" placeholder="Job title" value={draft.title} onKeyDown={keys} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+      <input className="input" aria-label="Organisation" placeholder="Organisation" value={draft.organisation} onKeyDown={keys} onChange={(e) => setDraft({ ...draft, organisation: e.target.value })} />
+      <div className={styles.inlineActions}>
+        <span className="fieldHint">Enter saves and remembers · Esc cancels</span>
+        <button type="button" className="btn btnGhost btnCompact" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" className="btn btnPrimary btnCompact" disabled={saving || !draft.name.trim()} onClick={() => onSave(draft)}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

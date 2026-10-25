@@ -92,6 +92,9 @@ Group divider: eyebrow "Group A · Name" + hairline; 40 px above, 24 px below. F
 - `.btnDanger` / `.btnDangerFilled`: red text / red fill (two-step confirm via `DangerButton`).
 All: radius `--button-shape` (pill), press `scale(.97)`, height 28 px (compact) / 32 px (default); focus ring `0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent)`. Segmented controls are a pill of pills (`--surface-2` track, `--surface` selected segment).
 
+## Agents
+Every AI task is an agent with a guide (`modules/agents.rs`): Summary, Naming, Email, Minutes. A prompt = the guide (workspace file or bundled default) + the fixed part the code needs. Tag the Ollama session with `.for_agent("<id>")` so Workspace → Agents shows the last run. Never put the JSON shape or data-fence rules in the guide text.
+
 ## AI marker (the only gradient)
 Every button that runs Whisper or Qwen: `className="btn … btnAi"` + `<SparkleIcon />` as its first child (`kernel/shell/icons.tsx`, Material Symbols `auto_awesome`), `aria-busy` while it is pending (the primary step button disappears once the job runs: the page shows its progress card instead). `.btnPrimary.btnAi` = gradient fill `--ai-gradient` (`--ai-from` blue-600 → `--ai-to` = `--primary`), white text; `.btnAi` alone = `--surface` with a 1 px gradient ring. AI-written content gets `<p className="fieldHint aiMark"><SparkleIcon /> Written by {model} · {date}</p>`. No other element uses a gradient, and no non-AI action gets the sparkle.
 

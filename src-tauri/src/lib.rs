@@ -42,6 +42,7 @@ mod kernel {
 }
 
 mod modules {
+    pub mod agents;
     pub mod meetings;
     pub mod people;
 }
@@ -55,6 +56,7 @@ mod recorder {
 }
 
 mod commands {
+    pub mod agents;
     pub mod backup;
     pub mod brand;
     pub mod glass;
@@ -97,6 +99,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::get_summary,
             commands::summary::summarise_meeting,
             commands::summary::cancel_summary,
+            commands::summary::confirm_names,
+            commands::summary::rewrite_email,
+            commands::summary::dismiss_names,
             commands::summary::update_summary_section,
             commands::summary::copy_summary_email,
             commands::summary::open_summary_in_mail,
@@ -126,6 +131,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::storage::compress_recordings,
             commands::storage::trash_old_recordings,
             commands::summary::update_attendees,
+            commands::agents::list_agents,
+            commands::agents::set_agent_guide,
+            commands::agents::reset_agent_guide,
             commands::people::list_people,
             commands::people::save_person,
             commands::people::delete_person,

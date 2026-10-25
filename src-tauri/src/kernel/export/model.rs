@@ -58,6 +58,7 @@ pub fn minutes(input: &MinutesInput) -> Value {
         "reference": reference(input.start.date_naive(), input.day_seq),
         "summary": section(SectionKind::Overview),
         "next_focus": next_focus,
+        "highlights": numbered(doc.highlights.iter().map(|h| json!({ "text": h }))),
         "agenda": numbered(doc.discussion.iter().map(|t| json!({ "topic": t.topic }))),
         "attendee_groups": groups
             .into_iter()
@@ -142,6 +143,7 @@ pub fn sample() -> Value {
             ..OpenIssue::default()
         }],
         next_focus: "Next".into(),
+        highlights: vec!["Budget approved at 1.2 bn".into()],
         ..SummaryDoc::default()
     };
     let start = DateTime::parse_from_rfc3339("2026-01-02T10:00:00+07:00").expect("valid date");
@@ -321,6 +323,7 @@ mod tests {
                 by: String::new(),
             }],
             next_focus: String::new(),
+            highlights: Vec::new(),
             generated_at: String::new(),
         }
     }

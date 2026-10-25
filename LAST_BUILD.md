@@ -1,4 +1,31 @@
-# Last Build — Breathing room, a real menu, one red Record, fixed Settings window · release 0.3.1
+# Last Build — Agents: guides, highlights, naming check, cover-note email · release 0.4.0
+_2026-10-25_
+
+## Release 0.4.0
+- Published from the local signed build (`scripts/release-local.sh`); the CI run fails at the key check until the `TAURI_SIGNING_PRIVATE_KEY` secret is set (see the 0.3.0 notes).
+- Migrations 0004 and 0005 run on first open of each workspace (additive).
+
+## Manual steps
+1. Open a transcribed meeting → Write summary: watch the progress card go Writing → checking the names → writing the cover note; a notification "Summary ready · N names to confirm" if the naming agent has doubts; review them.
+2. Type a note ("Vicky 1 go-live date; ThyssenKrupp warranty") → **Re-run with my notes** → the Highlights block appears first.
+3. Email card → Preview (cover note with key points) → **Open in Mail** after exporting the minutes once: the DOCX is attached.
+4. Workspace → Agents: edit the Summary guide (e.g. "Always name the chair"), Save, re-run; the agent's last run shows under its name.
+
+## What changed
+- **Agents** (`modules/agents.rs`, D-035): Summary · Naming · Email · Minutes, each with a Markdown guide — the bundled default (`src-tauri/agents/*.md`) until the workspace saves its own in `brand/agents/<id>.md` (atomic write; empty = back to default). **Workspace → Agents** shows each agent's description, the guide in an editor (Save / Discard / Reset to default, "Customised" chip) and its last run (model · status · tokens · seconds) from `ai_log.agent` (**migration 0004**, additive: `agent TEXT` + index). Ollama sessions are tagged with the agent (`TextSession::for_agent`).
+- **Summary agent** uses its guide: the guide goes first in the system prompt, then the rules the app relies on (data fence, JSON shape, section list). New JSON field **`highlights`** (3–6 sentences from the owner's notes, each tied to what was said); shown first on the Summary tab in a tinted block, and in the minutes data as `highlights` (template field `{{#highlights}}{{text}}{{/highlights}}`).
+- **Notes card**: "What you note here is highlighted in the summary" + **Re-run with my notes** (saves the notes, re-runs keeping edited sections).
+- **Naming agent** (`modules/meetings/naming.rs`, migration 0005 `summary.naming_json`): runs right after every summary. Deterministic first — names in the summary that aren't in the people memory, or are one or two letters from a remembered name/spelling (also "Minh" ↔ "Đỗ Minh"), with the attendee's title/organisation and a transcript line as context — then one Qwen call with the naming guide may add suspects or improve a suggestion (if it fails, the deterministic list stands). The notification says "Summary ready · 3 names to confirm"; the Summary tab shows a card (heard as → suggestion …) with **Review names** → a sheet: per name, the spelling to use (editable), title, organisation, why, where it was said, **Use this / Keep as heard**; **Remember these people**; Apply renames across the summary (so the email and minutes follow) and teaches the memory — no AI run. Dismiss drops the list.
+- **Attendees in place**: click a name in the Attendees card → name / title / organisation fields right there; Enter saves (renames everywhere, remembers), Esc cancels. The sheet stays for bulk edits.
+- **Email agent** (`email.rs`): the email is now a **cover note** — greeting, "the minutes of … are attached", **Key points** (highlights first, then each discussion topic with its substance — more detail than the overview), Decisions, Action items, sign-off. Qwen writes it from the email guide right after the naming check; when the model isn't available the deterministic version (`render`, same shape) stands. **Rewrite** (sparkle) in the Email card writes it again from the summary as it is now; section edits no longer silently replace the email, name confirmations and attendee edits rename inside it (`people::rename_in_text`).
+- **Open in Mail** now creates the message in Apple Mail with the **latest minutes export attached** (Apple Events via `osascript`, arguments not script text — `modules/meetings/mail.rs`); plain-text body; falls back to `mailto:` if Mail can't be driven. The command returns whether a file was attached.
+- **Minutes**: no AI agent — the minutes are filled from the summary by rules and the Word template (D-024), so Workspace → Agents lists the three agents that talk to the model (Summary, Naming, Email). The `highlights` field is available to templates.
+- Migration 0005 (`summary.naming_json`, additive) — reviewed with migration-safety like 0004.
+- Architect review: no must-fixes; applied — the three agents share **one AI session** per run (the queue is held once; a queued transcription can't slot in and thrash Whisper/Qwen between them), `Naming` and `Email` progress stages ("Summary written · checking the names / writing the cover note"), status set to Summarised only after the agents (a DB hiccup there can't flip a saved summary back to Transcribed), Rewrite reports the real error, `open_in_mail` moved into the module (thin command), Email card says when the summary was edited since the email was written, Highlights show a ghost when notes exist but the summary predates them, nullable run duration.
+
+---
+
+# Breathing room, a real menu, one red Record, fixed Settings window · release 0.3.1
 _2026-10-25_
 
 ## Release 0.3.1

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import type { SectionKind } from "../../bindings";
+import type { NameSuspect, SectionKind } from "../../bindings";
 import { useSaveNotes, type Meeting } from "../../kernel/bridge/meetings";
 import {
   cancelSummary,
   openOllamaApp,
   useCopyEmail,
+  useDismissNames,
   useOllamaStatus,
   useOpenInMail,
+  useRewriteEmail,
   useSummarise,
   useSummary,
   useSummaryError,
@@ -18,6 +20,7 @@ import {
 import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import AttendeesBlock from "./AttendeesBlock";
+import NamesSheet from "./NamesSheet";
 import { formatWhen } from "./format";
 import styles from "./SummaryTab.module.css";
 
@@ -87,7 +90,7 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
           <AttendeesBlock key={view?.doc.generated_at ?? "none"} slug={slug} meetingId={meeting.id} attendees={view?.doc.attendees ?? []} locked={busy || !view} />
         </div>
         <div className={`card ${styles.asideCard}`}>
-          <NotesCard key={meeting.id} slug={slug} meeting={meeting} />
+          <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
         </div>
       </aside>
     </div>
@@ -121,9 +124,13 @@ function ProgressCard({ meetingId, progress }: { meetingId: string; progress: Su
   const label =
     !progress || progress.stage === "queued"
       ? "Waiting for the previous AI job"
-      : progress.stage === "merging"
-        ? `Merging parts${progress.parts > 1 ? ` · ${progress.part} of ${progress.parts}` : ""}`
-        : `Writing${progress.parts > 1 ? ` part ${progress.part} of ${progress.parts}` : ""}`;
+      : progress.stage === "naming"
+        ? "Summary written · checking the names"
+        : progress.stage === "email"
+          ? "Summary written · writing the cover note"
+          : progress.stage === "merging"
+            ? `Merging parts${progress.parts > 1 ? ` · ${progress.part} of ${progress.parts}` : ""}`
+            : `Writing${progress.parts > 1 ? ` part ${progress.part} of ${progress.parts}` : ""}`;
   return (
     <div className={`card ${styles.notice}`}>
       <div>
@@ -212,6 +219,24 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
       )}
       {view.transcript_changed && !busy && <p className={`fieldHint ${styles.stale}`}>The transcript changed since — re-run to use it; your edits are kept.</p>}
 
+      {view.naming && !busy && <NamesCard slug={slug} meetingId={meeting.id} suspects={view.naming.suspects} aiChecked={view.naming.ai_checked} />}
+
+      {(view.doc.highlights.length > 0 || meeting.notes_md?.trim()) && (
+        <div className={`${styles.section} ${styles.highlights}`}>
+          <p className="eyebrow">From your notes</p>
+          <h3 className="sectionTitle">Highlights</h3>
+          {view.doc.highlights.length > 0 ? (
+            <ul className={styles.highlightList}>
+              {view.doc.highlights.map((h, i) => (
+                <li key={i}>{h}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ghostText">Not yet captured — re-run with your notes</p>
+          )}
+        </div>
+      )}
+
       {view.doc.sections.map((section, index) => (
         <SectionBlock
           key={`${view.doc.generated_at}-${index}`} // only a new AI summary resets open editors
@@ -230,27 +255,67 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
   );
 }
 
+/** The naming agent's doubts: how many, open the sheet, or dismiss. */
+function NamesCard({ slug, meetingId, suspects, aiChecked }: { slug: string; meetingId: string; suspects: NameSuspect[]; aiChecked: boolean }) {
+  const [open, setOpen] = useState(false);
+  const dismiss = useDismissNames(slug, meetingId);
+  const n = suspects.length;
+  return (
+    <div className={`card ${styles.notice}`} role="status">
+      <div>
+        <p className={`${styles.noticeTitle} aiMark`}>
+          <SparkleIcon />
+          {n === 1 ? "1 name to confirm" : `${n} names to confirm`}
+        </p>
+        <p className="fieldHint">
+          {suspects
+            .slice(0, 4)
+            .map((s) => (s.suggestion !== s.heard_as ? `${s.heard_as} → ${s.suggestion}` : s.heard_as))
+            .join(" · ")}
+          {n > 4 ? " · …" : ""}
+          {aiChecked ? "" : " (checked against the people memory only)"}
+        </p>
+      </div>
+      <div className={styles.choice}>
+        <button type="button" className="btn btnGhost btnCompact" disabled={dismiss.isPending} onClick={() => dismiss.mutate()}>
+          Dismiss
+        </button>
+        <button type="button" className="btn btnPrimary btnCompact" onClick={() => setOpen(true)}>
+          Review names
+        </button>
+      </div>
+      {open && <NamesSheet slug={slug} meetingId={meetingId} suspects={suspects} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
 /** The summary as an email: subject, copy, open in Mail, and a preview on request. */
 function EmailCard({ slug, meeting, view, busy }: { slug: string; meeting: Meeting; view: SummaryView | undefined; busy: boolean }) {
   const copy = useCopyEmail();
   const mail = useOpenInMail();
+  const rewrite = useRewriteEmail(slug, meeting.id);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
     const t = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(t);
   }, [copied]);
-  const actionError = copy.error ?? mail.error;
+  const actionError = copy.error ?? mail.error ?? rewrite.error;
   return (
     <div className={`card ${styles.asideCard}`}>
       <p className={styles.asideTitle}>Email</p>
       {view ? <p className={styles.subject}>{view.email_subject}</p> : <p className="ghostText">Not yet captured</p>}
+      <p className="fieldHint">{view?.edited_at ? "Edited since the email was written — Rewrite refreshes it." : "A cover note: the minutes attached, the key points in detail. Open in Mail attaches the latest export."}</p>
       <div className={styles.asideActions}>
         <button type="button" className="btn btnPrimary btnCompact" disabled={!view || busy || copy.isPending} onClick={() => copy.mutate({ slug, meetingId: meeting.id }, { onSuccess: () => setCopied(true) })}>
           {copied ? "Copied" : "Copy as email"}
         </button>
         <button type="button" className="btn btnSecondary btnCompact" disabled={!view || busy} onClick={() => mail.mutate({ slug, meetingId: meeting.id })}>
           Open in Mail
+        </button>
+        <button type="button" className="btn btnCompact btnAi" aria-busy={rewrite.isPending || undefined} disabled={!view || busy || rewrite.isPending} title="The email agent writes the cover note again from the summary as it is now" onClick={() => rewrite.mutate()}>
+          <SparkleIcon />
+          {rewrite.isPending ? "Writing…" : "Rewrite"}
         </button>
       </div>
       <span className="srOnly" aria-live="polite">
@@ -344,7 +409,7 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
 }
 
 /** The owner's notes: saved as you type, read by the next summary run. */
-function NotesCard({ slug, meeting }: { slug: string; meeting: Meeting }) {
+function NotesCard({ slug, meeting, canRun, onRerun }: { slug: string; meeting: Meeting; canRun: boolean; onRerun: () => void }) {
   const save = useSaveNotes(slug, meeting.id);
   const [draft, setDraft] = useState(meeting.notes_md ?? "");
   const saved = useRef(meeting.notes_md ?? "");
@@ -389,7 +454,23 @@ function NotesCard({ slug, meeting }: { slug: string; meeting: Meeting }) {
           }
         }}
       />
-      <p className="fieldHint">{save.error ? save.error.message : save.isPending ? "Saving…" : "Read by the next summary run."}</p>
+      <p className="fieldHint">{save.error ? save.error.message : save.isPending ? "Saving…" : "What you note here is highlighted in the summary."}</p>
+      <button
+        type="button"
+        className="btn btnCompact btnAi"
+        disabled={!canRun || !draft.trim()}
+        title="Qwen rewrites the summary with your notes as the highlights; your edited sections are kept"
+        onClick={() => {
+          if (latest.current !== saved.current) {
+            saved.current = latest.current;
+            mutate(latest.current);
+          }
+          onRerun();
+        }}
+      >
+        <SparkleIcon />
+        Re-run with my notes
+      </button>
     </>
   );
 }

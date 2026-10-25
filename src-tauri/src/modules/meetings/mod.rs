@@ -2,7 +2,9 @@
 
 pub mod audio;
 pub mod email;
+pub mod mail;
 pub mod minutes;
+pub mod naming;
 pub mod review;
 pub mod summarise;
 pub mod template;
@@ -309,11 +311,13 @@ pub struct SummaryRow {
     pub model: Option<String>,
     pub edited_at: Option<String>,
     pub updated_at: String,
+    /// The naming agent's pending suspects (JSON), until confirmed or dismissed.
+    pub naming_json: Option<String>,
 }
 
 pub async fn summary(pool: &SqlitePool, meeting_id: &str) -> Result<Option<SummaryRow>> {
     Ok(sqlx::query_as(
-        "SELECT sections_json, email_subject, email_md, model, edited_at, updated_at FROM summary WHERE meeting_id = ?",
+        "SELECT sections_json, email_subject, email_md, model, edited_at, updated_at, naming_json FROM summary WHERE meeting_id = ?",
     )
     .bind(meeting_id)
     .fetch_optional(pool)
@@ -348,6 +352,43 @@ pub async fn save_summary(
     .bind(edited)
     .execute(pool)
     .await?;
+    Ok(())
+}
+
+/// Saves the summary document only; the stored email stays as it is.
+pub async fn save_sections(pool: &SqlitePool, meeting_id: &str, sections_json: &str, edited: bool) -> Result<()> {
+    sqlx::query(
+        "UPDATE summary SET sections_json = ?, \
+           edited_at = CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') ELSE edited_at END, \
+           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE meeting_id = ?",
+    )
+    .bind(sections_json)
+    .bind(edited)
+    .bind(meeting_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Saves the email (subject + Markdown body) of a summary.
+pub async fn save_email(pool: &SqlitePool, meeting_id: &str, subject: &str, body: &str) -> Result<()> {
+    sqlx::query("UPDATE summary SET email_subject = ?, email_md = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE meeting_id = ?")
+        .bind(subject)
+        .bind(body)
+        .bind(meeting_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Stores (or clears, with None) the naming agent's pending suspects for a summary. Deliberately
+/// leaves `updated_at` alone: this is the agent's working state, not a change to the summary.
+pub async fn set_naming(pool: &SqlitePool, meeting_id: &str, naming_json: Option<&str>) -> Result<()> {
+    sqlx::query("UPDATE summary SET naming_json = ? WHERE meeting_id = ?")
+        .bind(naming_json)
+        .bind(meeting_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

@@ -132,6 +132,7 @@ pub async fn transcribe(
     };
     let entry = AiLogEntry {
         kind: "transcribe",
+        agent: None,
         model: model.id,
         meeting_id: Some(job.meeting_id),
         duration_ms: started.elapsed().as_millis() as u32,

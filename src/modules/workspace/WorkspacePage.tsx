@@ -1,6 +1,7 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useCurrentWorkspace, useUpdateWorkspace } from "../../kernel/bridge/workspaces";
+import AgentsPanel from "../workspace-settings/AgentsPanel";
 import BrandPanel from "../workspace-settings/BrandPanel";
 import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
 import PeoplePanel from "../workspace-settings/PeoplePanel";
@@ -13,6 +14,7 @@ export const WORKSPACE_TABS = [
   { id: "brand", label: "Brand" },
   { id: "types", label: "Meeting types" },
   { id: "people", label: "People" },
+  { id: "agents", label: "Agents" },
 ] as const;
 
 export type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
@@ -30,7 +32,7 @@ export default function WorkspacePage() {
     <div className="page">
       <p className="eyebrow">Workspace</p>
       <h1 className="pageTitle">{workspace?.name ?? ""}</h1>
-      <p className="pageMeta">One company: its meetings, brand, minutes templates and people stay together.</p>
+      <p className="pageMeta">One company: its meetings, brand, minutes templates, people and agents stay together.</p>
 
       <div className={`segmented ${styles.tabs}`} role="tablist" aria-label="Workspace settings">
         {WORKSPACE_TABS.map((item) => (
@@ -49,6 +51,8 @@ export default function WorkspacePage() {
           <BrandPanel slug={slug} />
         ) : tab === "types" ? (
           <MeetingTypesPanel slug={slug} />
+        ) : tab === "agents" ? (
+          <AgentsPanel slug={slug} />
         ) : (
           <PeoplePanel slug={slug} />
         )}

@@ -4,6 +4,7 @@ import {
   commands,
   events,
   type AppError,
+  type NameDecision,
   type SummaryProgress as SummaryProgressEvent,
   type SummaryStage,
   type SummaryView_Serialize,
@@ -91,6 +92,35 @@ export function useUpdateSection(slug: string, meetingId: string) {
   return useMutation({
     mutationFn: ({ index, markdown }: { index: number; markdown: string }) =>
       unwrap(commands.updateSummarySection(slug, meetingId, index, markdown)),
+    onSuccess: (view) => queryClient.setQueryData(keys.summary(slug, meetingId), view),
+  });
+}
+
+/** Applies the owner's answers to the naming agent (rename everywhere + remember); no AI run. */
+export function useConfirmNames(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (decisions: NameDecision[]) => unwrap(commands.confirmNames(slug, meetingId, decisions)),
+    onSuccess: (view) => {
+      queryClient.setQueryData(keys.summary(slug, meetingId), view);
+      void queryClient.invalidateQueries({ queryKey: ["people", slug] });
+    },
+  });
+}
+
+export function useDismissNames(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(commands.dismissNames(slug, meetingId)),
+    onSuccess: (view) => queryClient.setQueryData(keys.summary(slug, meetingId), view),
+  });
+}
+
+/** Writes the cover note again with the email agent (waits for the AI queue; ~20 s). */
+export function useRewriteEmail(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(commands.rewriteEmail(slug, meetingId)),
     onSuccess: (view) => queryClient.setQueryData(keys.summary(slug, meetingId), view),
   });
 }

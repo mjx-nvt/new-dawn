@@ -2,6 +2,16 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-035 — Agents with editable guides; highlights from the owner's notes; the naming step asks
+_2026-10-25_
+
+**Decision** (user: "each task should have an agent with a detailed guide, so I can improve the agents; my notes should highlight what matters; naming corrections should ask me to confirm; the email should be a cover note with detailed key points"):
+- **Four agents** — Summary, Naming, Email, Minutes — each with a Markdown **guide** in the workspace's `brand/agents/<id>.md` (bundled defaults in `src-tauri/agents/`, compiled in). The guide is the human-tunable part of the prompt and goes first; the code appends the part it relies on (data fence, JSON shape, section list), which can't be edited away. Workspace → Agents edits a guide in place, shows "Customised" and the agent's last run (`ai_log.agent`, migration 0004).
+- **Highlights**: the summary JSON gains `highlights` — the points the owner's notes flag, each tied to what the meeting said. Shown first on the Summary tab (tinted), available to the minutes template as `highlights`. The Notes card has **Re-run with my notes** (keeps edited sections).
+- The pipeline after transcription: summary → naming check → the owner confirms → deterministic rename + people memory → email and minutes rebuilt (naming and email agents follow in later steps of this build).
+
+---
+
 ## D-034 — Red means Record (and destructive), one record control; Settings is a fixed window
 _2026-10-25_
 

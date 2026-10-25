@@ -316,58 +316,67 @@ pub fn prompt_block(people: &[Person]) -> String {
 /// texts, topics, decisions, action owners, open issues, attendees. Whole words, any case, in
 /// one pass with the longest spelling winning, and every right name protected (so "Minh" →
 /// "Đỗ Minh" leaves an existing "Đỗ Minh" alone, run after run). Returns how many replacements.
-pub fn rename_in_doc(doc: &mut SummaryDoc, pairs: &[(String, String)]) -> usize {
-    // Longest first; a spelling seen twice keeps its first (longest) target; targets map to
-    // themselves so they're never rewritten.
-    let mut rules: Vec<(String, String)> = pairs
-        .iter()
-        .flat_map(|(from, to)| {
-            [
-                (from.trim().to_owned(), to.trim().to_owned()),
-                (to.trim().to_owned(), to.trim().to_owned()),
-            ]
-        })
-        .filter(|(from, _)| !from.is_empty())
-        .collect();
-    rules.sort_by_key(|(from, _)| std::cmp::Reverse(from.chars().count()));
-    let mut seen = Vec::new();
-    rules.retain(|(from, _)| {
-        let key = fold(from);
-        if seen.contains(&key) {
-            false
-        } else {
-            seen.push(key);
-            true
+/// The rules of a rename (see `rename_in_doc`), reusable on any text.
+struct Renamer {
+    re: regex::Regex,
+    rules: Vec<(String, String)>,
+}
+
+impl Renamer {
+    fn new(pairs: &[(String, String)]) -> Option<Self> {
+        // Longest first; a spelling seen twice keeps its first (longest) target; targets map to
+        // themselves so they're never rewritten.
+        let mut rules: Vec<(String, String)> = pairs
+            .iter()
+            .flat_map(|(from, to)| {
+                [
+                    (from.trim().to_owned(), to.trim().to_owned()),
+                    (to.trim().to_owned(), to.trim().to_owned()),
+                ]
+            })
+            .filter(|(from, _)| !from.is_empty())
+            .collect();
+        rules.sort_by_key(|(from, _)| std::cmp::Reverse(from.chars().count()));
+        let mut seen = Vec::new();
+        rules.retain(|(from, _)| {
+            let key = fold(from);
+            if seen.contains(&key) {
+                false
+            } else {
+                seen.push(key);
+                true
+            }
+        });
+        if rules.iter().all(|(from, to)| from == to) {
+            return None;
         }
-    });
-    if rules.iter().all(|(from, to)| from == to) {
-        return 0;
+        let alternation = rules
+            .iter()
+            .map(|(from, _)| format!("({})", regex::escape(from)))
+            .collect::<Vec<_>>()
+            .join("|");
+        let re = regex::Regex::new(&format!("(?iu){alternation}")).ok()?;
+        Some(Self { re, rules })
     }
-    let alternation = rules
-        .iter()
-        .map(|(from, _)| format!("({})", regex::escape(from)))
-        .collect::<Vec<_>>()
-        .join("|");
-    let Ok(re) = regex::Regex::new(&format!("(?iu){alternation}")) else {
-        return 0;
-    };
-    // The regex crate has no look-around: whole-word is checked by hand on the neighbours.
-    let edge = |c: char| !c.is_alphanumeric() && !unicode_normalization::char::is_combining_mark(c);
-    let mut count = 0;
-    let mut fix = |text: &mut String| {
+
+    /// Whole-word replacements in `text`; returns how many changed something.
+    fn fix(&self, text: &mut String) -> usize {
+        // The regex crate has no look-around: whole-word is checked by hand on the neighbours.
+        let edge = |c: char| !c.is_alphanumeric() && !unicode_normalization::char::is_combining_mark(c);
+        let mut count = 0;
         let mut out = String::with_capacity(text.len());
         let mut last = 0;
-        for caps in re.captures_iter(text) {
+        for caps in self.re.captures_iter(text) {
             let m = caps.get(0).expect("whole match");
             let before = text[..m.start()].chars().next_back().is_none_or(edge);
             let after = text[m.end()..].chars().next().is_none_or(edge);
             if !before || !after {
                 continue;
             }
-            let which = (1..=rules.len())
+            let which = (1..=self.rules.len())
                 .find(|i| caps.get(*i).is_some())
                 .expect("one group matched");
-            let to = &rules[which - 1].1;
+            let to = &self.rules[which - 1].1;
             out.push_str(&text[last..m.start()]);
             out.push_str(to);
             last = m.end();
@@ -379,7 +388,21 @@ pub fn rename_in_doc(doc: &mut SummaryDoc, pairs: &[(String, String)]) -> usize 
             out.push_str(&text[last..]);
             *text = out;
         }
+        count
+    }
+}
+
+/// The same rename on free text (the stored email body).
+pub fn rename_in_text(text: &mut String, pairs: &[(String, String)]) -> usize {
+    Renamer::new(pairs).map_or(0, |r| r.fix(text))
+}
+
+pub fn rename_in_doc(doc: &mut SummaryDoc, pairs: &[(String, String)]) -> usize {
+    let Some(renamer) = Renamer::new(pairs) else {
+        return 0;
     };
+    let mut count = 0;
+    let mut fix = |text: &mut String| count += renamer.fix(text);
     for s in &mut doc.sections {
         fix(&mut s.markdown);
     }

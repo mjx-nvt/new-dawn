@@ -1,0 +1,49 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.titles {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.title {
+  gap: var(--space-2);
+  font-size: var(--t-lg);
+  font-weight: 600;
+}
+.title > svg { color: var(--ai-to); }
+
+.run { flex: none; }
+
+.editor {
+  height: auto;
+  padding: var(--space-3) var(--space-4);
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spacer { flex: 1; }
+
+.ghost {
+  height: 220px;
+  margin-top: var(--space-5);
+  border-radius: var(--radius-card);
+}
