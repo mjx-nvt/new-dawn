@@ -113,13 +113,20 @@
 
 .row .late { color: var(--status-negative); }
 
+/* Priority marks (!, !!, !!!): orange, never red — red means overdue. Quiet once done. */
+.row .priority {
+  color: var(--primary-text);
+  font-weight: 600;
+}
+.done .priority { color: var(--ink-3); }
+
 .dayField {
   width: auto;
   height: 28px;
 }
 
-/* Delete (and "Add date" on a row without one) show on hover or keyboard focus, so the list
-   stays calm. */
+/* Delete (and "!" and "Add date" on a row without them) show on hover or keyboard focus, so the
+   list stays calm. */
 .reveal {
   opacity: 0;
   transition: opacity 150ms ease-out;

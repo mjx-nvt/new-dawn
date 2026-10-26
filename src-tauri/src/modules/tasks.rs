@@ -56,16 +56,18 @@ pub struct TaskView {
     pub origin: TaskOrigin,
     /// Why it was found to be yours (automatic tasks).
     pub reason: String,
+    /// Reminders' levels: 0 none, 1 low (!), 2 medium (!!), 3 high (!!!).
+    pub priority: u8,
 }
 
-/// The list in Reminders' order.
+/// The list in Reminders' order ("Highest first").
 #[derive(Debug, Clone, Default, Serialize, Type)]
 pub struct TaskList {
-    /// Open and due today or earlier (overdue first).
+    /// Open and due today or earlier: highest priority first, then overdue first.
     pub today: Vec<TaskView>,
-    /// Open and due later, earliest first.
+    /// Open and due later: earliest first, then highest priority.
     pub upcoming: Vec<TaskView>,
-    /// Open with no date, oldest first.
+    /// Open with no date: highest priority first, then oldest.
     pub no_date: Vec<TaskView>,
     /// Done, most recent first (the last 200).
     pub completed: Vec<TaskView>,
@@ -80,6 +82,8 @@ pub struct TaskPatch {
     #[specta(type = Option<String>)]
     pub due_on: Option<Option<String>>,
     pub done: Option<bool>,
+    /// 0 (none) to 3 (high).
+    pub priority: Option<u8>,
 }
 
 /// A field that is there, even as `null` (`Some(None)`); left out, serde's default (`None`).
@@ -97,6 +101,7 @@ struct Row {
     done_at: Option<String>,
     origin: TaskOrigin,
     reason: String,
+    priority: u8,
     meeting_id: Option<String>,
     meeting_title: Option<String>,
     meeting_held_on: Option<String>,
@@ -118,6 +123,7 @@ impl From<Row> for TaskView {
             meeting,
             origin: r.origin,
             reason: r.reason,
+            priority: r.priority,
         }
     }
 }
@@ -125,7 +131,7 @@ impl From<Row> for TaskView {
 /// Task rows with their meeting's title and date read live; `rest` (a constant) filters and orders.
 fn select(rest: &'static str) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(format!(
-        "SELECT t.id, t.title, t.owner, t.due_text, t.due_on, t.done_at, t.origin, t.reason, \
+        "SELECT t.id, t.title, t.owner, t.due_text, t.due_on, t.done_at, t.origin, t.reason, t.priority, \
          m.id AS meeting_id, m.title AS meeting_title, m.held_on AS meeting_held_on \
          FROM task t LEFT JOIN meeting m ON m.id = t.meeting_id {rest}"
     ))
@@ -151,7 +157,8 @@ fn one_line(text: &str, max: usize) -> String {
 pub async fn list(pool: &SqlitePool) -> Result<TaskList> {
     let today = today();
     let open: Vec<Row> = sqlx::query_as(select(
-        "WHERE t.deleted_at IS NULL AND t.done_at IS NULL ORDER BY t.due_on, t.created_at",
+        "WHERE t.deleted_at IS NULL AND t.done_at IS NULL \
+         ORDER BY t.due_on, t.priority DESC, t.created_at",
     ))
     .fetch_all(pool)
     .await?;
@@ -163,6 +170,10 @@ pub async fn list(pool: &SqlitePool) -> Result<TaskList> {
             Some(_) => list.upcoming.push(task),
         }
     }
+    // Today: highest first, and the sort is stable, so equal priorities stay overdue first. No date
+    // is already highest first (its rows share a NULL day); Upcoming stays by day, so a high task
+    // three weeks out doesn't jump above tomorrow's.
+    list.today.sort_by_key(|t| std::cmp::Reverse(t.priority));
     let completed: Vec<Row> = sqlx::query_as(select(
         "WHERE t.deleted_at IS NULL AND t.done_at IS NOT NULL ORDER BY t.done_at DESC LIMIT 200",
     ))
@@ -208,11 +219,14 @@ pub async fn add(pool: &SqlitePool, title: &str) -> Result<TaskView> {
     get(pool, &id).await
 }
 
-/// Renames, dates or ticks a task. A tick follows to the action item it came from.
+/// Renames, dates, ticks or prioritises a task. A tick follows to the action item it came from.
 pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<TaskView> {
     let title = patch.title.as_deref().map(|t| one_line(t, 500));
     if title.as_deref() == Some("") {
         bail!(AppError::invalid("A task needs a title"));
+    }
+    if patch.priority.is_some_and(|p| p > 3) {
+        bail!(AppError::invalid("A priority is 0 (none) to 3 (high)"));
     }
     let due_on = match patch.due_on {
         Some(Some(day)) => Some(Some(
@@ -227,6 +241,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
            due_on = CASE WHEN ?2 THEN ?3 ELSE due_on END, \
            done_at = CASE WHEN ?4 IS NULL THEN done_at \
              WHEN ?4 THEN coalesce(done_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) END, \
+           priority = coalesce(?6, priority), \
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?5 AND deleted_at IS NULL",
     )
@@ -235,6 +250,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
     .bind(due_on.flatten())
     .bind(patch.done)
     .bind(id)
+    .bind(patch.priority)
     .execute(pool)
     .await?;
     if done.rows_affected() == 0 {
@@ -567,7 +583,11 @@ mod tests {
                 ("", "Friday", Some("2026-10-30")),
                 "yours: no owner shown; Friday counted from the meeting"
             );
-            assert_eq!(t.origin, TaskOrigin::Button);
+            assert_eq!(
+                (t.origin, t.priority),
+                (TaskOrigin::Button, 0),
+                "added from an item: no priority"
+            );
             assert_eq!(t.meeting.unwrap().title, "Partner call");
             let t = get(&pool, &minh).await.unwrap();
             assert_eq!(
@@ -583,6 +603,7 @@ mod tests {
                 title: None,
                 due_on,
                 done,
+                priority: None,
             };
             update(&pool, &mine, patch(Some(Some(day(-1))), None))
                 .await
@@ -669,6 +690,7 @@ mod tests {
                 title: Some("  ".into()),
                 due_on: None,
                 done: None,
+                priority: None,
             };
             assert!(update(&pool, &minh, rename).await.is_err());
             assert!(delete(&pool, "nope").await.is_err());
@@ -676,6 +698,67 @@ mod tests {
             assert_eq!(patch.due_on, Some(None), "null removes the date");
             let patch: TaskPatch = serde_json::from_str("{}").unwrap();
             assert_eq!(patch.due_on, None, "left out keeps it");
+            hub.close_all().await;
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn priority_sorts_today_and_no_date_upcoming_stays_by_day() {
+        let root = std::env::temp_dir().join(format!("newdawn-tasks-{}", uuid::Uuid::now_v7()));
+        tauri::async_runtime::block_on(async {
+            let hub = WorkspaceHub::open(root.clone()).await.unwrap();
+            hub.create_workspace("VIFC", "test").await.unwrap();
+            let pool = hub.pool("test").unwrap();
+            let day = |offset: i64| {
+                (chrono::Local::now().date_naive() + chrono::Duration::days(offset)).to_string()
+            };
+            // (title, due in days, priority)
+            for (title, due, priority) in [
+                ("overdue", Some(-2), 0),
+                ("yesterday, low", Some(-1), 1),
+                ("today", Some(0), 0),
+                ("today, high", Some(0), 3),
+                ("in two days", Some(2), 0),
+                ("tomorrow", Some(1), 0),
+                ("in two days, high", Some(2), 3),
+                ("no date", None, 0),
+                ("no date, medium", None, 2),
+            ] {
+                let t = add(&pool, title).await.unwrap();
+                assert_eq!(t.priority, 0, "typed: no priority");
+                let patch = TaskPatch {
+                    title: None,
+                    due_on: due.map(|d| Some(day(d))),
+                    done: None,
+                    priority: Some(priority),
+                };
+                assert_eq!(
+                    update(&pool, &t.id, patch).await.unwrap().priority,
+                    priority
+                );
+            }
+            let titles =
+                |tasks: &[TaskView]| tasks.iter().map(|t| t.title.clone()).collect::<Vec<_>>();
+            let l = list(&pool).await.unwrap();
+            assert_eq!(
+                titles(&l.today),
+                ["today, high", "yesterday, low", "overdue", "today"],
+                "highest first, then overdue first"
+            );
+            assert_eq!(
+                titles(&l.upcoming),
+                ["tomorrow", "in two days, high", "in two days"],
+                "by day, then highest first"
+            );
+            assert_eq!(titles(&l.no_date), ["no date, medium", "no date"]);
+
+            // Left out keeps it; out of range is refused.
+            let high = &l.today[0].id;
+            let rename: TaskPatch = serde_json::from_str(r#"{"title": "Today, urgent"}"#).unwrap();
+            assert_eq!(update(&pool, high, rename).await.unwrap().priority, 3);
+            let wrong: TaskPatch = serde_json::from_str(r#"{"priority": 4}"#).unwrap();
+            assert!(update(&pool, high, wrong).await.is_err());
             hub.close_all().await;
         });
         std::fs::remove_dir_all(root).unwrap();

@@ -11,7 +11,7 @@
 }
 .subHead > h4 { margin-bottom: 0; }
 
-/* Remove / Add / Add all sit at the end of their line. */
+/* Add all sits at the end of its line. */
 .action { margin-left: auto; }
 
 .head {
@@ -29,24 +29,61 @@
   font-size: var(--t-md);
   line-height: 1.5;
 }
-/* The person (name, role, chips — wrapping as needed) on the left, Remove / Add on the right. */
+/* A person: the ⊖ / ⊕ control at the start, then the name and its chips over the role. */
 .list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--space-2);
 }
-.who {
+.who { min-width: 0; }
+
+/* The first line is as tall as the 28 pt control beside it (as a task's title is). */
+.line {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--space-2);
-  min-width: 0;
+  align-items: center;
+  column-gap: var(--space-2);
+}
+.name {
+  padding: 3px 0;
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.name:hover:not(:disabled) { color: var(--primary-text); text-decoration: underline; }
+.role {
+  font-size: var(--t-sm);
+  line-height: 1.45;
+  color: var(--ink-3);
 }
 
-.name { font-weight: 600; text-align: left; }
-.name:hover:not(:disabled) { color: var(--primary-text); text-decoration: underline; }
-.role { color: var(--ink-2); }
+/* Apple's list-editing controls: an 18 px disc in a 28 px hit area — red ⊖ out of the attendees,
+   green ⊕ in (the shapes carry the meaning, not only the colours). The glyph takes the card's
+   colour: white on the light-mode fills, dark on the lighter dark-mode ones, for contrast. */
+.control {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  transition: transform 120ms ease-out;
+}
+.control:active:not(:disabled) { transform: scale(.9); }
+.control:disabled { opacity: .5; }
+.control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.control circle { fill: var(--status-negative); }
+.add circle { fill: var(--status-positive); }
+.control path {
+  stroke: var(--surface);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* In the lists the disc, not its hit area, lines up with the heading above. */
+.list .control { margin-left: -5px; }
 
 .slot {
   min-height: 44px;

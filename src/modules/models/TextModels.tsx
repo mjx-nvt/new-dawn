@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useOllamaPull } from "../../kernel/bridge/onboarding";
-import DangerButton from "../../kernel/shell/DangerButton";
+import MenuButton from "../../kernel/shell/MenuButton";
 import {
   openOllamaApp,
   unloadOllamaModel,
@@ -15,7 +15,8 @@ function formatMb(mb: number): string {
 }
 
 /** Settings → Models → Text model: the Ollama models on this Mac, which one writes summaries,
- *  download / update / remove, and free its memory. */
+ *  download / update / remove, and free its memory. One line per model: its one action, then
+ *  Update and Remove in the ⋯ menu. */
 export default function TextModels() {
   const status = useOllamaStatus();
   const pull = useOllamaPull();
@@ -23,14 +24,31 @@ export default function TextModels() {
   const remove = useRemoveOllamaModel();
   const [name, setName] = useState("");
   const [freed, setFreed] = useState(false);
+  // Remove's second step (as DangerButton's): the model whose red "Remove from Ollama?" shows, for 4 s.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const confirmButton = useRef<HTMLButtonElement>(null);
   const s = status.data;
   const error = select.error ?? remove.error ?? pull.error;
+
+  // The confirm stands in for the row's action and goes when disarmed; if it had focus, focus
+  // goes back to the row's ⋯ (where Remove… was chosen) instead of dropping to the page.
+  const disarm = () => {
+    const el = confirmButton.current;
+    if (el && el === document.activeElement) el.closest("li")?.querySelector<HTMLElement>('[aria-haspopup="menu"]')?.focus();
+    setRemoving(null);
+  };
 
   useEffect(() => {
     if (!freed) return;
     const t = setTimeout(() => setFreed(false), 4000);
     return () => clearTimeout(t);
   }, [freed]);
+
+  useEffect(() => {
+    if (!removing) return;
+    const t = setTimeout(disarm, 4000);
+    return () => clearTimeout(t);
+  }, [removing]);
 
   if (!s) return <div className={`${styles.ghost} ghostCard`} />;
   if (!s.running) {
@@ -83,19 +101,42 @@ export default function TextModels() {
                 )}
               </div>
               <div className={styles.actions}>
-                {installed && !inUse && (
+                {removing === m.name ? (
+                  <button
+                    key="confirm"
+                    ref={confirmButton}
+                    type="button"
+                    className="btn btnDangerFilled btnCompact"
+                    autoFocus
+                    onClick={() => {
+                      disarm();
+                      remove.mutate(m.name);
+                    }}
+                  >
+                    Remove from Ollama?
+                  </button>
+                ) : !installed ? (
+                  <button type="button" className="btn btnSecondary btnCompact" disabled={pull.running} onClick={() => pull.start(m.name)}>
+                    {pulling ? "Downloading…" : "Download"}
+                  </button>
+                ) : !inUse ? (
                   <button type="button" className="btn btnSecondary btnCompact" disabled={select.isPending} onClick={() => select.mutate(m.name)}>
                     Use for summaries
                   </button>
-                )}
-                <button type="button" className="btn btnGhost btnCompact" disabled={pull.running} onClick={() => pull.start(m.name)}>
-                  {pulling ? "Downloading…" : installed ? "Update" : "Download"}
-                </button>
-                {installed && !inUse && (
-                  <DangerButton confirm="Remove from Ollama?" onConfirm={() => remove.mutate(m.name)} disabled={remove.isPending}>
-                    Remove
-                  </DangerButton>
-                )}
+                ) : null}
+                <MenuButton
+                  label={`More actions for ${m.name}`}
+                  items={[
+                    { label: "Update", onSelect: () => pull.start(m.name), disabled: !installed || pull.running },
+                    {
+                      label: inUse ? "Remove (in use for summaries)" : "Remove…",
+                      onSelect: () => setRemoving(m.name),
+                      danger: true,
+                      disabled: inUse || remove.isPending,
+                      separator: true,
+                    },
+                  ]}
+                />
               </div>
             </li>
           );

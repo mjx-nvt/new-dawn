@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import type { Attendee_Serialize } from "../../bindings";
 import { useUpdateAttendees } from "../../kernel/bridge/people";
@@ -30,7 +30,7 @@ const changed = (r: Row) =>
   r.attendance !== r.original.attendance;
 
 /** Everyone the meeting involves, in two lists: the attendees (the only people in the minutes)
- *  and the others. Remove / Add move someone across. Edit opens a sheet; saving a name fixes it
+ *  and the others. ⊖ / ⊕ move someone across. Edit opens a sheet; saving a name fixes it
  *  across the summary, email and minutes and (with Remember) teaches the people memory. */
 export default function AttendeesBlock({
   slug,
@@ -61,7 +61,7 @@ export default function AttendeesBlock({
     update.mutate({ attendees: list.filter((a) => a.name.trim()), remember: true }, { onSuccess: () => { setInline(null); setSaved(true); } });
   };
 
-  // Remove / Add / Add all (`i` = -1): the same list in the same order, only the flags change —
+  // ⊖ / ⊕ / Add all (`i` = -1): the same list in the same order, only the flags change —
   // nothing is renamed or remembered. Disabled while saving, so two quick clicks can't undo each
   // other. The person lands in the other list (a new button) and Add all goes away, so focus
   // follows them — or goes to the Attendees heading — once their button is enabled again.
@@ -88,24 +88,29 @@ export default function AttendeesBlock({
   const others = people.filter(({ a }) => !a.attending);
   const busy = locked || update.isPending;
 
-  const item = ({ a, i }: { a: Attendee_Serialize; i: number }, action: React.ReactNode) =>
-    inline === i ? (
+  // A person: the ⊖ / ⊕ control, then the name (click to edit) and its chips over the role.
+  const item = ({ a, i }: { a: Attendee_Serialize; i: number }, control: React.ReactNode) => {
+    const role = [a.title, a.organisation].filter(Boolean).join(", ");
+    return inline === i ? (
       <li key={i} className={styles.inline}>
         <InlineEditor row={toRow(a)} saving={update.isPending} onCancel={() => setInline(null)} onSave={(row) => saveInline(i, row)} />
       </li>
     ) : (
       <li key={i}>
-        <span className={styles.who}>
-          <button type="button" className={styles.name} disabled={locked} title="Edit in place" onClick={() => setInline(i)}>
-            {a.name}
-          </button>
-          {[a.title, a.organisation].filter(Boolean).length > 0 && <span className={styles.role}>{[a.title, a.organisation].filter(Boolean).join(", ")}</span>}
-          {me && foldName(a.name) === me && <span className="chip">You</span>}
-          {a.attendance && a.attendance !== "Present" && <span className="chip">{a.attendance}</span>}
-        </span>
-        {action}
+        {control}
+        <div className={styles.who}>
+          <p className={styles.line}>
+            <button type="button" className={styles.name} disabled={locked} title="Edit in place" onClick={() => setInline(i)}>
+              {a.name}
+            </button>
+            {me && foldName(a.name) === me && <span className="chip">You</span>}
+            {a.attendance && a.attendance !== "Present" && <span className="chip">{a.attendance}</span>}
+          </p>
+          {role && <p className={styles.role}>{role}</p>}
+        </div>
       </li>
     );
+  };
 
   return (
     <div className={styles.block}>
@@ -124,12 +129,7 @@ export default function AttendeesBlock({
         {going.length ? (
           <ul className={styles.list}>
             {going.map((p) =>
-              item(
-                p,
-                <button type="button" ref={refocus(p.i)} className={`btn btnGhost btnCompact ${styles.action}`} disabled={busy} aria-label={`Remove ${p.a.name} from the attendees`} onClick={() => setAttending(p.i, false)}>
-                  Remove
-                </button>,
-              ),
+              item(p, <ListControl ref={refocus(p.i)} disabled={busy} label={`Remove ${p.a.name} from the attendees`} onClick={() => setAttending(p.i, false)} />),
             )}
           </ul>
         ) : (
@@ -154,12 +154,7 @@ export default function AttendeesBlock({
         {others.length ? (
           <ul className={styles.list}>
             {others.map((p) =>
-              item(
-                p,
-                <button type="button" ref={refocus(p.i)} className={`btn btnGhost btnCompact ${styles.action}`} disabled={busy} aria-label={`Add ${p.a.name} to the attendees`} onClick={() => setAttending(p.i, true)}>
-                  Add
-                </button>,
-              ),
+              item(p, <ListControl add ref={refocus(p.i)} disabled={busy} label={`Add ${p.a.name} to the attendees`} onClick={() => setAttending(p.i, true)} />),
             )}
           </ul>
         ) : attendees.length ? (
@@ -211,6 +206,20 @@ export default function AttendeesBlock({
         />
       )}
     </div>
+  );
+}
+
+/** Apple's list-editing control at the start of a row: a red ⊖ takes the person out of a list, a
+ *  green ⊕ puts them in (the one red that isn't record or destructive: it only moves people, so
+ *  one click and no confirm). `label` names the person, for the tooltip and screen readers. */
+function ListControl({ add = false, label, ...button }: { add?: boolean; label: string } & ComponentProps<"button">) {
+  return (
+    <button type="button" className={add ? `${styles.control} ${styles.add}` : styles.control} aria-label={label} title={label} {...button}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+        <circle cx="9" cy="9" r="9" />
+        <path d={add ? "M5 9h8M9 5v8" : "M5 9h8"} />
+      </svg>
+    </button>
   );
 }
 
@@ -305,9 +314,7 @@ function AttendeesSheet({
                 <option>Online</option>
                 <option>Absent</option>
               </select>
-              <button type="button" className="btn btnDanger btnCompact" aria-label={`Remove ${r.name || "this person"}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}>
-                Remove
-              </button>
+              <ListControl label={`Remove ${r.name || "this person"}`} onClick={() => setRows(rows.filter((_, j) => j !== i))} />
             </div>
           ))}
           <div>

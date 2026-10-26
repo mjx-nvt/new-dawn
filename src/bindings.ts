@@ -1250,28 +1250,28 @@ export type SystemAudio =
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
 
-/**  The list in Reminders' order. */
+/**  The list in Reminders' order ("Highest first"). */
 export type TaskList = TaskList_Serialize | TaskList_Deserialize;
 
-/**  The list in Reminders' order. */
+/**  The list in Reminders' order ("Highest first"). */
 export type TaskList_Deserialize = {
-	/**  Open and due today or earlier (overdue first). */
+	/**  Open and due today or earlier: highest priority first, then overdue first. */
 	today: TaskView_Deserialize[],
-	/**  Open and due later, earliest first. */
+	/**  Open and due later: earliest first, then highest priority. */
 	upcoming: TaskView_Deserialize[],
-	/**  Open with no date, oldest first. */
+	/**  Open with no date: highest priority first, then oldest. */
 	no_date: TaskView_Deserialize[],
 	/**  Done, most recent first (the last 200). */
 	completed: TaskView_Deserialize[],
 };
 
-/**  The list in Reminders' order. */
+/**  The list in Reminders' order ("Highest first"). */
 export type TaskList_Serialize = {
-	/**  Open and due today or earlier (overdue first). */
+	/**  Open and due today or earlier: highest priority first, then overdue first. */
 	today: TaskView_Serialize[],
-	/**  Open and due later, earliest first. */
+	/**  Open and due later: earliest first, then highest priority. */
 	upcoming: TaskView_Serialize[],
-	/**  Open with no date, oldest first. */
+	/**  Open with no date: highest priority first, then oldest. */
 	no_date: TaskView_Serialize[],
 	/**  Done, most recent first (the last 200). */
 	completed: TaskView_Serialize[],
@@ -1301,6 +1301,8 @@ export type TaskPatch_Deserialize = {
 	/**  The day it is due, YYYY-MM-DD; `null` removes the date. */
 	due_on?: string | null,
 	done?: boolean | null,
+	/**  0 (none) to 3 (high). */
+	priority?: number | null,
 };
 
 /**  What `update` changes; a field left out stays as it is. */
@@ -1309,6 +1311,8 @@ export type TaskPatch_Serialize = {
 	/**  The day it is due, YYYY-MM-DD; `null` removes the date. */
 	due_on: string | null,
 	done: boolean | null,
+	/**  0 (none) to 3 (high). */
+	priority: number | null,
 };
 
 export type TaskView = TaskView_Serialize | TaskView_Deserialize;
@@ -1327,6 +1331,8 @@ export type TaskView_Deserialize = {
 	origin: TaskOrigin,
 	/**  Why it was found to be yours (automatic tasks). */
 	reason: string,
+	/**  Reminders' levels: 0 none, 1 low (!), 2 medium (!!), 3 high (!!!). */
+	priority: number,
 };
 
 export type TaskView_Serialize = {
@@ -1343,6 +1349,8 @@ export type TaskView_Serialize = {
 	origin: TaskOrigin,
 	/**  Why it was found to be yours (automatic tasks). */
 	reason: string,
+	/**  Reminders' levels: 0 none, 1 low (!), 2 medium (!!), 3 high (!!!). */
+	priority: number,
 };
 
 export type TemplateCheck = TemplateCheck_Serialize | TemplateCheck_Deserialize;

@@ -5,15 +5,16 @@
   list-style: none;
 }
 
+/* One line per model, never wrapping under: what it is on the left (it wraps within itself);
+   its one action and the ⋯ menu on the right, so every row's ⋯ lines up with or without that action. */
 .row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-4);
 }
 
 .main {
-  flex: 1 1 240px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -22,9 +23,11 @@
 
 .name {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .progress {
@@ -54,7 +57,7 @@
   color: var(--status-negative);
 }
 
-.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.actions { display: flex; align-items: center; gap: var(--space-2); }
 
 .ghost { min-height: 64px; border-radius: var(--radius-card); }
 

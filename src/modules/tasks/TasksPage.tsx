@@ -150,7 +150,8 @@ function Rows({ slug, tasks }: { slug: string; tasks: TaskView[] }) {
   );
 }
 
-/** One task: the circle, the title (click to rename), where it came from, the due chip, Delete. */
+/** One task: the circle, the title (click to rename), where it came from, Delete, the priority
+ *  and due chips. */
 function Row({ slug, task }: { slug: string; task: TaskView }) {
   const update = useUpdateTask(slug);
   const remove = useDeleteTask(slug);
@@ -209,8 +210,36 @@ function Row({ slug, task }: { slug: string; task: TaskView }) {
           Delete
         </DangerButton>
       </div>
+      <PriorityChip name={name} priority={task.priority} onSet={(priority) => set({ priority })} />
       <DueChip name={name} due={task.due_on} late={!done && !!task.due_on && isPast(task.due_on)} onSet={(due_on) => set({ due_on })} />
     </li>
+  );
+}
+
+/** Reminders' levels, highest first: the value, its name, its marks. */
+const PRIORITIES = [
+  [3, "High", "!!!"],
+  [2, "Medium", "!!"],
+  [1, "Low", "!"],
+] as const;
+
+/** The priority as Reminders shows it — "!", "!!", "!!!" in orange, never red (red is overdue) —
+ *  or a quiet "!" on hover when there's none. Its menu sets it. */
+function PriorityChip({ name, priority, onSet }: { name: string; priority: number; onSet: (priority: number) => void }) {
+  const level = PRIORITIES.find(([value]) => value === priority);
+  return (
+    <div className={level ? undefined : styles.reveal}>
+      <MenuButton
+        className={level ? `btn btnGhost btnCompact ${styles.priority}` : "btn btnGhost btnCompact"}
+        label={level ? `Priority ${level[1]}: change the priority of “${name}”` : `Add a priority to “${name}”`}
+        items={[
+          ...PRIORITIES.map(([value, label, marks]) => ({ label: `${label} ${marks}`, onSelect: () => onSet(value) })),
+          { label: "None", onSelect: () => onSet(0), disabled: !level, separator: true },
+        ]}
+      >
+        {level?.[2] ?? "!"}
+      </MenuButton>
+    </div>
   );
 }
 

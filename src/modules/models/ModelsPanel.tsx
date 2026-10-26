@@ -11,6 +11,7 @@ import {
   type ModelInfo,
 } from "../../kernel/bridge/models";
 import type { AppError } from "../../kernel/bridge/unwrap";
+import MenuButton from "../../kernel/shell/MenuButton";
 import styles from "./ModelsPanel.module.css";
 import TextModels from "./TextModels";
 
@@ -155,22 +156,22 @@ function ModelRow({ model, progress, error }: { model: ModelInfo; progress?: Dow
           <button type="button" className="btn btnGhost btnCompact" onClick={() => cancel.mutate(model.id)}>
             Cancel
           </button>
-        ) : status.state === "ready" ? (
-          <button type="button" className="btn btnGhost btnCompact" onClick={() => remove.mutate(model.id)}>
-            Delete
+        ) : status.state !== "ready" ? (
+          <button type="button" className="btn btnPrimary btnCompact" onClick={() => start.mutate(model.id)}>
+            {status.state === "partial" ? "Resume" : "Download"}
           </button>
-        ) : (
-          <>
-            {status.state === "partial" && (
-              <button type="button" className="btn btnGhost btnCompact" onClick={() => remove.mutate(model.id)}>
-                Discard
-              </button>
-            )}
-            <button type="button" className="btn btnPrimary btnCompact" onClick={() => start.mutate(model.id)}>
-              {status.state === "partial" ? "Resume" : "Download"}
-            </button>
-          </>
-        )}
+        ) : null}
+        <MenuButton
+          label={`More actions for ${model.label}`}
+          items={[
+            {
+              label: status.state === "partial" ? "Discard download" : "Delete",
+              onSelect: () => remove.mutate(model.id),
+              danger: true,
+              disabled: status.state !== "ready" && status.state !== "partial",
+            },
+          ]}
+        />
       </div>
     </li>
   );

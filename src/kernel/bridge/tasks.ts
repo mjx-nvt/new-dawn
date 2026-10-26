@@ -53,9 +53,9 @@ export function useAddTask(slug: string) {
   });
 }
 
-/** Renames, dates (`due_on: null` removes the date) or ticks a task; a tick follows to its
- *  meeting's action item. A ticked task moves to Completed a moment later, so the row can show
- *  it done first (and be unticked in place). */
+/** Renames, dates (`due_on: null` removes the date), ticks or prioritises (`priority` 0–3) a
+ *  task; a tick follows to its meeting's action item. A ticked task moves to Completed a moment
+ *  later, so the row can show it done first (and be unticked in place). */
 export function useUpdateTask(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({

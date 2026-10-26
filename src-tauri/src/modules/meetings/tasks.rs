@@ -947,6 +947,7 @@ mod tests {
                     title: None,
                     due_on: None,
                     done: Some(true),
+                    priority: None,
                 },
             )
             .await
