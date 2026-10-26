@@ -1,11 +1,12 @@
 # Builds New Dawn for Apple Silicon and publishes the .dmg plus the signed update bundle and
 # latest.json as a GitHub release of this (public) repo; the app's updater reads latest.json.
-# Trigger: push a tag like v0.2.0.
+# Releases are published from the Mac with scripts/release-local.sh, so the signing key never
+# leaves it (D-031). This workflow is a manual fallback: Actions → Release → Run workflow, pick
+# the tag (e.g. v0.7.3) under "Use workflow from". It needs the TAURI_SIGNING_PRIVATE_KEY secret.
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 12
 
       - uses: actions/setup-node@v5
         with:
