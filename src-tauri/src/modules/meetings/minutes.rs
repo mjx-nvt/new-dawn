@@ -80,16 +80,18 @@ pub async fn export_docx(
             .bind(&meeting.meeting_type_id)
             .fetch_optional(&pool)
             .await?;
+    let owner = crate::kernel::profile::owner(&hub, slug)
+        .await?
+        .unwrap_or_default();
+    // A live discussion's lines name who spoke them (the owner, or "Call").
     let transcript = if options.include_transcript {
         Some(summarise::transcript_text(
             &super::transcript(&pool, meeting_id).await?,
+            Some(&owner.name),
         ))
     } else {
         None
     };
-    let owner = crate::kernel::profile::owner(&hub, slug)
-        .await?
-        .unwrap_or_default();
     let slogan = crate::kernel::brand::tokens::get(app, slug).await?.slogan;
     let data = model::minutes(&MinutesInput {
         meeting: &meeting,

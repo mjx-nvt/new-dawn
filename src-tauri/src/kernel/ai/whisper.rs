@@ -275,33 +275,92 @@ impl WhisperEngine {
         Ok(())
     }
 
-    /// One utterance of a live session (D-041): no VAD (the live segmenter cut it), the session's
-    /// `LiveDecoder` settings, a fresh state per call, language-safe cleanup. Blocking; takes no
-    /// queue turn. None when nothing real was said.
+    /// One utterance of a live session (D-041) in `language` (Vietnamese unless English): no VAD
+    /// (the live segmenter cut it), the session's `LiveDecoder` settings, a fresh state per call,
+    /// language-safe cleanup, and how sure Whisper was. Blocking; takes no queue turn. None when
+    /// nothing real was said.
     pub(in crate::kernel::ai) fn transcribe_utterance(
         &self,
         model: SpeechModel<'_>,
         decoder: &LiveDecoder,
         samples: &[f32],
-    ) -> Result<Option<String>> {
+        language: Language,
+    ) -> Result<Option<Heard>> {
+        let mut guard = self.with_model(model)?;
+        let loaded = guard.as_mut().expect("model loaded above");
+        let eot = loaded.ctx.token_eot();
+        let mut state = loaded
+            .ctx
+            .create_state()
+            .context("creating a Whisper state")?;
+        let params = match language {
+            Language::En => &decoder.en,
+            _ => &decoder.vi,
+        };
+        if let Err(err) = state.full(params.clone(), samples) {
+            if decoder.cancel.load(Ordering::Relaxed) {
+                bail!(AppError::new("cancelled", "Live transcription stopped"));
+            }
+            return Err(err).context("running Whisper");
+        }
+        let (mut raw, mut tokens) = (String::new(), Vec::new());
+        for segment in state.as_iter() {
+            raw.push_str(&segment.to_str_lossy()?);
+            for i in 0..segment.n_tokens() {
+                let token = segment.get_token(i).context("reading a token")?;
+                let data = token.token_data();
+                let bytes = (data.id < eot)
+                    .then(|| token.to_bytes().map(<[u8]>::to_vec))
+                    .transpose()?;
+                tokens.push(Tok {
+                    bytes,
+                    p: data.p,
+                    plog: data.plog,
+                });
+            }
+        }
+        loaded.last_used = Instant::now();
+        let Some(text) = clean_text(&raw) else {
+            return Ok(None);
+        };
+        let (confidence, avg_logprob, ended) = score(&tokens);
+        // Shorter than what Whisper wrote: `collapse_repeats` cut a loop.
+        let runaway = !ended || text.len() < raw.trim().len();
+        Ok(Some(Heard {
+            text,
+            confidence,
+            avg_logprob,
+            runaway,
+        }))
+    }
+
+    /// How likely an utterance is Vietnamese and English by Whisper's language detection — an extra
+    /// encoder pass (about a second), so only for a line in doubt. Blocking; takes no queue turn.
+    pub(in crate::kernel::ai) fn language_odds(
+        &self,
+        model: SpeechModel<'_>,
+        samples: &[f32],
+    ) -> Result<(f32, f32)> {
         let mut guard = self.with_model(model)?;
         let loaded = guard.as_mut().expect("model loaded above");
         let mut state = loaded
             .ctx
             .create_state()
             .context("creating a Whisper state")?;
-        if let Err(err) = state.full(decoder.params.clone(), samples) {
-            if decoder.cancel.load(Ordering::Relaxed) {
-                bail!(AppError::new("cancelled", "Live transcription stopped"));
-            }
-            return Err(err).context("running Whisper");
-        }
-        let mut parts = Vec::new();
-        for segment in state.as_iter() {
-            parts.extend(clean_text(&segment.to_str_lossy()?));
-        }
+        let threads = threads() as usize;
+        state
+            .pcm_to_mel(samples, threads)
+            .context("reading the utterance")?;
+        let (_, probs) = state
+            .lang_detect(0, threads)
+            .context("detecting the language")?;
         loaded.last_used = Instant::now();
-        Ok((!parts.is_empty()).then(|| parts.join(" ")))
+        let odds = |language: Language| {
+            whisper_rs::get_lang_id(language.code())
+                .and_then(|id| probs.get(id as usize).copied())
+                .unwrap_or(0.0)
+        };
+        Ok((odds(Language::Vi), odds(Language::En)))
     }
 
     /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
@@ -400,46 +459,106 @@ impl WhisperEngine {
 }
 
 /// Decoding settings for a live session's utterances (D-041), built once per session and cloned
-/// per call: Vietnamese forced (no detection pass), greedy with one candidate, one segment with no
-/// timestamps (the times come from the segmenter), at most 128 tokens, the vocabulary prompt, and
-/// whisper.cpp's default `no_context` (true: nothing carries over between calls). It owns the
-/// cancel flag its abort callback points to, so the pointer outlives every use of the settings.
+/// per call: the language forced (Vietnamese or English; no detection pass), greedy with one
+/// candidate at temperature 0 and no fallback (so every line's token probabilities mean the same
+/// thing, and a garbled line costs one pass, not six), one segment with no timestamps (the times
+/// come from the segmenter), up to whisper.cpp's own 220-token ceiling (a 15 s presenter line),
+/// the vocabulary prompt, and whisper.cpp's default `no_context` (true: nothing carries over
+/// between calls). It owns the cancel flag its abort callback points to, so the pointer outlives
+/// every use of the settings.
 pub(in crate::kernel::ai) struct LiveDecoder {
-    params: FullParams<'static, 'static>,
+    vi: FullParams<'static, 'static>,
+    en: FullParams<'static, 'static>,
     cancel: Arc<AtomicBool>,
 }
 
 impl LiveDecoder {
     pub fn new(prompt: &str, cancel: Arc<AtomicBool>) -> Self {
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_n_threads(threads());
-        params.set_language(Some(Language::Vi.code()));
         let prompt = prompt.replace('\0', " ");
-        if !prompt.trim().is_empty() {
-            params.set_initial_prompt(&prompt); // leaked once per session (see `transcribe`)
+        let params = |language: Language| {
+            let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+            params.set_n_threads(threads());
+            params.set_language(Some(language.code()));
+            if !prompt.trim().is_empty() {
+                params.set_initial_prompt(&prompt); // leaked once per session (see `transcribe`)
+            }
+            params.set_translate(false);
+            params.set_single_segment(true);
+            params.set_no_timestamps(true);
+            params.set_max_tokens(220);
+            params.set_suppress_blank(true);
+            params.set_suppress_nst(true);
+            params.set_temperature(0.0);
+            params.set_temperature_inc(0.0);
+            params.set_entropy_thold(2.4);
+            params.set_logprob_thold(-1.0);
+            params.set_no_speech_thold(0.55);
+            params.set_print_progress(false);
+            params.set_print_realtime(false);
+            params.set_print_special(false);
+            params.set_print_timestamps(false);
+            // SAFETY: the pointer is to the flag `Self` owns, and the settings (and their clones)
+            // are only used through `&self`, so the flag outlives every whisper call that reads it.
+            unsafe {
+                params.set_abort_callback(Some(abort_when_cancelled));
+                params.set_abort_callback_user_data(Arc::as_ptr(&cancel) as *mut std::ffi::c_void);
+            }
+            params
+        };
+        Self {
+            vi: params(Language::Vi),
+            en: params(Language::En),
+            cancel,
         }
-        params.set_translate(false);
-        params.set_single_segment(true);
-        params.set_no_timestamps(true);
-        params.set_max_tokens(128);
-        params.set_suppress_blank(true);
-        params.set_suppress_nst(true);
-        params.set_temperature(0.0);
-        params.set_entropy_thold(2.4);
-        params.set_logprob_thold(-1.0);
-        params.set_no_speech_thold(0.55);
-        params.set_print_progress(false);
-        params.set_print_realtime(false);
-        params.set_print_special(false);
-        params.set_print_timestamps(false);
-        // SAFETY: the pointer is to the flag `Self` owns, and the settings (and their clones) are
-        // only used through `&self`, so the flag outlives every whisper call that reads it.
-        unsafe {
-            params.set_abort_callback(Some(abort_when_cancelled));
-            params.set_abort_callback_user_data(Arc::as_ptr(&cancel) as *mut std::ffi::c_void);
-        }
-        Self { params, cancel }
     }
+}
+
+/// One live utterance as Whisper heard it.
+pub(in crate::kernel::ai) struct Heard {
+    pub text: String,
+    /// Per word, the probability of its least likely token, averaged over the words (punctuation
+    /// skipped): 0–1.
+    pub confidence: f32,
+    /// The mean log-probability of the decoded tokens, end-of-text included (whisper.cpp's own).
+    pub avg_logprob: f32,
+    /// No end-of-text within the token cap, or a loop the cleanup collapsed.
+    pub runaway: bool,
+}
+
+/// A decoded token as `score` sees it: its bytes (None: end-of-text, the only special token a
+/// live decode writes), probability and log-probability.
+pub(in crate::kernel::ai) struct Tok {
+    pub bytes: Option<Vec<u8>>,
+    pub p: f32,
+    pub plog: f32,
+}
+
+/// (confidence, avg_logprob, ended) of a decoded line — see `Heard`. A word is as sure as its least
+/// sure token: a Vietnamese syllable takes ~1.8 byte tokens and the continuation bytes are almost
+/// always certain, which would flatter a plain token average (r3 §4.2).
+pub(in crate::kernel::ai) fn score(tokens: &[Tok]) -> (f32, f32, bool) {
+    let (mut words, mut sum, mut word, mut ended) = (0u32, 0f32, None::<f32>, false);
+    for token in tokens {
+        let Some(bytes) = &token.bytes else {
+            ended = true;
+            continue;
+        };
+        if bytes.iter().all(|b| b.is_ascii_punctuation() || *b == b' ') {
+            continue; // Whisper is often unsure of punctuation
+        }
+        if bytes.first() == Some(&b' ') {
+            if let Some(p) = word.take() {
+                (words, sum) = (words + 1, sum + p);
+            }
+        }
+        word = Some(word.map_or(token.p, |least| least.min(token.p)));
+    }
+    if let Some(p) = word {
+        (words, sum) = (words + 1, sum + p);
+    }
+    let confidence = if words == 0 { 0.0 } else { sum / words as f32 };
+    let avg_logprob = tokens.iter().map(|t| t.plog).sum::<f32>() / tokens.len().max(1) as f32;
+    (confidence, avg_logprob, ended)
 }
 
 /// whisper.cpp abort callback: `user_data` is the job's `AtomicBool` cancel flag.

@@ -15,6 +15,7 @@ export function useStopAndOpen() {
       const slug = status?.workspace_slug;
       stop.mutate(undefined, {
         onSuccess: async (meeting) => {
+          if (!meeting) return; // a quick translation: nothing saved, nothing to open
           if (slug && slug !== current?.slug) await switchWorkspace.mutateAsync(slug).catch(() => undefined);
           void navigate({ to: "/meetings/$meetingId", params: { meetingId: meeting.id }, search: { tab: "transcript" } });
         },

@@ -15,6 +15,7 @@ mod events;
 
 mod kernel {
     pub mod ai {
+        pub mod days;
         pub mod live;
         pub mod log;
         pub mod models;
@@ -186,6 +187,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::recorder::start_recording,
             commands::recorder::set_recording_paused,
             commands::recorder::stop_recording,
+            commands::recorder::live_lines,
             commands::recorder::microphone_permission,
             commands::recorder::request_microphone_permission,
             commands::recorder::open_privacy_settings,
@@ -359,6 +361,7 @@ pub fn run() {
             ));
             app.manage(modules::meetings::transcribe::TranscriptionJobs::default());
             app.manage(recorder::session::Recorder::default());
+            app.manage(kernel::ai::live::LiveLines::default());
             app.manage(modules::meetings::summarise::SummaryJobs::default());
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());

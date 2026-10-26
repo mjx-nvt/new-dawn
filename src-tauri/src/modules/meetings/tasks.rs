@@ -23,7 +23,7 @@ use super::{Meeting, MeetingFormat, TranscriptSegment, review};
 use crate::kernel::ai::ollama::{Message, Request, TextSession};
 use crate::kernel::profile::{Owner, clean};
 use crate::modules::agents::{self, Agent};
-use crate::modules::people::{Person, fold};
+use crate::modules::people::{Person, fold, words};
 use crate::modules::tasks::{self as store, TaskOrigin};
 
 /// The most items one call judges; the rest wait for "Add to Tasks".
@@ -189,15 +189,6 @@ fn parts(owner: &str) -> Vec<String> {
     text.split([',', ';', '/', '&', '+'])
         .map(str::trim)
         .filter(|p| !p.is_empty())
-        .map(str::to_owned)
-        .collect()
-}
-
-/// The words of `text`, folded.
-fn words(text: &str) -> Vec<String> {
-    fold(text)
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
         .map(str::to_owned)
         .collect()
 }
@@ -516,9 +507,10 @@ fn picks(answer: &str, asked: &[usize]) -> Result<Vec<(usize, String, String)>> 
 
 /// Transcript lines for the agent: up to 10 lines that name the owner, for each item the two lines
 /// sharing the most rare words with it (a word in few lines counts more, so no stop-word list),
-/// then the lines around those — at most 40, in time order, 200 characters each. The line an item
-/// already in Tasks (`taken`) rests on is left out unless an asked item rests on it too: the
-/// owner's "I'll prepare the note" is no evidence that the booth is theirs.
+/// then the lines around those — at most 40, in time order, 200 characters each, labelled with who
+/// spoke them in a live discussion (as the summary reads them). The line an item already in Tasks
+/// (`taken`) rests on is left out unless an asked item rests on it too: the owner's "I'll prepare
+/// the note" is no evidence that the booth is theirs.
 fn evidence(
     segments: &[TranscriptSegment],
     items: &[&ActionItem],
@@ -600,7 +592,8 @@ fn evidence(
             let s = &segments[i];
             let secs = s.start_ms / 1000;
             let text: String = s.text.chars().take(200).collect();
-            format!("[{:02}:{:02}] {text}", secs / 60, secs % 60)
+            let who = summarise::speaker_label(s.speaker, Some(&who.me.name));
+            format!("[{:02}:{:02}] {who}{text}", secs / 60, secs % 60)
         })
         .collect()
 }
@@ -770,8 +763,7 @@ mod tests {
             start_ms: n * 30_000,
             end_ms: n * 30_000 + 5_000,
             text: text.into(),
-            raw_text: None,
-            translation: None,
+            ..TranscriptSegment::default()
         };
         let segments: Vec<TranscriptSegment> = [
             "Welcome everyone to the partner call.",
@@ -802,6 +794,19 @@ mod tests {
         // Chairing is in Tasks already: its line is no evidence for the memorandum.
         let chair = item("Tien Nguyen", "Chair the next session");
         assert_eq!(evidence(&segments, &[&mou], &[&chair], &who), got[..4]);
+
+        // A live discussion's lines say who spoke them, as the summary reads them.
+        let mut spoken = segments.clone();
+        spoken[1].speaker = Some(crate::modules::meetings::Speaker::Them);
+        spoken[2].speaker = Some(crate::modules::meetings::Speaker::You);
+        let got_spoken = evidence(&spoken, &[&mou], &[], &who);
+        assert_eq!(
+            got_spoken[1..3],
+            [
+                "[00:30] Call: The bank still needs the memorandum before signing.",
+                "[01:00] Tien Nguyen: Fine, I'll send the memorandum tonight.",
+            ]
+        );
 
         // Twenty items fill the 40 lines with their best lines; the line naming the owner stays.
         let mut segments: Vec<TranscriptSegment> = (0..59)

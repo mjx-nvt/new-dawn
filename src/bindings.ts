@@ -167,17 +167,23 @@ export const commands = {
 	deleteMeeting: (slug: string, meetingId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_meeting", { slug, meetingId })),
 	recorderStatus: () => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("recorder_status")),
 	/**
-	 *  `live`: transcribe (Vietnamese) and translate (English) as people speak (D-041); the meeting is
-	 *  then Vietnamese. Live refuses with `ai_busy` while another AI job runs, `model_missing` without
-	 *  a Whisper model.
+	 *  `live`: transcribe and translate as people speak (D-041), the way `direction` says; the
+	 *  meeting's language follows it (both ways: auto). `save: false` (live only): a quick
+	 *  translation — no meeting (None), recording or summary; its lines are in `live_lines`. Live
+	 *  refuses with `ai_busy` while another AI job runs, `model_missing` without a Whisper model.
 	 */
-	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null, presentation: boolean, presenter: string | null, live: boolean) => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId, presentation, presenter, live })),
+	startRecording: (slug: string, title: string, language: Language, meetingTypeId: string | null, presentation: boolean, presenter: string | null, live: boolean, save: boolean, direction: LiveDirection) => typedError<Meeting_Serialize | null, AppError>(__TAURI_INVOKE("start_recording", { slug, title, language, meetingTypeId, presentation, presenter, live, save, direction })),
 	setRecordingPaused: (paused: boolean) => typedError<RecorderStatus_Serialize, AppError>(__TAURI_INVOKE("set_recording_paused", { paused })),
 	/**
 	 *  Finalises the WAV, marks the meeting `recorded` and queues transcription — or, after a live
-	 *  session, waits for its last lines and marks it `transcribed`.
+	 *  session, waits for its last lines and marks it `transcribed`. None after a quick translation.
 	 */
-	stopRecording: () => typedError<Meeting_Serialize, AppError>(__TAURI_INVOKE("stop_recording")),
+	stopRecording: () => typedError<Meeting_Serialize | null, AppError>(__TAURI_INVOKE("stop_recording")),
+	/**
+	 *  The current or last quick translation's lines, in memory only until the next live session
+	 *  starts or the app quits.
+	 */
+	liveLines: () => typedError<TranscriptSegment_Serialize[], AppError>(__TAURI_INVOKE("live_lines")),
 	microphonePermission: () => typedError<PermissionState, AppError>(__TAURI_INVOKE("microphone_permission")),
 	requestMicrophonePermission: () => typedError<PermissionState, AppError>(__TAURI_INVOKE("request_microphone_permission")),
 	/**  Opens System Settings at Microphone or at Screen & System Audio Recording. */
@@ -528,6 +534,13 @@ export type Button_Serialize = {
 	secondary: string,
 };
 
+/**  How clearly Whisper heard a live line; none = clear (or not scored: batch lines). */
+export type Clarity = 
+/**  Translated, with a marker. */
+"uncertain" | 
+/**  Not translated: several voices at once or a weak signal. */
+"unclear";
+
 export type Converter = "word" | "libreoffice" | "pages";
 
 export type ConverterInfo = ConverterInfo_Serialize | ConverterInfo_Deserialize;
@@ -611,7 +624,19 @@ export type InstalledModel = {
 	size_mb: number,
 };
 
+/**  A live line's language when the session translates both ways. */
+export type Lang = "vi" | "en";
+
 export type Language = "en" | "vi" | "auto";
+
+/**  Which way a live session translates (0.7.5). */
+export type LiveDirection = 
+/**  Tiếng Việt → English. */
+"vi_en" | 
+/**  English → Tiếng Việt. */
+"en_vi" | 
+/**  Each line's language is detected (Vietnamese or English), then translated into the other. */
+"both";
 
 export type LivePhase = 
 /**  Waiting for someone to finish a sentence. */
@@ -621,7 +646,7 @@ export type LivePhase =
 /**  Qwen is translating a finished line. */
 "translating" | 
 /**
- *  Waiting for speech with translation off (no text model): Vietnamese only; why is in
+ *  Waiting for speech with translation off (no text model): the transcript only; why is in
  *  `translation_off_reason`.
  */
 "ready";
@@ -637,12 +662,23 @@ export type LiveStatus_Deserialize = {
 	/**  600 ms windows the live text skipped because it fell behind (the recording has them all). */
 	dropped: number,
 	/**
-	 *  Why there is no English (no Ollama or text model when the session started, or Ollama
+	 *  Why there is no translation (no Ollama or text model when the session started, or Ollama
 	 *  stopped answering); it stays off for the rest of the session.
 	 */
 	translation_off_reason?: string | null,
-	/**  The text model translating ("Translated on this Mac by …"); None in Vietnamese only. */
+	/**  The text model translating ("Translated on this Mac by …"); None without translation. */
 	model?: string | null,
+	/**  Quick translation: nothing is saved, the lines are in `live_lines`. */
+	quick: boolean,
+	direction: LiveDirection,
+	format: MeetingFormat,
+	/**  The presenter's name, in a presentation. */
+	presenter?: string | null,
+	/**
+	 *  Microphone lines dropped because the call had just said the same words: the microphone
+	 *  hears the speakers ("use headphones").
+	 */
+	overheard: number,
 };
 
 /**  A live session's state, part of `RecorderStatus` (sent with `RecorderStatusChanged`). */
@@ -653,12 +689,23 @@ export type LiveStatus_Serialize = {
 	/**  600 ms windows the live text skipped because it fell behind (the recording has them all). */
 	dropped: number,
 	/**
-	 *  Why there is no English (no Ollama or text model when the session started, or Ollama
+	 *  Why there is no translation (no Ollama or text model when the session started, or Ollama
 	 *  stopped answering); it stays off for the rest of the session.
 	 */
 	translation_off_reason: string | null,
-	/**  The text model translating ("Translated on this Mac by …"); None in Vietnamese only. */
+	/**  The text model translating ("Translated on this Mac by …"); None without translation. */
 	model: string | null,
+	/**  Quick translation: nothing is saved, the lines are in `live_lines`. */
+	quick: boolean,
+	direction: LiveDirection,
+	format: MeetingFormat,
+	/**  The presenter's name, in a presentation. */
+	presenter: string | null,
+	/**
+	 *  Microphone lines dropped because the call had just said the same words: the microphone
+	 *  hears the speakers ("use headphones").
+	 */
+	overheard: number,
 };
 
 export type Meeting = Meeting_Serialize | Meeting_Deserialize;
@@ -1033,12 +1080,14 @@ export type RecorderStatusChanged_Serialize = RecorderStatus_Serialize;
 export type RecorderStatus_Deserialize = {
 	phase: RecorderPhase,
 	workspace_slug?: string | null,
+	/**  None while idle, and for a quick translation (nothing is saved). */
 	meeting_id?: string | null,
 	elapsed_ms: number,
 	system_audio: SystemAudio,
 	/**
 	 *  A live session's transcription and translation (D-041); None for a plain recording, and
-	 *  once live has failed (Stop then transcribes the recording the batch way).
+	 *  once live has failed (Stop then transcribes the recording the batch way; a quick
+	 *  translation stops on its own).
 	 */
 	live?: LiveStatus_Deserialize | null,
 };
@@ -1046,12 +1095,14 @@ export type RecorderStatus_Deserialize = {
 export type RecorderStatus_Serialize = {
 	phase: RecorderPhase,
 	workspace_slug: string | null,
+	/**  None while idle, and for a quick translation (nothing is saved). */
 	meeting_id: string | null,
 	elapsed_ms: number,
 	system_audio: SystemAudio,
 	/**
 	 *  A live session's transcription and translation (D-041); None for a plain recording, and
-	 *  once live has failed (Stop then transcribes the recording the batch way).
+	 *  once live has failed (Stop then transcribes the recording the batch way; a quick
+	 *  translation stops on its own).
 	 */
 	live: LiveStatus_Serialize | null,
 };
@@ -1089,6 +1140,12 @@ export type Slogan_Serialize = {
 	en: string,
 	vi: string,
 };
+
+/**
+ *  Who spoke a live line (0.7.5): `you` = this Mac's microphone in a call, `them` = the call's
+ *  audio. Batch lines, presentations and meetings in a room have none.
+ */
+export type Speaker = "you" | "them";
 
 /**  Where a transcription job is; sent to the UI with a 0–100 percent. */
 export type Stage = "queued" | "decoding" | "detecting_speech" | "transcribing" | "saving";
@@ -1457,8 +1514,17 @@ export type TranscriptSegment_Deserialize = {
 	text: string,
 	/**  What Whisper wrote, when the vocabulary corrected this line (D-036). */
 	raw_text?: string | null,
-	/**  The English of a line written during a live session (D-041); None until translated. */
+	/**  The translation of a line written during a live session (D-041); None until translated. */
 	translation?: string | null,
+	/**  Who spoke a live line, when known. */
+	speaker?: Speaker | null,
+	/**  How clearly a live line was heard; None = clear, or a batch line. */
+	clarity?: Clarity | null,
+	/**
+	 *  A live line's language when the session translated both ways (and in a quick translation,
+	 *  which has no meeting); None = the meeting's.
+	 */
+	lang?: Lang | null,
 };
 
 export type TranscriptSegment_Serialize = {
@@ -1468,8 +1534,17 @@ export type TranscriptSegment_Serialize = {
 	text: string,
 	/**  What Whisper wrote, when the vocabulary corrected this line (D-036). */
 	raw_text: string | null,
-	/**  The English of a line written during a live session (D-041); None until translated. */
+	/**  The translation of a line written during a live session (D-041); None until translated. */
 	translation: string | null,
+	/**  Who spoke a live line, when known. */
+	speaker: Speaker | null,
+	/**  How clearly a live line was heard; None = clear, or a batch line. */
+	clarity: Clarity | null,
+	/**
+	 *  A live line's language when the session translated both ways (and in a quick translation,
+	 *  which has no meeting); None = the meeting's.
+	 */
+	lang: Lang | null,
 };
 
 /**  A transcription job ended: `error` is None on success; code `cancelled` when stopped. */

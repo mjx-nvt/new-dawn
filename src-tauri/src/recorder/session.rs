@@ -2,7 +2,9 @@
 //! A capture thread owns the (non-Send) mic stream and the system tap; a mixer thread writes the
 //! WAV. Start creates the meeting (`recording`); Stop finalises the file, marks it `recorded` and
 //! queues transcription. A live session (D-041) also feeds the live worker, which writes the
-//! transcript as people speak; its Stop marks the meeting `transcribed` instead.
+//! transcript as people speak; its Stop marks the meeting `transcribed` instead. A quick
+//! translation (a live session that isn't saved) has no meeting, no folder and no WAV: its lines
+//! stay in memory (`live::LiveLines`) and Stop only lets the worker finish.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,12 +24,14 @@ use super::saver::{self, WavWriter};
 use super::{mic, system_tap};
 use crate::error::AppError;
 use crate::events::{RecorderLevel, RecorderStatusChanged, TranscriptionFinished};
-use crate::kernel::ai::live::{self, LiveHandle, LiveMeeting, LiveStatus, Window};
+use crate::kernel::ai::live::{self, LiveDirection, LiveHandle, LiveMeeting, LiveStatus, Window};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::notify;
 use crate::kernel::permissions::{self, PermissionState};
-use crate::modules::meetings::{self, Meeting, MeetingStatus, NewMeeting, summarise, transcribe};
+use crate::modules::meetings::{
+    self, Meeting, MeetingFormat, MeetingStatus, NewMeeting, summarise, transcribe,
+};
 use sqlx::SqlitePool;
 
 /// Bounded channel size per source: 50 × ~100 ms = 5 s of slack before chunks are dropped.
@@ -59,11 +63,13 @@ pub enum SystemAudio {
 pub struct RecorderStatus {
     pub phase: RecorderPhase,
     pub workspace_slug: Option<String>,
+    /// None while idle, and for a quick translation (nothing is saved).
     pub meeting_id: Option<String>,
     pub elapsed_ms: u32,
     pub system_audio: SystemAudio,
     /// A live session's transcription and translation (D-041); None for a plain recording, and
-    /// once live has failed (Stop then transcribes the recording the batch way).
+    /// once live has failed (Stop then transcribes the recording the batch way; a quick
+    /// translation stops on its own).
     pub live: Option<LiveStatus>,
 }
 
@@ -75,13 +81,17 @@ pub struct StartRequest {
     /// A presentation by one main presenter (else a discussion), D-038.
     pub presenter: Option<String>,
     pub presentation: bool,
-    /// Transcribe (Vietnamese) and translate (English) as people speak (D-041).
+    /// Transcribe and translate as people speak (D-041), the way `direction` says.
     pub live: bool,
+    /// False (live only): a quick translation — no meeting, recording or summary.
+    pub save: bool,
+    pub direction: LiveDirection,
 }
 
 struct Active {
     slug: String,
-    meeting_id: String,
+    /// None for a quick translation.
+    meeting_id: Option<String>,
     shared: Arc<Shared>,
     stop: Sender<()>,
     capture: Option<JoinHandle<Result<u64>>>,
@@ -128,7 +138,7 @@ impl Active {
         RecorderStatus {
             phase,
             workspace_slug: Some(self.slug.clone()),
-            meeting_id: Some(self.meeting_id.clone()),
+            meeting_id: self.meeting_id.clone(),
             elapsed_ms: self.elapsed().as_millis() as u32,
             system_audio,
             live,
@@ -186,14 +196,18 @@ impl Recorder {
     }
 }
 
-pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
+/// Starts a recording (and its live session); returns its meeting — None for a quick translation.
+pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Option<Meeting>> {
     let recorder = app.state::<Recorder>();
     if recorder.lock().is_some() || recorder.starting.swap(true, Ordering::AcqRel) {
         bail!(AppError::invalid("A recording is already running"));
     }
     let _claim = StartClaim(&recorder.starting);
+    if !request.save && !request.live {
+        bail!(AppError::invalid("Only a live session can be left unsaved"));
+    }
     let title = request.title.trim().to_owned();
-    if title.is_empty() {
+    if title.is_empty() && request.save {
         bail!(AppError::invalid("Title is required"));
     }
     match permissions::request_microphone().await? {
@@ -207,7 +221,13 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     let hub = app.state::<WorkspaceHub>();
     let workspace = hub.workspace(&request.slug).await?;
     let pool = hub.pool(&request.slug)?;
-    let id = meetings::new_id();
+    // A quick translation saves nothing: no meeting, no folder, no WAV.
+    let id = request.save.then(meetings::new_id);
+    let format = if request.presentation {
+        MeetingFormat::Presentation
+    } else {
+        MeetingFormat::Discussion
+    };
     // Live (D-041): claim the AI before anything is created, so a busy AI refuses cleanly. It
     // writes into this meeting once windows arrive; a failed start below drops `live_tx`, which
     // ends the worker.
@@ -217,50 +237,62 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
             slug: request.slug.clone(),
             id: id.clone(),
             title: title.clone(),
-            presenter: request.presenter.clone().filter(|_| request.presentation),
+            format,
+            presenter: request
+                .presenter
+                .as_deref()
+                .filter(|_| request.presentation)
+                .map(|p| crate::modules::people::clean(p, 120))
+                .filter(|p| !p.is_empty()),
+            direction: request.direction,
         };
         let handle = live::start(app, meeting, rx).await?;
-        (Some(tx), Some(handle), Language::Vi) // live is Vietnamese → English
+        (Some(tx), Some(handle), request.direction.language())
     } else {
         (None, None, request.language)
     };
-    let folder = Path::new(&workspace.folder_path)
-        .join("recordings")
-        .join(&id);
-    tokio::fs::create_dir_all(&folder)
-        .await
-        .with_context(|| format!("creating {}", folder.display()))?;
-    let path = folder.join("audio.wav");
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() as i64);
-    let mut meeting = meetings::create(
-        &pool,
-        NewMeeting {
-            id: &id,
-            meeting_type_id: request.meeting_type_id.as_deref(),
-            title: &title,
-            held_at_unix: now,
-            language,
-            audio_path: &path.to_string_lossy(),
-            status: MeetingStatus::Recording,
-        },
-    )
-    .await?;
-    if request.presentation {
-        meeting = meetings::set_format(
+    // The meeting and its recording's folder, when saved.
+    let mut saved: Option<(Meeting, PathBuf)> = None;
+    if let Some(id) = &id {
+        let folder = Path::new(&workspace.folder_path)
+            .join("recordings")
+            .join(id);
+        tokio::fs::create_dir_all(&folder)
+            .await
+            .with_context(|| format!("creating {}", folder.display()))?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        let mut meeting = meetings::create(
             &pool,
-            &id,
-            meetings::MeetingFormat::Presentation,
-            request.presenter.as_deref(),
+            NewMeeting {
+                id,
+                meeting_type_id: request.meeting_type_id.as_deref(),
+                title: &title,
+                held_at_unix: now,
+                language,
+                audio_path: &folder.join("audio.wav").to_string_lossy(),
+                status: MeetingStatus::Recording,
+            },
         )
         .await?;
+        if request.presentation {
+            meeting = meetings::set_format(
+                &pool,
+                id,
+                MeetingFormat::Presentation,
+                request.presenter.as_deref(),
+            )
+            .await?;
+        }
+        saved = Some((meeting, folder));
     }
 
     let shared = Arc::new(Shared::default());
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<bool>>();
-    let capture = spawn_capture(path, shared.clone(), stop_rx, ready_tx, live_tx);
+    let wav = saved.as_ref().map(|(_, folder)| folder.join("audio.wav"));
+    let capture = spawn_capture(wav, shared.clone(), stop_rx, ready_tx, live_tx);
     let ready = tokio::task::spawn_blocking(move || {
         ready_rx
             .recv()
@@ -274,8 +306,10 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
         Ok(tap) => tap,
         Err(err) => {
             let _ = tokio::task::spawn_blocking(move || capture.join()).await;
-            meetings::delete(&pool, &id).await.ok();
-            tokio::fs::remove_dir_all(&folder).await.ok();
+            if let Some((meeting, folder)) = &saved {
+                meetings::delete(&pool, &meeting.id).await.ok();
+                tokio::fs::remove_dir_all(folder).await.ok();
+            }
             return Err(err);
         }
     };
@@ -297,7 +331,11 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     *app.state::<Recorder>().lock() = Some(active);
     let _ = RecorderStatusChanged(status).emit(app);
     spawn_meter(app.clone());
-    notify::show(app, "Recording started", &meeting.title);
+    let meeting = saved.map(|(meeting, _)| meeting);
+    match &meeting {
+        Some(meeting) => notify::show(app, "Recording started", &meeting.title),
+        None => notify::show(app, "Quick translation started", "Nothing is saved"),
+    }
     Ok(meeting)
 }
 
@@ -322,7 +360,9 @@ pub fn pause(app: &AppHandle, paused: bool) -> Result<RecorderStatus> {
     Ok(status)
 }
 
-pub async fn stop(app: &AppHandle) -> Result<Meeting> {
+/// Stops the recording. Returns its meeting — None for a quick translation, whose Stop only lets
+/// the live worker finish its last lines (they stay in memory).
+pub async fn stop(app: &AppHandle) -> Result<Option<Meeting>> {
     let (slug, meeting_id, capture, stop, shared, live) = {
         let recorder = app.state::<Recorder>();
         let mut guard = recorder.lock();
@@ -373,6 +413,20 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
     app.state::<Recorder>().lock().take();
     let _ = RecorderStatusChanged(app.state::<Recorder>().status()).emit(app);
 
+    let Some(meeting_id) = meeting_id else {
+        // A quick translation: nothing on disk to finish, transcribe or summarise.
+        let samples = joined.unwrap_or_else(|err| {
+            tracing::warn!("recorder ended with an error: {err:#}");
+            0
+        });
+        let length = notify::clock(saver::duration_ms(samples));
+        notify::show(
+            app,
+            "Quick translation stopped",
+            &format!("{length} — nothing was saved"),
+        );
+        return Ok(None);
+    };
     let pool = app.state::<WorkspaceHub>().pool(&slug)?;
     let samples = match joined {
         Ok(samples) => samples,
@@ -411,7 +465,7 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
                 notify::clock(duration_ms)
             ),
         );
-        return Ok(meeting);
+        return Ok(Some(meeting));
     }
     meetings::finish_recording(&pool, &meeting_id, duration_ms, MeetingStatus::Recorded).await?;
     let queued = transcribe::start(app, &slug, &meeting_id).await;
@@ -429,7 +483,7 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
         "Recording stopped",
         &format!("{} · {}{next}", meeting.title, notify::clock(duration_ms)),
     );
-    Ok(meeting)
+    Ok(Some(meeting))
 }
 
 /// After a live session, what the batch path does once a transcript is saved: shrink the WAV
@@ -492,9 +546,10 @@ async fn repair_file(path: Option<String>) -> Result<u64> {
 
 /// Capture thread: owns the mic stream and the tap (neither is Send), runs the mixer, and keeps
 /// both alive until `stop`. Reports `Ok(tap_available)` or the start error through `ready`.
-/// `live`: a live session's worker, fed by the mixer.
+/// `path`: the WAV to write, None for a quick translation. `live`: a live session's worker, fed
+/// by the mixer.
 fn spawn_capture(
-    path: PathBuf,
+    path: Option<PathBuf>,
     shared: Arc<Shared>,
     stop: mpsc::Receiver<()>,
     ready: Sender<Result<bool>>,
@@ -507,7 +562,7 @@ fn spawn_capture(
             let (sys_tx, sys_rx) = mpsc::sync_channel(CHANNEL_CAP);
             let setup = (|| -> Result<_> {
                 let mic = mic::start(mic_tx, shared.clone())?;
-                let wav = WavWriter::create(&path)?;
+                let wav = path.as_deref().map(WavWriter::create).transpose()?;
                 Ok((mic, wav))
             })();
             let (mic, wav) = match setup {
@@ -568,6 +623,20 @@ fn spawn_meter(app: AppHandle) {
             let Some(((you, them), status)) = snapshot else {
                 break;
             };
+            // A quick translation whose live worker failed records nothing (no WAV): end it rather
+            // than keep the microphone open. Its lines stay in `live_lines`.
+            if status.meeting_id.is_none()
+                && status.live.is_none()
+                && status.phase != RecorderPhase::Stopping
+            {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = stop(&app).await {
+                        tracing::warn!("could not end the quick translation: {err:#}");
+                    }
+                });
+                break;
+            }
             let _ = RecorderLevel {
                 you,
                 them,
@@ -610,7 +679,7 @@ mod tests {
         let shared = Arc::new(Shared::default());
         let (stop_tx, stop_rx) = mpsc::channel();
         let (ready_tx, ready_rx) = mpsc::channel();
-        let capture = spawn_capture(path.clone(), shared.clone(), stop_rx, ready_tx, None);
+        let capture = spawn_capture(Some(path.clone()), shared.clone(), stop_rx, ready_tx, None);
         let tap = ready_rx.recv().unwrap().expect("capture should start");
         eprintln!("system tap available: {tap}");
 

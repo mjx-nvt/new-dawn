@@ -318,14 +318,14 @@ pub async fn unload() {
     unload_one(&app).await;
 }
 
-/// Asks Ollama to load `name` now (an empty chat with the usual `num_ctx`, so the first real call
-/// neither waits for the load nor reloads). Best effort.
-pub async fn preload(name: String) {
+/// Asks Ollama to load `name` now (an empty chat with the session's `num_ctx`, so the first real
+/// call neither waits for the load nor reloads). Best effort.
+pub async fn preload(name: String, num_ctx: u32) {
     let body = serde_json::json!({
         "model": name,
         "messages": [],
         "keep_alive": KEEP_ALIVE,
-        "options": { "num_ctx": NUM_CTX },
+        "options": { "num_ctx": num_ctx },
     });
     if let Ok(client) = client(Duration::from_secs(120)) {
         let _ = client
@@ -377,6 +377,8 @@ pub struct TextSession<'a> {
     /// Fixed for the whole session (a pick in Settings waits for the queue anyway).
     model: String,
     temperature: f32,
+    /// Context window for every call of the session (a change makes Ollama reload the model).
+    num_ctx: u32,
 }
 
 /// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
@@ -440,6 +442,7 @@ pub async fn session_on<'a>(
         agent: None,
         model,
         temperature: TEMPERATURE,
+        num_ctx: NUM_CTX,
     }
 }
 
@@ -466,6 +469,7 @@ impl<'a> TextSession<'a> {
             agent: None,
             model: model(),
             temperature: TEMPERATURE,
+            num_ctx: NUM_CTX,
         }
     }
 }
@@ -489,6 +493,13 @@ impl TextSession<'_> {
         self
     }
 
+    /// Context window for the calls that follow; set it before the first (live asks less, so the
+    /// fast model fits beside Whisper).
+    pub fn set_num_ctx(&mut self, num_ctx: u32) -> &mut Self {
+        self.num_ctx = num_ctx;
+        self
+    }
+
     /// One streamed `/api/chat` call. `on_token` gets the running count of generated tokens.
     /// Errors with `context_overflow` if the prompt filled the context (Ollama truncates silently).
     pub async fn complete(
@@ -504,7 +515,7 @@ impl TextSession<'_> {
         let result = self.stream(request, cancel, &mut on_token).await;
         // Ollama truncates an over-long prompt silently; treat a full context as an overflow,
         // but keep the token counts in the log row that explains it.
-        let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= NUM_CTX);
+        let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= self.num_ctx);
         let (status, error, prompt_tokens, output_tokens) = match &result {
             Ok(c) if overflow => (
                 "error",
@@ -574,7 +585,7 @@ impl TextSession<'_> {
             "stream": true,
             "think": request.think,
             "keep_alive": KEEP_ALIVE,
-            "options": { "num_ctx": NUM_CTX, "num_predict": request.max_tokens, "temperature": self.temperature },
+            "options": { "num_ctx": self.num_ctx, "num_predict": request.max_tokens, "temperature": self.temperature },
         });
         let response = client(Duration::from_secs(180))? // the first token can wait for the model to load
             .post(format!("{BASE}/api/chat"))

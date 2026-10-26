@@ -66,7 +66,46 @@ pub struct Meeting {
     pub tasks_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
+/// Who spoke a live line (0.7.5): `you` = this Mac's microphone in a call, `them` = the call's
+/// audio. Batch lines, presentations and meetings in a room have none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum Speaker {
+    You,
+    Them,
+}
+
+/// How clearly Whisper heard a live line; none = clear (or not scored: batch lines).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum Clarity {
+    /// Translated, with a marker.
+    Uncertain,
+    /// Not translated: several voices at once or a weak signal.
+    Unclear,
+}
+
+/// A live line's language when the session translates both ways.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(rename_all = "snake_case")]
+pub enum Lang {
+    Vi,
+    En,
+}
+
+impl From<Lang> for Language {
+    fn from(lang: Lang) -> Self {
+        match lang {
+            Lang::Vi => Language::Vi,
+            Lang::En => Language::En,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Type, sqlx::FromRow)]
 pub struct TranscriptSegment {
     pub seq: u32,
     pub start_ms: u32,
@@ -74,8 +113,15 @@ pub struct TranscriptSegment {
     pub text: String,
     /// What Whisper wrote, when the vocabulary corrected this line (D-036).
     pub raw_text: Option<String>,
-    /// The English of a line written during a live session (D-041); None until translated.
+    /// The translation of a line written during a live session (D-041); None until translated.
     pub translation: Option<String>,
+    /// Who spoke a live line, when known.
+    pub speaker: Option<Speaker>,
+    /// How clearly a live line was heard; None = clear, or a batch line.
+    pub clarity: Option<Clarity>,
+    /// A live line's language when the session translated both ways (and in a quick translation,
+    /// which has no meeting); None = the meeting's.
+    pub lang: Option<Lang>,
 }
 
 /// Just enough of a meeting type for pickers (full editing arrives with tenant setup, P1.4).
@@ -496,7 +542,7 @@ pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
 }
 
 pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<TranscriptSegment>> {
-    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text, translation FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
+    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text, translation, speaker, clarity, lang FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
         .bind(meeting_id)
         .fetch_all(pool)
         .await?)
@@ -562,25 +608,41 @@ pub async fn save_transcript(
     Ok(())
 }
 
-/// Appends one line of a live session (D-041) as it arrives; the FTS trigger indexes it like any
-/// other. `raw` is what Whisper wrote when the vocabulary corrected the line.
+/// Appends one line of a live session (D-041) as it arrives, with who spoke it, how clearly and
+/// in which language; the FTS trigger indexes it like any other.
 pub async fn append_segment(
     pool: &SqlitePool,
     meeting_id: &str,
-    seq: u32,
-    segment: &Segment,
-    raw: Option<&str>,
+    line: &TranscriptSegment,
 ) -> Result<()> {
-    sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text, translation, speaker, clarity, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(new_id())
         .bind(meeting_id)
-        .bind(seq)
-        .bind(segment.start_ms)
-        .bind(segment.end_ms)
-        .bind(&segment.text)
-        .bind(raw)
+        .bind(line.seq)
+        .bind(line.start_ms)
+        .bind(line.end_ms)
+        .bind(&line.text)
+        .bind(&line.raw_text)
+        .bind(&line.translation)
+        .bind(line.speaker)
+        .bind(line.clarity)
+        .bind(line.lang)
         .execute(pool)
         .await?;
+    Ok(())
+}
+
+/// A live session's first call line: the microphone lines written before it were the owner's.
+/// Runs during the session, before any summary, so the `updated_at` it bumps changes nothing.
+pub async fn label_owner_lines(pool: &SqlitePool, meeting_id: &str) -> Result<()> {
+    sqlx::query(
+        "UPDATE transcript_segment SET speaker = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE meeting_id = ? AND speaker IS NULL",
+    )
+    .bind(Speaker::You)
+    .bind(meeting_id)
+    .execute(pool)
+    .await?;
     Ok(())
 }
 
@@ -606,8 +668,8 @@ pub async fn set_translation(
 #[cfg(test)]
 mod tests {
     use super::{
-        MeetingStatus, NewMeeting, append_segment, create, fts_query, save_transcript, search,
-        set_translation, transcript,
+        Clarity, Lang, MeetingStatus, NewMeeting, Speaker, TranscriptSegment, append_segment,
+        create, fts_query, label_owner_lines, save_transcript, search, set_translation, transcript,
     };
     use crate::kernel::ai::whisper::{Language, Segment};
     use crate::kernel::hub::WorkspaceHub;
@@ -624,34 +686,44 @@ mod tests {
                 meeting_type_id: None,
                 title: "Live",
                 held_at_unix: 0,
-                language: Language::Vi,
+                language: Language::Auto,
                 audio_path: "/tmp/x.wav",
                 status: MeetingStatus::Recording,
             };
             create(&pool, new).await.unwrap();
-            let line = |start_ms, text: &str| Segment {
-                start_ms,
-                end_ms: start_ms + 2_000,
+            let line = |seq: u32, text: &str| TranscriptSegment {
+                seq,
+                start_ms: seq * 3_000,
+                end_ms: seq * 3_000 + 2_000,
                 text: text.into(),
+                lang: Some(Lang::Vi),
+                ..TranscriptSegment::default()
             };
-            append_segment(&pool, "m1", 0, &line(0, "Chào mọi người"), None)
+            append_segment(&pool, "m1", &line(0, "Chào mọi người"))
                 .await
                 .unwrap();
-            append_segment(
-                &pool,
-                "m1",
-                1,
-                &line(3_000, "Đồng ý với WiredScore"),
-                Some("Đồng ý với Wired Score"),
-            )
-            .await
-            .unwrap();
+            let corrected = TranscriptSegment {
+                raw_text: Some("Đồng ý với Wired Score".into()),
+                clarity: Some(Clarity::Uncertain),
+                ..line(1, "Đồng ý với WiredScore")
+            };
+            append_segment(&pool, "m1", &corrected).await.unwrap();
             set_translation(&pool, "m1", 1, "Agreed with WiredScore")
                 .await
                 .unwrap();
+            // The first call line: the microphone's lines before it were the owner's.
+            label_owner_lines(&pool, "m1").await.unwrap();
+            let call = TranscriptSegment {
+                speaker: Some(Speaker::Them),
+                clarity: Some(Clarity::Unclear),
+                lang: Some(Lang::En),
+                ..line(2, "Sounds good")
+            };
+            append_segment(&pool, "m1", &call).await.unwrap();
+            label_owner_lines(&pool, "m1").await.unwrap(); // the call's line keeps its label
 
             let lines = transcript(&pool, "m1").await.unwrap();
-            assert_eq!(lines.len(), 2);
+            assert_eq!(lines.len(), 3);
             assert_eq!((lines[0].seq, lines[0].translation.as_deref()), (0, None));
             assert_eq!(lines[1].start_ms, 3_000);
             assert_eq!(lines[1].raw_text.as_deref(), Some("Đồng ý với Wired Score"));
@@ -659,16 +731,42 @@ mod tests {
                 lines[1].translation.as_deref(),
                 Some("Agreed with WiredScore")
             );
+            let labels: Vec<_> = lines
+                .iter()
+                .map(|l| (l.speaker, l.clarity, l.lang))
+                .collect();
+            assert_eq!(
+                labels,
+                [
+                    (Some(Speaker::You), None, Some(Lang::Vi)),
+                    (Some(Speaker::You), Some(Clarity::Uncertain), Some(Lang::Vi)),
+                    (Some(Speaker::Them), Some(Clarity::Unclear), Some(Lang::En)),
+                ]
+            );
             assert_eq!(
                 search(&pool, "dong y").await.unwrap().len(),
                 1,
                 "live lines are searchable as they arrive"
             );
             assert!(
-                append_segment(&pool, "m1", 1, &line(5_000, "again"), None)
+                append_segment(&pool, "m1", &line(1, "again"))
                     .await
                     .is_err(),
                 "a line number is used once"
+            );
+            // A batch pass writes no labels (Transcribe again removes them).
+            let batch = Segment {
+                start_ms: 0,
+                end_ms: 1_000,
+                text: "Chào".into(),
+            };
+            save_transcript(&pool, "m1", &[batch], &[], 1_000)
+                .await
+                .unwrap();
+            let lines = transcript(&pool, "m1").await.unwrap();
+            assert_eq!(
+                (lines[0].speaker, lines[0].clarity, lines[0].lang),
+                (None, None, None)
             );
             hub.close_all().await;
         });

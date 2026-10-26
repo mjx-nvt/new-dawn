@@ -83,7 +83,7 @@ impl Agent {
             }
             Agent::Translate => "Translates your slogan into Vietnamese for your documents.",
             Agent::Live => {
-                "Translates each finished line of a live session from Vietnamese to English."
+                "Translates each finished line of a live session between Vietnamese and English."
             }
         }
     }

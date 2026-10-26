@@ -2,9 +2,10 @@
 //! resampled to 16 kHz; the mic gets a soft limiter (Core Audio float input is not clipped, and
 //! laptop speakers feeding the mic measured 4.7× full scale), an 80 Hz high-pass and loudness
 //! normalisation towards −23 LUFS; both are aligned in 600 ms windows, summed with proportional scaling above ±1, and
-//! written to the WAV unless paused. Per-source levels and the "system audio is silent" flag are
-//! published through `Shared` for the 10 Hz meter. In a live session each written window is also
-//! offered to the live worker (D-041), never waiting for it.
+//! written to the WAV unless paused (a quick translation has no WAV). Per-source levels and the
+//! "system audio is silent" flag are published through `Shared` for the 10 Hz meter. In a live
+//! session each window is also offered to the live worker (D-041) — the mix with the microphone's
+//! and the call's parts — never waiting for it.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -55,16 +56,18 @@ pub struct Source {
     pub rate: u32,
 }
 
-/// Runs until the mic channel closes (the session dropped the streams). Returns samples written.
-/// `live`: a live session's worker, handed a copy of every window written.
+/// Runs until the mic channel closes (the session dropped the streams). Returns the samples
+/// recorded. `wav`: None for a quick translation (nothing on disk). `live`: a live session's
+/// worker, handed every window recorded.
 pub fn run(
     mic: Source,
     system: Option<Source>,
     shared: Arc<Shared>,
-    mut wav: WavWriter,
+    mut wav: Option<WavWriter>,
     mut live: Option<SyncSender<Window>>,
 ) -> Result<u64> {
     let mut mic_chain = MicChain::new(mic.rate)?;
+    let tap = system.is_some();
     let mut sys_resampler = match &system {
         Some(s) => Some(ToRate::new(s.rate)?),
         None => None,
@@ -107,33 +110,53 @@ pub fn run(
             }
         }
         while mic_q.len() >= WINDOW {
-            let window = mix_window(&mut mic_q, &mut sys_q, WINDOW);
+            let parts = mix_window(&mut mic_q, &mut sys_q, WINDOW);
             if !shared.paused.load(Ordering::Relaxed) {
-                wav.write(&window)?;
-                offer_live(&mut live, &shared, written, &window);
-                written += window.len() as u64;
+                written += record(&mut wav, &mut live, &shared, written, parts, tap)?;
             }
         }
     }
 
-    // Stopping: write what is left, then finalise the header.
+    // Stopping: record what is left, then finalise the header.
     if !mic_q.is_empty() && !shared.paused.load(Ordering::Relaxed) {
         let len = mic_q.len();
-        let window = mix_window(&mut mic_q, &mut sys_q, len);
-        wav.write(&window)?;
-        offer_live(&mut live, &shared, written, &window);
+        let parts = mix_window(&mut mic_q, &mut sys_q, len);
+        written += record(&mut wav, &mut live, &shared, written, parts, tap)?;
     }
-    wav.finish()
+    match wav {
+        Some(wav) => wav.finish(),
+        None => Ok(written),
+    }
 }
 
-/// Hands the live worker a copy of a written window without ever waiting: a full channel drops
-/// it (counted), a closed one (the worker has ended) stops the copies.
-fn offer_live(live: &mut Option<SyncSender<Window>>, shared: &Shared, at: u64, window: &[f32]) {
-    let Some(tx) = live else { return };
+/// One window recorded at sample `at`: the mix to the WAV (if any), then the window to the live
+/// worker. Returns its length.
+fn record(
+    wav: &mut Option<WavWriter>,
+    live: &mut Option<SyncSender<Window>>,
+    shared: &Shared,
+    at: u64,
+    (samples, you, them): (Vec<f32>, Vec<f32>, Vec<f32>),
+    tap: bool,
+) -> Result<u64> {
+    if let Some(wav) = wav {
+        wav.write(&samples)?;
+    }
+    let len = samples.len() as u64;
     let window = Window {
         at,
-        samples: window.to_vec(),
+        samples,
+        you,
+        them: tap.then_some(them),
     };
+    offer_live(live, shared, window);
+    Ok(len)
+}
+
+/// Hands the live worker a window without ever waiting: a full channel drops it (counted), a
+/// closed one (the worker has ended) stops the offers.
+fn offer_live(live: &mut Option<SyncSender<Window>>, shared: &Shared, window: Window) {
+    let Some(tx) = live else { return };
     match tx.try_send(window) {
         Ok(()) => {}
         Err(TrySendError::Full(_)) => {
@@ -143,25 +166,30 @@ fn offer_live(live: &mut Option<SyncSender<Window>>, shared: &Shared, at: u64, w
     }
 }
 
-/// Takes `len` mic samples and up to `len` system samples (silence-padded), sums them and scales
-/// the window down proportionally if any sample would exceed ±1. Drops system backlog beyond
+/// Takes `len` mic samples and up to `len` system samples (silence-padded to `len`, so both parts
+/// keep the recording's clock), and returns (the mix, the mic's part, the system's part). The mix
+/// is scaled down proportionally if any sample would exceed ±1. Drops system backlog beyond
 /// `MAX_SYSTEM_BACKLOG` so clock drift can't grow without bound.
-fn mix_window(mic_q: &mut VecDeque<f32>, sys_q: &mut VecDeque<f32>, len: usize) -> Vec<f32> {
+fn mix_window(
+    mic_q: &mut VecDeque<f32>,
+    sys_q: &mut VecDeque<f32>,
+    len: usize,
+) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
     if sys_q.len() > MAX_SYSTEM_BACKLOG {
         sys_q.drain(..sys_q.len() - MAX_SYSTEM_BACKLOG);
     }
     let take_sys = sys_q.len().min(len);
-    let mut out: Vec<f32> = mic_q.drain(..len).collect();
-    for (o, s) in out.iter_mut().zip(sys_q.drain(..take_sys)) {
-        *o += s;
-    }
+    let you: Vec<f32> = mic_q.drain(..len).collect();
+    let mut them: Vec<f32> = sys_q.drain(..take_sys).collect();
+    them.resize(len, 0.0);
+    let mut out: Vec<f32> = you.iter().zip(&them).map(|(a, b)| a + b).collect();
     let peak = out.iter().fold(0.0f32, |m, s| m.max(s.abs()));
     if peak > 1.0 {
         for o in &mut out {
             *o /= peak;
         }
     }
-    out
+    (out, you, them)
 }
 
 fn rms(samples: &[f32]) -> f32 {
@@ -313,27 +341,58 @@ mod tests {
     fn mixes_with_proportional_scaling_and_padding() {
         let mut mic: VecDeque<f32> = vec![0.8; 4].into();
         let mut sys: VecDeque<f32> = vec![0.8, 0.2].into();
-        let out = mix_window(&mut mic, &mut sys, 4);
+        let (out, you, them) = mix_window(&mut mic, &mut sys, 4);
         // 1.6 peak scaled to 1.0; 1.0/1.6 for the mixed pair; missing system samples are silence
         assert!((out[0] - 1.0).abs() < 1e-6);
         assert!((out[1] - 1.0 / 1.6).abs() < 1e-6);
         assert!((out[2] - 0.5).abs() < 1e-6);
         assert!(mic.is_empty() && sys.is_empty());
+        // The parts as they were, the system's padded to the window.
+        assert_eq!(you, [0.8; 4]);
+        assert_eq!(them, [0.8, 0.2, 0.0, 0.0]);
     }
 
     #[test]
-    fn live_copies_never_wait() {
+    fn live_windows_never_wait() {
         let shared = Shared::default();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let mut live = Some(tx);
-        offer_live(&mut live, &shared, 0, &[0.1; 4]);
-        offer_live(&mut live, &shared, 4, &[0.2; 4]); // full: dropped and counted
+        let window = |at, v| Window {
+            at,
+            samples: vec![v; 4],
+            you: vec![v; 4],
+            them: None,
+        };
+        offer_live(&mut live, &shared, window(0, 0.1));
+        offer_live(&mut live, &shared, window(4, 0.2)); // full: dropped and counted
         assert_eq!(shared.live_dropped.load(Ordering::Relaxed), 1);
         let first = rx.recv().unwrap();
         assert_eq!((first.at, first.samples.len()), (0, 4));
-        drop(rx); // the worker ended: no more copies
-        offer_live(&mut live, &shared, 8, &[0.3; 4]);
+        drop(rx); // the worker ended: no more windows
+        offer_live(&mut live, &shared, window(8, 0.3));
         assert!(live.is_none());
+    }
+
+    #[test]
+    fn a_window_carries_the_call_only_with_a_tap() {
+        let shared = Shared::default();
+        let (tx, rx) = std::sync::mpsc::sync_channel(2);
+        let mut live = Some(tx);
+        let parts = || (vec![0.3; 4], vec![0.1; 4], vec![0.2; 4]);
+        // A quick translation: no WAV, the clock still counts.
+        let mut wav = None;
+        assert_eq!(
+            record(&mut wav, &mut live, &shared, 8, parts(), true).unwrap(),
+            4
+        );
+        assert_eq!(
+            record(&mut wav, &mut live, &shared, 12, parts(), false).unwrap(),
+            4
+        );
+        let with_tap = rx.recv().unwrap();
+        assert_eq!((with_tap.at, with_tap.you.len()), (8, 4));
+        assert_eq!(with_tap.them.as_deref(), Some(&[0.2; 4][..]));
+        assert!(rx.recv().unwrap().them.is_none(), "no tap: no call part");
     }
 
     #[test]

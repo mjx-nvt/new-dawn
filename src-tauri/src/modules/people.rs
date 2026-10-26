@@ -73,6 +73,15 @@ pub fn fold(text: &str) -> String {
         .join(" ")
 }
 
+/// The words of `text`, folded.
+pub fn words(text: &str) -> Vec<String> {
+    fold(text)
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Person>> {
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT id, name, title, organisation, aliases_json, updated_at FROM person \

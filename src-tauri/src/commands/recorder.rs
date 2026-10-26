@@ -1,9 +1,10 @@
 use tauri::{AppHandle, State};
 
 use crate::error::AppError;
+use crate::kernel::ai::live::{LiveDirection, LiveLines};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::permissions::{self, PermissionState};
-use crate::modules::meetings::Meeting;
+use crate::modules::meetings::{Meeting, TranscriptSegment};
 use crate::recorder::session::{self, Recorder, RecorderStatus, StartRequest};
 
 #[tauri::command]
@@ -12,9 +13,10 @@ pub fn recorder_status(recorder: State<'_, Recorder>) -> Result<RecorderStatus, 
     Ok(recorder.status())
 }
 
-/// `live`: transcribe (Vietnamese) and translate (English) as people speak (D-041); the meeting is
-/// then Vietnamese. Live refuses with `ai_busy` while another AI job runs, `model_missing` without
-/// a Whisper model.
+/// `live`: transcribe and translate as people speak (D-041), the way `direction` says; the
+/// meeting's language follows it (both ways: auto). `save: false` (live only): a quick
+/// translation — no meeting (None), recording or summary; its lines are in `live_lines`. Live
+/// refuses with `ai_busy` while another AI job runs, `model_missing` without a Whisper model.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)] // the bridge passes each field
@@ -27,7 +29,9 @@ pub async fn start_recording(
     presentation: bool,
     presenter: Option<String>,
     live: bool,
-) -> Result<Meeting, AppError> {
+    save: bool,
+    direction: LiveDirection,
+) -> Result<Option<Meeting>, AppError> {
     Ok(session::start(
         &app,
         StartRequest {
@@ -38,9 +42,19 @@ pub async fn start_recording(
             presenter,
             presentation,
             live,
+            save,
+            direction,
         },
     )
     .await?)
+}
+
+/// The current or last quick translation's lines, in memory only until the next live session
+/// starts or the app quits.
+#[tauri::command]
+#[specta::specta]
+pub fn live_lines(lines: State<'_, LiveLines>) -> Result<Vec<TranscriptSegment>, AppError> {
+    Ok(lines.get())
 }
 
 #[tauri::command]
@@ -50,10 +64,10 @@ pub fn set_recording_paused(app: AppHandle, paused: bool) -> Result<RecorderStat
 }
 
 /// Finalises the WAV, marks the meeting `recorded` and queues transcription — or, after a live
-/// session, waits for its last lines and marks it `transcribed`.
+/// session, waits for its last lines and marks it `transcribed`. None after a quick translation.
 #[tauri::command]
 #[specta::specta]
-pub async fn stop_recording(app: AppHandle) -> Result<Meeting, AppError> {
+pub async fn stop_recording(app: AppHandle) -> Result<Option<Meeting>, AppError> {
     Ok(session::stop(&app).await?)
 }
 

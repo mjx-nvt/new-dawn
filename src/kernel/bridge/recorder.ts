@@ -4,6 +4,7 @@ import {
   commands,
   events,
   type Language,
+  type LiveDirection,
   type LiveStatus_Serialize,
   type PermissionState,
   type RecorderLevel,
@@ -53,15 +54,19 @@ export interface StartRecordingInput {
   meetingTypeId: string | null;
   presentation: boolean;
   presenter: string | null;
-  /** Transcribe (Vietnamese) and translate (English) as people speak (D-041). */
+  /** Transcribe and translate as people speak (D-041). */
   live: boolean;
+  /** Live only: false = quick translation, nothing saved (default true). */
+  save?: boolean;
+  /** Live only: which way it translates (default Tiếng Việt → English). */
+  direction?: LiveDirection;
 }
 
 export function useStartRecording() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: StartRecordingInput) =>
-      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter, input.live)),
+      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter, input.live, input.save ?? true, input.direction ?? "vi_en")),
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: MIC_KEY }),
