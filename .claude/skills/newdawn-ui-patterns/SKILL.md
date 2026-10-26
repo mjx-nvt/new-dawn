@@ -115,6 +115,9 @@ Always a native `<select className="input">` — `components.css` makes it a 28 
 ## Record
 One control: `.btn.btnRecord` (red `--status-negative` fill, white; a `.recordDot` before the label) — the toolbar button when idle and the dialog's Start recording. No sidebar entry. Red is for record and destructive only.
 
+## Tasks (D-042)
+Sidebar **Tasks** right below Live (checklist icon) with the count due today or overdue. The page, one scroll: the "Add a task" field (Enter adds, focus stays), then **Today** (overdue dates in `--status-negative` text), **Upcoming**, **No date**, **Completed (n)** collapsed. A row: circle checkbox, the title (click to edit in place), the due chip on the right with a menu (Today, Tomorrow, Next week, Pick a date…, Remove date), Delete via `DangerButton`; a second line for the meeting link, an unparsed phrase ("said “end of month”") and the AI marker on tasks the agent added. Others' items read "Minh: …". In a summary, each action item ends with a quiet `btnGhost btnCompact` "Add to Tasks" → "In Tasks".
+
 ## Live (D-041)
 Sidebar **Live** right below Meetings (speech-bubble icon, never red). The page: idle = title, one line, red "Start live translation" (it records) over the two-column structure with ghost rows; live = the meeting title, a fixed "Tiếng Việt → English" chip, one status word, A−/A+ (3 steps, per-Mac), and `TranscriptView` in two languages (`64px 1fr 1fr`; English cell `ghostText` "Translating…" until it lands; AI marker on the English head). Follow the newest line while the user is at the bottom; scrolled up → a "↓ Latest" capsule. Pause/Stop stay on the pill. Never rewrite a shown line.
 

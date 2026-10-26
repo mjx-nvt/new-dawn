@@ -547,6 +547,7 @@ mod tests {
                 item: "Brief Tien Nguyen's team".into(),
                 due: String::new(),
                 done: false,
+                task_id: None,
             }],
             ..SummaryDoc::default()
         };
@@ -646,6 +647,7 @@ mod tests {
                     item: "x".into(),
                     due: String::new(),
                     done: false,
+                    task_id: None,
                 }],
                 ..SummaryDoc::default()
             };

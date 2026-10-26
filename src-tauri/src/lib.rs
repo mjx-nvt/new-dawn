@@ -50,6 +50,7 @@ mod modules {
     pub mod brand;
     pub mod meetings;
     pub mod people;
+    pub mod tasks;
     pub mod vocabulary;
 }
 
@@ -75,6 +76,7 @@ mod commands {
     pub mod recorder;
     pub mod storage;
     pub mod summary;
+    pub mod tasks;
     pub mod templates;
     pub mod vocabulary;
     pub mod window;
@@ -143,6 +145,12 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::storage::compress_recordings,
             commands::storage::trash_old_recordings,
             commands::summary::update_attendees,
+            commands::tasks::list_tasks,
+            commands::tasks::add_task,
+            commands::tasks::update_task,
+            commands::tasks::delete_task,
+            commands::tasks::add_action_item_to_tasks,
+            commands::tasks::open_task_count,
             commands::agents::list_agents,
             commands::agents::set_agent_guide,
             commands::agents::reset_agent_guide,

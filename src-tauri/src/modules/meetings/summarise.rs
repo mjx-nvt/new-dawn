@@ -55,6 +55,9 @@ pub struct ActionItem {
     /// Ticked off in the to-do list (D-038).
     #[serde(default)]
     pub done: bool,
+    /// Its task in Tasks (0.7.3); kept while the item stays the same (`review::carry_links`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_id: Option<String>,
 }
 
 /// Someone the meeting involves (D-039). `attending` marks the attendees — the only people the
@@ -489,7 +492,7 @@ fn apply_people(doc: &mut SummaryDoc, people: &[Person], language: Language) {
 }
 
 /// Words that are titles, not names ("Mr. Tom" is found by "tom").
-const HONORIFICS: &[&str] = &[
+pub(super) const HONORIFICS: &[&str] = &[
     "mr", "mrs", "ms", "miss", "dr", "madame", "madam", "sir", "anh", "chi", "em", "ong", "ba",
     "co", "chu",
 ];
@@ -535,7 +538,7 @@ fn mentioned(name: &str, people: &[Person], words: &std::collections::HashSet<&s
 
 /// Common Vietnamese family names and the middle names "Văn" / "Thị" (folded): shared by too
 /// many people to tell anyone apart on their own.
-const FAMILY_NAMES: &[&str] = &[
+pub(super) const FAMILY_NAMES: &[&str] = &[
     "nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do",
     "ho", "ngo", "duong", "ly", "van", "thi",
 ];
@@ -591,8 +594,10 @@ fn keep_mentioned(
 
 /// Who attends (D-039): everyone the meeting involves when `everyone_attends`, else only the
 /// presenter. Then the owner — they recorded it — attends, first, with their title in this
-/// workspace: run after `apply_people`, so the people memory can't overwrite it.
-fn settle_attendees(
+/// workspace: run after `apply_people`, so the people memory can't overwrite it. Their own row
+/// is the one with their name — a namesake ("Lê Minh") may be listed before "Đỗ Minh" — else
+/// another spelling of them ("Tien").
+pub(super) fn settle_attendees(
     doc: &mut SummaryDoc,
     everyone_attends: bool,
     presenter: Option<&str>,
@@ -604,11 +609,16 @@ fn settle_attendees(
     let Some(owner) = owner else {
         return;
     };
-    let me = match doc
+    let mine = doc
         .attendees
         .iter()
-        .position(|a| same_person(&a.name, &owner.name))
-    {
+        .position(|a| people::fold(&a.name) == people::fold(&owner.name))
+        .or_else(|| {
+            doc.attendees
+                .iter()
+                .position(|a| same_person(&a.name, &owner.name))
+        });
+    let me = match mine {
         Some(i) => {
             let mut a = doc.attendees.remove(i);
             a.name.clone_from(&owner.name);
@@ -695,7 +705,12 @@ fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryD
         attendees: raw.attendees,
         discussion: raw.discussion,
         decisions: raw.decisions,
-        action_items: raw.action_items,
+        // Links to Tasks come from the previous summary, never from the model.
+        action_items: raw
+            .action_items
+            .into_iter()
+            .map(|a| ActionItem { task_id: None, ..a })
+            .collect(),
         open_issues: raw.open_issues,
         next_focus: raw.next_focus.trim().to_owned(),
         highlights: raw
@@ -901,6 +916,8 @@ pub enum SummaryStage {
     Naming,
     /// The email agent is writing the cover note.
     Email,
+    /// The tasks agent is finding the owner's action items (0.7.3).
+    Tasks,
 }
 
 /// Cancel flags of running summary jobs, by meeting id.
@@ -1016,6 +1033,10 @@ async fn run(
     cancel: Arc<AtomicBool>,
 ) -> Result<usize> {
     let previous = meeting.status;
+    // Only a meeting's first summary feeds Tasks: older summaries aren't scanned, and a re-run
+    // leaves its new items to "Add to Tasks".
+    let feeds_tasks =
+        meeting.tasks_at.is_none() && super::summary(&pool, &meeting.id).await?.is_none();
     // What each stage usually takes, for the time-left estimate in the UI.
     let model = agents::model_for(&pool, Agent::Summary)
         .await
@@ -1024,6 +1045,12 @@ async fn run(
         agents::typical(&pool, "summary", &model).await,
         agents::typical(&pool, "naming", &model).await,
         agents::typical(&pool, "email", &model).await,
+        // Only a meeting that feeds Tasks asks the tasks agent.
+        if feeds_tasks {
+            agents::typical(&pool, "tasks", &model).await
+        } else {
+            (0, 0)
+        },
     ];
     let report = {
         let (app, slug, meeting_id) = (app.clone(), slug.to_owned(), meeting.id.clone());
@@ -1031,13 +1058,15 @@ async fn run(
             let (expected_ms, expected_tokens) = match stage {
                 SummaryStage::Naming => typical[1],
                 SummaryStage::Email => typical[2],
+                SummaryStage::Tasks => typical[3],
                 _ => typical[0],
             };
-            // What still follows this stage (the names check, the cover note).
+            // What still follows this stage (the names check, the cover note, the tasks).
             let later_ms = match stage {
-                SummaryStage::Email => 0,
-                SummaryStage::Naming => typical[2].0,
-                _ => typical[1].0 + typical[2].0,
+                SummaryStage::Tasks => 0,
+                SummaryStage::Email => typical[3].0,
+                SummaryStage::Naming => typical[2].0 + typical[3].0,
+                _ => typical[1].0 + typical[2].0 + typical[3].0,
             };
             let event = SummaryProgress {
                 workspace_slug: slug.clone(),
@@ -1132,6 +1161,7 @@ async fn run(
                 review::keep_edits(&mut doc, previous);
             }
             review::carry_ticks(&mut doc, &previous.action_items);
+            review::carry_links(&mut doc.action_items, &previous.action_items);
             // Who the owner ticked as attending stays so across re-runs; only people the
             // transcript or notes still mention come back.
             let words = word_set(&corpus);
@@ -1180,6 +1210,14 @@ async fn run(
                 }
             }
             Err(err) => tracing::warn!("email agent skipped (the rendered note stands): {err:#}"),
+        }
+        // The owner's action items go to Tasks (once per meeting); the links are saved.
+        if owner.is_some() && feeds_tasks {
+            report(SummaryStage::Tasks, 0, 0, 0);
+        }
+        session.for_agent("tasks");
+        if let Err(err) = super::tasks::find(&session, folder, &pool, &meeting, &mut doc, owner.as_ref().filter(|_| feeds_tasks), &known, &segments, &cancel).await {
+            tracing::warn!("tasks skipped: {err:#}");
         }
         drop(session);
         super::set_status(&pool, &meeting.id, MeetingStatus::Summarised).await?;
@@ -1291,18 +1329,21 @@ mod tests {
                     item: "review".into(),
                     due: String::new(),
                     done: false,
+                    task_id: None,
                 },
                 ActionItem {
                     owner: "Duke".into(),
                     item: "send".into(),
                     due: String::new(),
                     done: false,
+                    task_id: None,
                 },
                 ActionItem {
                     owner: "Nguyễn Văn Tiến".into(),
                     item: "send the deck".into(),
                     due: String::new(),
                     done: false,
+                    task_id: None,
                 },
             ],
             ..SummaryDoc::default()
@@ -1513,6 +1554,9 @@ pub struct SummaryView {
     pub updated_at: String,
     /// Names the naming agent wants confirmed (None once done).
     pub naming: Option<super::naming::NamingReview>,
+    /// This meeting's tasks still in Tasks (not deleted): an action item whose `task_id` is one
+    /// of them is "In Tasks"; a deleted one's item offers "Add to Tasks" again.
+    pub in_tasks: Vec<String>,
 }
 
 pub async fn view(pool: &SqlitePool, meeting_id: &str) -> Result<Option<SummaryView>> {
@@ -1534,6 +1578,11 @@ pub async fn view(pool: &SqlitePool, meeting_id: &str) -> Result<Option<SummaryV
     .bind(written)
     .fetch_one(pool)
     .await?;
+    let in_tasks: Vec<(String,)> =
+        sqlx::query_as("SELECT id FROM task WHERE meeting_id = ? AND deleted_at IS NULL")
+            .bind(meeting_id)
+            .fetch_all(pool)
+            .await?;
     Ok(Some(SummaryView {
         transcript_changed,
         sections_html: doc
@@ -1552,6 +1601,7 @@ pub async fn view(pool: &SqlitePool, meeting_id: &str) -> Result<Option<SummaryV
             .as_deref()
             .and_then(|j| serde_json::from_str(j).ok())
             .filter(|n: &super::naming::NamingReview| !n.suspects.is_empty()),
+        in_tasks: in_tasks.into_iter().map(|(id,)| id).collect(),
     }))
 }
 
@@ -1582,6 +1632,10 @@ pub async fn update_section(
         edited,
     )
     .await?;
+    // A tick here ticks the item's task in Tasks too.
+    if current.doc.sections[index as usize].kind == SectionKind::ActionItems {
+        crate::modules::tasks::follow(pool, &meeting.id, &current.doc.action_items).await?;
+    }
     view(pool, meeting_id)
         .await?
         .context("summary vanished while saving")

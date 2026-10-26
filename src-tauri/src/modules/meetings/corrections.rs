@@ -281,6 +281,7 @@ pub async fn apply(
             super::review::carry_ticks(&mut v.doc, &ticks);
             // After the rewrites, so a rewritten section can't bring an old spelling back.
             summary_changes = people::rename_in_doc(&mut v.doc, &pairs) as u32;
+            crate::modules::tasks::rename(&pool, meeting_id, &pairs).await?;
             let known = people::list(&pool).await?;
             people::correct(&mut v.doc, &known);
             // The summary is current with the transcript it just corrected (no "transcript changed" banner).

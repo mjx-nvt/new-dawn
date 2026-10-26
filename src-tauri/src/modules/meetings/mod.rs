@@ -8,6 +8,7 @@ pub mod minutes;
 pub mod naming;
 pub mod review;
 pub mod summarise;
+pub mod tasks;
 pub mod template;
 pub mod transcribe;
 pub mod waveform;
@@ -60,6 +61,9 @@ pub struct Meeting {
     pub format: MeetingFormat,
     /// The main presenter's name, when the audio may never say it.
     pub presenter: Option<String>,
+    /// When the meeting first fed Tasks (an automatic task or "Add to Tasks"); after that a
+    /// re-run adds no task by itself (0.7.3).
+    pub tasks_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]

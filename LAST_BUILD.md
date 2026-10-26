@@ -1,4 +1,22 @@
-# Last Build — Live: Vietnamese captions with English as people speak · release 0.7.2
+# Last Build — Tasks: your to-dos from meetings · release 0.7.3
+_2026-10-26_
+
+## What changed
+- **Tasks** tab (right below Live): one list per workspace — Today (incl. overdue), Upcoming, No date, Completed. Type to add; set a due date from the chip; tick, edit, delete. The sidebar shows how many are due today or overdue.
+- **From your meetings**: after a meeting's first summary, the action items that are yours become tasks — the ones assigned to you by name or title at once, and the unclear ones (Unassigned, teams, items that name you) decided by the new **Tasks agent** using your notes and the transcript. Each task links back to its meeting.
+- **Add to Tasks** on every action item in a summary ("In Tasks" once added). Ticks stay in sync both ways.
+- **Due dates** from what was said ("Friday", "thứ Sáu", "next week", "cuối tháng", "15/11"), counted from the meeting's date.
+- New migration 0009 (additive: the task list), reviewed SAFE.
+- Reviews: backend and UI each had a correctness and a rules/UI review plus a fix pass; a final cross-review (rules, a meeting end to end, edge cases) found 2 must-fixes — a tick in Tasks rewrote an edited Action items list; a namesake ("Lê Minh") could pass for you — and 7 improvements (renames reach Tasks, "lần thứ 3" isn't a weekday, older meetings aren't scanned on re-run, titles keep "<" and ">", …), all applied. 105 Rust tests. The Tasks agent, live on qwen3.5:9b: 12 of 12 runs picked exactly your items (the team item given to Minh's team stayed out).
+- **Seen in the running app** on your data: the Tasks page (empty state with the "add your name" hint), and through the app's commands — Add to Tasks from a meeting (Ryan's item shows as "Ryan: …"), typed tasks due today / in 3 days / 2 days ago (Today lists the overdue one first), a tick, delete and restore (no duplicates). The test's tasks were deleted afterwards. The other screens couldn't be captured this time (macOS kept the test window in the Stage Manager strip while you were using the Mac); the UI was also driven in a browser with a stand-in for the app during the build.
+
+## Manual steps
+1. Set **Your name** in Settings → General — without it nothing is added automatically (the Tasks page says so).
+2. Older summaries aren't scanned; use **Add to Tasks** on their items.
+
+---
+
+# Live: Vietnamese captions with English as people speak · release 0.7.2
 _2026-10-26_
 
 ## What changed

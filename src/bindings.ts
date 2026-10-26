@@ -102,6 +102,21 @@ export const commands = {
 	trashOldRecordings: (slug: string, days: number) => typedError<number, AppError>(__TAURI_INVOKE("trash_old_recordings", { slug, days })),
 	/**  Saves corrected attendees; `remember` teaches the people memory (D-028). */
 	updateAttendees: (slug: string, meetingId: string, attendees: AttendeeEdit_Deserialize[], remember: boolean) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("update_attendees", { slug, meetingId, attendees, remember })),
+	/**  The workspace's tasks: today (overdue included), upcoming, no date, completed. */
+	listTasks: (slug: string) => typedError<TaskList_Serialize, AppError>(__TAURI_INVOKE("list_tasks", { slug })),
+	/**  A task typed in Tasks (no date). */
+	addTask: (slug: string, title: string) => typedError<TaskView_Serialize, AppError>(__TAURI_INVOKE("add_task", { slug, title })),
+	/**
+	 *  Renames, dates (`due_on: null` removes the date) or ticks a task; a tick follows to the
+	 *  meeting's action item.
+	 */
+	updateTask: (slug: string, id: string, patch: TaskPatch_Deserialize) => typedError<TaskView_Serialize, AppError>(__TAURI_INVOKE("update_task", { slug, id, patch })),
+	/**  Deletes a task; "Add to Tasks" on its action item brings it back. */
+	deleteTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_task", { slug, id })),
+	/**  "Add to Tasks" on action item `index` of a meeting's summary. */
+	addActionItemToTasks: (slug: string, meetingId: string, index: number) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("add_action_item_to_tasks", { slug, meetingId, index })),
+	/**  Open tasks due today or earlier: the sidebar badge. */
+	openTaskCount: (slug: string) => typedError<number, AppError>(__TAURI_INVOKE("open_task_count", { slug })),
 	listAgents: (slug: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("list_agents", { slug })),
 	/**  Saves the workspace's own guide for an agent; empty text restores the default. */
 	setAgentGuide: (slug: string, agent: Agent, text: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_guide", { slug, agent, text })),
@@ -214,6 +229,8 @@ export type ActionItem_Deserialize = {
 	due: string,
 	/**  Ticked off in the to-do list (D-038). */
 	done?: boolean,
+	/**  Its task in Tasks (0.7.3); kept while the item stays the same (`review::carry_links`). */
+	task_id?: string | null,
 };
 
 export type ActionItem_Serialize = {
@@ -222,9 +239,11 @@ export type ActionItem_Serialize = {
 	due: string,
 	/**  Ticked off in the to-do list (D-038). */
 	done: boolean,
+	/**  Its task in Tasks (0.7.3); kept while the item stays the same (`review::carry_links`). */
+	task_id?: string,
 };
 
-export type Agent = "summary" | "naming" | "email" | "minutes" | "corrections" | "translate" | "live";
+export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -712,6 +731,11 @@ export type Meeting_Deserialize = {
 	format: MeetingFormat,
 	/**  The main presenter's name, when the audio may never say it. */
 	presenter?: string | null,
+	/**
+	 *  When the meeting first fed Tasks (an automatic task or "Add to Tasks"); after that a
+	 *  re-run adds no task by itself (0.7.3).
+	 */
+	tasks_at?: string | null,
 };
 
 export type Meeting_Serialize = {
@@ -730,6 +754,11 @@ export type Meeting_Serialize = {
 	format: MeetingFormat,
 	/**  The main presenter's name, when the audio may never say it. */
 	presenter: string | null,
+	/**
+	 *  When the meeting first fed Tasks (an automatic task or "Add to Tasks"); after that a
+	 *  re-run adds no task by itself (0.7.3).
+	 */
+	tasks_at: string | null,
 };
 
 /**  A native menu item that the UI has to act on. */
@@ -1166,7 +1195,9 @@ export type SummaryStage = "queued" | "writing" | "merging" |
 /**  The naming agent is checking the people named. */
 "naming" | 
 /**  The email agent is writing the cover note. */
-"email";
+"email" | 
+/**  The tasks agent is finding the owner's action items (0.7.3). */
+"tasks";
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView = SummaryView_Serialize | SummaryView_Deserialize;
@@ -1184,6 +1215,11 @@ export type SummaryView_Deserialize = {
 	updated_at: string,
 	/**  Names the naming agent wants confirmed (None once done). */
 	naming?: NamingReview | null,
+	/**
+	 *  This meeting's tasks still in Tasks (not deleted): an action item whose `task_id` is one
+	 *  of them is "In Tasks"; a deleted one's item offers "Add to Tasks" again.
+	 */
+	in_tasks: string[],
 };
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
@@ -1199,6 +1235,11 @@ export type SummaryView_Serialize = {
 	updated_at: string,
 	/**  Names the naming agent wants confirmed (None once done). */
 	naming: NamingReview | null,
+	/**
+	 *  This meeting's tasks still in Tasks (not deleted): an action item whose `task_id` is one
+	 *  of them is "In Tasks"; a deleted one's item offers "Add to Tasks" again.
+	 */
+	in_tasks: string[],
 };
 
 export type SystemAudio = 
@@ -1208,6 +1249,101 @@ export type SystemAudio =
 "silent" | 
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
+
+/**  The list in Reminders' order. */
+export type TaskList = TaskList_Serialize | TaskList_Deserialize;
+
+/**  The list in Reminders' order. */
+export type TaskList_Deserialize = {
+	/**  Open and due today or earlier (overdue first). */
+	today: TaskView_Deserialize[],
+	/**  Open and due later, earliest first. */
+	upcoming: TaskView_Deserialize[],
+	/**  Open with no date, oldest first. */
+	no_date: TaskView_Deserialize[],
+	/**  Done, most recent first (the last 200). */
+	completed: TaskView_Deserialize[],
+};
+
+/**  The list in Reminders' order. */
+export type TaskList_Serialize = {
+	/**  Open and due today or earlier (overdue first). */
+	today: TaskView_Serialize[],
+	/**  Open and due later, earliest first. */
+	upcoming: TaskView_Serialize[],
+	/**  Open with no date, oldest first. */
+	no_date: TaskView_Serialize[],
+	/**  Done, most recent first (the last 200). */
+	completed: TaskView_Serialize[],
+};
+
+/**  The meeting a task came from, as it is now (a renamed meeting shows its new title). */
+export type TaskMeeting = {
+	id: string,
+	title: string,
+	held_on: string,
+};
+
+export type TaskOrigin = 
+/**  Found after a summary (the rules or the tasks agent). */
+"auto" | 
+/**  "Add to Tasks" on an action item. */
+"button" | 
+/**  Typed in Tasks. */
+"typed";
+
+/**  What `update` changes; a field left out stays as it is. */
+export type TaskPatch = TaskPatch_Serialize | TaskPatch_Deserialize;
+
+/**  What `update` changes; a field left out stays as it is. */
+export type TaskPatch_Deserialize = {
+	title?: string | null,
+	/**  The day it is due, YYYY-MM-DD; `null` removes the date. */
+	due_on?: string | null,
+	done?: boolean | null,
+};
+
+/**  What `update` changes; a field left out stays as it is. */
+export type TaskPatch_Serialize = {
+	title: string | null,
+	/**  The day it is due, YYYY-MM-DD; `null` removes the date. */
+	due_on: string | null,
+	done: boolean | null,
+};
+
+export type TaskView = TaskView_Serialize | TaskView_Deserialize;
+
+export type TaskView_Deserialize = {
+	id: string,
+	title: string,
+	/**  Whose item it is when it isn't yours ("Minh"); "" when it is. */
+	owner: string,
+	/**  The due phrase as said ("end of month"); "" when none was. */
+	due_text: string,
+	/**  The day it is due, YYYY-MM-DD (a local calendar day). */
+	due_on?: string | null,
+	done_at?: string | null,
+	meeting?: TaskMeeting | null,
+	origin: TaskOrigin,
+	/**  Why it was found to be yours (automatic tasks). */
+	reason: string,
+};
+
+export type TaskView_Serialize = {
+	id: string,
+	title: string,
+	/**  Whose item it is when it isn't yours ("Minh"); "" when it is. */
+	owner: string,
+	/**  The due phrase as said ("end of month"); "" when none was. */
+	due_text: string,
+	/**  The day it is due, YYYY-MM-DD (a local calendar day). */
+	due_on: string | null,
+	done_at: string | null,
+	meeting: TaskMeeting | null,
+	origin: TaskOrigin,
+	/**  Why it was found to be yours (automatic tasks). */
+	reason: string,
+};
 
 export type TemplateCheck = TemplateCheck_Serialize | TemplateCheck_Deserialize;
 

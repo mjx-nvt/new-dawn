@@ -10,6 +10,7 @@ export default function DangerButton({
   disabled,
   compact = true,
   title,
+  label,
 }: {
   children: string;
   confirm: string;
@@ -17,6 +18,9 @@ export default function DangerButton({
   disabled?: boolean;
   compact?: boolean;
   title?: string;
+  /** The accessible name until armed, when the text alone doesn't say what goes (a row's
+   *  "Delete"); it starts with that text. Armed, the button is read as `confirm`. */
+  label?: string;
 }) {
   const [armed, setArmed] = useState(false);
   useEffect(() => {
@@ -30,6 +34,7 @@ export default function DangerButton({
       className={`btn ${compact ? "btnCompact " : ""}${armed ? "btnDangerFilled" : "btnDanger"}`}
       disabled={disabled}
       title={title}
+      aria-label={armed ? undefined : label}
       onClick={() => {
         if (armed) {
           setArmed(false);

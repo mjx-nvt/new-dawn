@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { openSettings } from "../bridge/settings";
-import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, SettingsIcon, WorkspaceIcon } from "./icons";
+import { useOpenTaskCount } from "../bridge/tasks";
+import { useCurrentWorkspace } from "../bridge/workspaces";
+import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, SettingsIcon, TasksIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -24,6 +26,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
     </>
   );
   const tip = (text: string) => (iconsOnly ? text : undefined);
+  const { data: workspace } = useCurrentWorkspace();
+  const { data: due = 0 } = useOpenTaskCount(workspace?.slug); // due today or overdue
 
   return (
     <nav className={iconsOnly ? `${styles.sidebar} ${styles.rail}` : styles.sidebar} inert={hidden} aria-label="Sidebar">
@@ -37,6 +41,16 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
         </Link>
         <Link to="/live" search={{}} className={styles.item} activeProps={{ className: styles.active }} title={tip("Live")}>
           {label("Live", <LiveIcon />)}
+        </Link>
+        <Link
+          to="/tasks"
+          className={styles.item}
+          activeProps={{ className: styles.active }}
+          title={tip(due ? `Tasks · ${due} due` : "Tasks")}
+          aria-label={due ? `Tasks, ${due} due` : undefined}
+        >
+          {label("Tasks", <TasksIcon />)}
+          {due > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{due}</span>)}
         </Link>
         <Link
           to="/workspace"

@@ -1,0 +1,140 @@
+/* Tasks (D-042): one column at the summary's reading measure, so the due chip stays near the title. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 76ch;
+  margin-top: var(--space-5);
+}
+
+.section { margin-top: var(--space-5); } /* + the board's gap: 32 between sections */
+
+/* Section titles; Completed's is the <summary> of a disclosure (collapsed by default, ⇧⌘H). */
+.heading {
+  margin-bottom: var(--space-3);
+  cursor: default;
+}
+
+/* A section's rows: one card, hairlines between rows. No overflow clipping: the date menu
+   reaches out of it. */
+.list {
+  list-style: none;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.row + .row { border-top: 0.5px solid var(--hair); }
+
+/* Reminders' circle: a ring; ticked, a dot inside the ring. Centred on the 28 pt first line. */
+.check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 5px;
+  border: 1.5px solid var(--ink-3);
+  border-radius: 50%;
+  appearance: none;
+  transition: background 150ms ease-out, border-color 150ms ease-out;
+}
+.check:hover { border-color: var(--ink-2); }
+.check:checked {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: inset 0 0 0 2.5px var(--surface);
+}
+.check:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.check:checked:focus-visible { box-shadow: inset 0 0 0 2.5px var(--surface), 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+.line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/* The first line is as tall as the 28 pt controls beside it. */
+.owner,
+.title {
+  padding: 3px 0;
+  line-height: 1.5;
+}
+/* Never squeezed ("Minh:" stays whole), but a long group owner wraps within half the line so
+   the title keeps the other half. */
+.owner {
+  flex: none;
+  max-width: 50%;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.title {
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.titleInput { height: 28px; }
+
+/* Done: struck through and quiet, like a ticked item in the summary. */
+.done .owner,
+.done .title {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+/* Where it came from: the meeting, a due phrase that names no day, the AI marker. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+.meta > * + *::before {
+  content: "·";
+  margin-right: var(--space-2);
+}
+
+.meeting { color: inherit; }
+.meeting:hover { color: var(--primary-text); text-decoration: underline; }
+
+.row .late { color: var(--status-negative); }
+
+.dayField {
+  width: auto;
+  height: 28px;
+}
+
+/* Delete (and "Add date" on a row without one) show on hover or keyboard focus, so the list
+   stays calm. */
+.reveal {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+.row:hover .reveal,
+.reveal:focus-within { opacity: 1; }
+
+/* An empty list: the shape of the rows to come. */
+.ghosts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.ghostRow {
+  height: 52px;
+  border-radius: var(--radius-card);
+}

@@ -420,6 +420,7 @@ pub async fn confirm(
         .filter(|(from, to)| from != to)
         .collect();
     let renamed = people::rename_in_doc(&mut current.doc, &pairs);
+    crate::modules::tasks::rename(pool, meeting_id, &pairs).await?;
     let mut email = current.email_md.clone();
     if people::rename_in_text(&mut email, &pairs) > 0 {
         super::save_email(pool, meeting_id, &current.email_subject, &email).await?;
@@ -480,6 +481,7 @@ mod tests {
                 item: "x".into(),
                 due: String::new(),
                 done: false,
+                task_id: None,
             }],
             ..SummaryDoc::default()
         };

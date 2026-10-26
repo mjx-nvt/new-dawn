@@ -7,6 +7,7 @@ import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/M
 import MeetingsPage, { type MeetingsSearch } from "./modules/meetings/MeetingsPage";
 import { SORTS, STATUS_FILTERS, WHEN_FILTERS } from "./modules/meetings/listing";
 import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboarding/WelcomePage";
+import TasksPage from "./modules/tasks/TasksPage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupSearch } from "./modules/tenant-setup/TenantSetupPage";
@@ -63,6 +64,14 @@ const liveRoute = createRoute({
   staticData: { title: "Live" },
 });
 
+// Your to-dos: from meetings' action items and typed (D-042).
+const tasksRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/tasks",
+  component: TasksPage,
+  staticData: { title: "Tasks" },
+});
+
 const workspaceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/workspace",
@@ -114,7 +123,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

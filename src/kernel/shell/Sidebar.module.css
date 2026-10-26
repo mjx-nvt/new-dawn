@@ -69,10 +69,31 @@
   white-space: nowrap;
 }
 
+/* Tasks due today or overdue: the count at the end of the row (a dot on the icon in the rail). */
+.count {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.active > .count { color: inherit; }
+
+.dot {
+  position: absolute;
+  top: 8px;
+  left: calc(50% + 4px);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
 /* Icon-only rail: items become centred squares; labels live in tooltips. */
 /* visible: the workspace popover is wider than the rail. */
 .rail { padding: 0 var(--space-3) var(--space-3); overflow: visible; }
 .rail .item {
+  position: relative;
   justify-content: center;
   height: 36px;
   padding: 0;

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type AttendeeEdit, type Person, type PersonInput } from "../../bindings";
+import { invalidateTasks } from "./tasks";
 import { unwrap } from "./unwrap";
 
 export type { AttendeeEdit, Person, PersonInput };
@@ -44,6 +45,7 @@ export function useUpdateAttendees(slug: string, meetingId: string) {
     onSuccess: (view) => {
       queryClient.setQueryData(["summary", slug, meetingId], view);
       void queryClient.invalidateQueries({ queryKey: key(slug) });
+      invalidateTasks(queryClient, slug); // a rename reaches the meeting's tasks
     },
   });
 }

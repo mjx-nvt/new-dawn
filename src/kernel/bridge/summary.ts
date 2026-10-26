@@ -9,6 +9,7 @@ import {
   type SummaryStage,
   type SummaryView_Serialize,
 } from "../../bindings";
+import { invalidateTasks } from "./tasks";
 import { unwrap } from "./unwrap";
 
 export type SummaryView = SummaryView_Serialize;
@@ -79,6 +80,7 @@ export function useSummarySync() {
       void queryClient.invalidateQueries({ queryKey: ["meeting", payload.workspace_slug, payload.meeting_id] });
       void queryClient.invalidateQueries({ queryKey: ["meetings", payload.workspace_slug] });
       void queryClient.invalidateQueries({ queryKey: ["meeting-search"] });
+      invalidateTasks(queryClient, payload.workspace_slug); // the run's tasks pass may have added some
     });
     return () => {
       void onProgress.then((stop) => stop());
@@ -105,7 +107,10 @@ export function useUpdateSection(slug: string, meetingId: string) {
   return useMutation({
     mutationFn: ({ index, markdown }: { index: number; markdown: string }) =>
       unwrap(commands.updateSummarySection(slug, meetingId, index, markdown)),
-    onSuccess: (view) => queryClient.setQueryData(keys.summary(slug, meetingId), view),
+    onSuccess: (view) => {
+      queryClient.setQueryData(keys.summary(slug, meetingId), view);
+      invalidateTasks(queryClient, slug); // a tick here ticks the item's task too
+    },
   });
 }
 
@@ -117,6 +122,7 @@ export function useConfirmNames(slug: string, meetingId: string) {
     onSuccess: (view) => {
       queryClient.setQueryData(keys.summary(slug, meetingId), view);
       void queryClient.invalidateQueries({ queryKey: ["people", slug] });
+      invalidateTasks(queryClient, slug); // a rename reaches the meeting's tasks
     },
   });
 }
@@ -140,6 +146,7 @@ export function useApplyCorrections(slug: string, meetingId: string) {
       for (const key of [["transcript", slug, meetingId], ["people", slug], ["vocabulary", slug], ["whisper-prompt", slug], ["agents", slug], ["meeting-search"]]) {
         void queryClient.invalidateQueries({ queryKey: key });
       }
+      invalidateTasks(queryClient, slug); // a rename reaches the meeting's tasks
     },
   });
 }

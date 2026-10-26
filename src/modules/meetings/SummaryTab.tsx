@@ -1,5 +1,6 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import type { NameSuspect, SectionKind } from "../../bindings";
+import type { ActionItem_Serialize, NameSuspect, SectionKind } from "../../bindings";
 import { useSaveNotes, type Meeting } from "../../kernel/bridge/meetings";
 import {
   cancelSummary,
@@ -18,7 +19,8 @@ import {
   type SummaryProgress,
   type SummaryView,
 } from "../../kernel/bridge/summary";
-import { SparkleIcon } from "../../kernel/shell/icons";
+import { useAddActionItemToTasks } from "../../kernel/bridge/tasks";
+import { CheckIcon, SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import AiProgress, { SummaryBar, useNow } from "./AiProgress";
 import { useAgents } from "../../kernel/bridge/agents";
@@ -255,6 +257,8 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
           html={view.sections_html[index] ?? ""}
           locked={busy}
           untasked={section.kind === "action_items" ? peopleWithoutTasks(view) : []}
+          items={section.kind === "action_items" ? view.doc.action_items : undefined}
+          inTasks={view.in_tasks}
         />
       ))}
     </>
@@ -354,6 +358,9 @@ interface SectionProps {
   locked: boolean;
   /** Attendees with no task in the to-do list (shown under Action items). */
   untasked?: string[];
+  /** The action items behind the to-do lines (Action items only), and this meeting's tasks in Tasks. */
+  items?: ActionItem_Serialize[];
+  inTasks?: string[];
 }
 
 // The minutes are rebuilt from these sections' bullets, so the format matters there (D-025).
@@ -365,9 +372,12 @@ const FORMAT_HINT: Partial<Record<SectionKind, string>> = {
   open_questions: "One “- ” line per question",
 };
 
-function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, html, locked, untasked = [] }: SectionProps) {
+function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, html, locked, untasked = [], items, inTasks = [] }: SectionProps) {
   const [draft, setDraft] = useState<string | null>(null);
   const update = useUpdateSection(slug, meetingId);
+  const add = useAddActionItemToTasks(slug, meetingId);
+  const lines = toLines(markdown);
+  const error = update.error ?? add.error;
   return (
     <div className={styles.section}>
       <div className={styles.sectionHead}>
@@ -406,17 +416,26 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
             </button>
           </div>
         </div>
-      ) : (kind === "next_steps" || kind === "action_items") && toTasks(markdown).length > 0 ? (
+      ) : (kind === "next_steps" || kind === "action_items") && lines.length > 0 ? (
         <>
-          <TaskList markdown={markdown} locked={locked || update.isPending} onChange={(next) => update.mutate({ index, markdown: next })} />
+          <Checklist
+            markdown={markdown}
+            locked={locked || update.isPending}
+            onChange={(next) => update.mutate({ index, markdown: next })}
+            // Line k is item k only while the counts agree (a hand edit can add a stray paragraph).
+            items={items?.length === lines.length ? items : undefined}
+            inTasks={inTasks}
+            adding={add.isPending}
+            onAdd={(k) => add.mutate(k)}
+          />
           {untasked.length > 0 && (
             <p className={`fieldHint ${styles.untasked}`}>
               No task for {untasked.join(", ")}. If one was given a task, add it with Edit or in Corrections.
             </p>
           )}
-          {update.error && (
+          {error && (
             <p className={styles.error} role="alert">
-              {update.error.message}
+              {error.message}
             </p>
           )}
         </>
@@ -431,7 +450,8 @@ function SectionBlock({ slug, meetingId, index, kind, edited, title, markdown, h
   );
 }
 
-interface Task {
+/** A to-do line of the section's Markdown (an action item, or an older summary's next step). */
+interface Line {
   line: number;
   done: boolean;
   text: string;
@@ -447,8 +467,8 @@ function peopleWithoutTasks(view: SummaryView): string[] {
     .map((a) => a.name);
 }
 
-/** "- [ ] text", "- [x] text", and plain "- text" bullets (older summaries) as tasks. */
-function toTasks(markdown: string): Task[] {
+/** "- [ ] text", "- [x] text", and plain "- text" bullets (older summaries) as to-do lines. */
+function toLines(markdown: string): Line[] {
   return markdown.split("\n").flatMap((raw, line) => {
     const m = raw.match(/^[-*]\s+(?:\[( |x|X)\]\s+)?(.+)$/); // top-level lines only
     return m ? [{ line, done: !!m[1] && m[1] !== " ", text: m[2].replace(/\*+/g, "") }] : [];
@@ -456,7 +476,7 @@ function toTasks(markdown: string): Task[] {
 }
 
 /** "Owner — task — due": the owner in bold, the due date quieter. */
-function TaskText({ text }: { text: string }) {
+function LineText({ text }: { text: string }) {
   const parts = text.split(" — ");
   if (parts.length < 2) return <span>{text}</span>;
   const due = parts.length > 2 ? parts[parts.length - 1] : null;
@@ -469,24 +489,58 @@ function TaskText({ text }: { text: string }) {
   );
 }
 
+interface ChecklistProps {
+  markdown: string;
+  locked: boolean;
+  onChange: (markdown: string) => void;
+  /** The action item behind each line: then each line ends with "Add to Tasks" or "In Tasks". */
+  items?: ActionItem_Serialize[];
+  inTasks: string[];
+  adding: boolean;
+  onAdd: (index: number) => void;
+}
+
 /** The to-do list (Action items; Next steps in older summaries): ticking saves the section. */
-function TaskList({ markdown, locked, onChange }: { markdown: string; locked: boolean; onChange: (markdown: string) => void }) {
-  const tasks = toTasks(markdown);
-  const toggle = (task: Task) => {
-    const lines = markdown.split("\n");
-    lines[task.line] = `- [${task.done ? " " : "x"}] ${lines[task.line].replace(/^\s*[-*]\s+(?:\[( |x|X)\]\s+)?/, "")}`;
-    onChange(lines.join("\n"));
+function Checklist({ markdown, locked, onChange, items, inTasks, adding, onAdd }: ChecklistProps) {
+  const lines = toLines(markdown);
+  const toggle = (line: Line) => {
+    const rows = markdown.split("\n");
+    rows[line.line] = `- [${line.done ? " " : "x"}] ${rows[line.line].replace(/^\s*[-*]\s+(?:\[( |x|X)\]\s+)?/, "")}`;
+    onChange(rows.join("\n"));
   };
   return (
     <ul className={styles.tasks}>
-      {tasks.map((t) => (
-        <li key={t.line}>
-          <label className={t.done ? `${styles.task} ${styles.taskDone}` : styles.task}>
-            <input type="checkbox" checked={t.done} disabled={locked} onChange={() => toggle(t)} />
-            <TaskText text={t.text} />
-          </label>
-        </li>
-      ))}
+      {lines.map((t, k) => {
+        const item = items?.[k];
+        return (
+          <li key={t.line} className={styles.taskRow}>
+            <label className={t.done ? `${styles.task} ${styles.taskDone}` : styles.task}>
+              <input type="checkbox" checked={t.done} disabled={locked} onChange={() => toggle(t)} />
+              <LineText text={t.text} />
+            </label>
+            {item &&
+              (item.task_id && inTasks.includes(item.task_id) ? (
+                <Link
+                  to="/tasks"
+                  className={`btn btnGhost btnCompact ${styles.taskButton}`}
+                  aria-label={`In Tasks: ${item.item}`}
+                  title="Open Tasks"
+                  // The second click of a double-click on "Add to Tasks" lands here: stay on the meeting.
+                  onClick={(e) => {
+                    if (e.detail > 1) e.preventDefault();
+                  }}
+                >
+                  <CheckIcon />
+                  In Tasks
+                </Link>
+              ) : (
+                <button type="button" className={`btn btnGhost btnCompact ${styles.taskButton}`} aria-label={`Add to Tasks: ${item.item}`} disabled={locked || adding} onClick={() => onAdd(k)}>
+                  Add to Tasks
+                </button>
+              ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }

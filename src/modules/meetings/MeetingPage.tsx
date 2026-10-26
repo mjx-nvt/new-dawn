@@ -346,7 +346,7 @@ function DeleteSheet({ slug, meetingId, title, onClose }: { slug: string; meetin
         </h2>
         <p className="fieldHint">
           The recording moves to the Trash. The transcript, summary, notes and export list are deleted. Minutes you already
-          exported stay in the workspace's exports folder.
+          exported stay in the workspace's exports folder, and its tasks stay in Tasks.
         </p>
         {remove.error && (
           <p className="formError" role="alert">

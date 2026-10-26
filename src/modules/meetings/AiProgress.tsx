@@ -75,9 +75,10 @@ const SUMMARY_LABEL: Record<SummaryProgress["stage"], string> = {
   merging: "Merging the parts",
   naming: "Checking the names",
   email: "Writing the cover note",
+  tasks: "Finding your tasks",
 };
 
-/** Summary, naming and email stages: time left from the live token rate against what past runs
+/** Summary, naming, email and tasks stages: time left from the live token rate against what past runs
  *  of the same agent wrote (`expected_tokens`), or from their usual duration (`expected_ms`)
  *  before the first token. No history yet: elapsed only. */
 export function SummaryBar({ progress, title }: { progress: SummaryProgress; title?: string }) {
@@ -100,7 +101,7 @@ export function SummaryBar({ progress, title }: { progress: SummaryProgress; tit
       eta = (eta ?? 0) + (parts - part + 1) * expected_ms;
       fraction = fraction == null ? null : (part - 1 + fraction) / (parts + 1);
     }
-    // Then the names check and the cover note.
+    // Then the names check, the cover note and finding your tasks.
     if (eta != null) eta += later_ms;
   }
   const step = parts > 1 && stage !== "naming" && stage !== "email" ? ` · part ${part} of ${parts}` : "";

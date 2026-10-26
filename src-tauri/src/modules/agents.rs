@@ -17,6 +17,7 @@ pub enum Agent {
     Summary,
     Naming,
     Email,
+    Tasks,
     Minutes,
     Corrections,
     Translate,
@@ -26,10 +27,11 @@ pub enum Agent {
 impl Agent {
     /// The agents that talk to the model. The minutes are filled from the summary by rules
     /// and the Word template (D-024), so `Minutes` has no guide to edit.
-    pub const ALL: [Agent; 6] = [
+    pub const ALL: [Agent; 7] = [
         Agent::Summary,
         Agent::Naming,
         Agent::Email,
+        Agent::Tasks,
         Agent::Corrections,
         Agent::Translate,
         Agent::Live,
@@ -40,6 +42,7 @@ impl Agent {
             Agent::Summary => "summary",
             Agent::Naming => "naming",
             Agent::Email => "email",
+            Agent::Tasks => "tasks",
             Agent::Minutes => "minutes",
             Agent::Corrections => "corrections",
             Agent::Translate => "translate",
@@ -52,6 +55,7 @@ impl Agent {
             Agent::Summary => "Summary",
             Agent::Naming => "Naming",
             Agent::Email => "Email",
+            Agent::Tasks => "Tasks",
             Agent::Minutes => "Minutes",
             Agent::Corrections => "Corrections",
             Agent::Translate => "Translation",
@@ -70,6 +74,9 @@ impl Agent {
             Agent::Email => {
                 "Writes the cover note that goes with the minutes: key points, decisions, actions."
             }
+            Agent::Tasks => {
+                "Finds the action items that are yours after each summary and adds them to Tasks."
+            }
             Agent::Minutes => "Fills the Word template from the summary.",
             Agent::Corrections => {
                 "Applies what you tell it is wrong to the summary, email and transcript, and remembers the names and terms."
@@ -87,6 +94,7 @@ impl Agent {
             Agent::Summary => include_str!("../../agents/summary.md"),
             Agent::Naming => include_str!("../../agents/naming.md"),
             Agent::Email => include_str!("../../agents/email.md"),
+            Agent::Tasks => include_str!("../../agents/tasks.md"),
             Agent::Minutes => include_str!("../../agents/minutes.md"),
             Agent::Corrections => include_str!("../../agents/corrections.md"),
             Agent::Translate => include_str!("../../agents/translate.md"),

@@ -93,7 +93,7 @@ function AgentCard({
         </p>
       </div>
       <div className={styles.modelRow}>
-        {guide.agent === "naming" ? (
+        {guide.agent === "naming" || guide.agent === "tasks" ? (
           <p className="fieldHint">Runs inside the summary, on the Summary agent's model (switching models mid-run costs seconds).</p>
         ) : (
           <label className={styles.model}>

@@ -300,6 +300,7 @@ mod tests {
                 item: "circulate the agenda".into(),
                 due: "Friday".into(),
                 done: false,
+                task_id: None,
             }],
             ..SummaryDoc::default()
         }

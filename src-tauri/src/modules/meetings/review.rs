@@ -25,10 +25,16 @@ struct Entry {
 }
 
 fn entries(markdown: &str) -> Vec<Entry> {
-    let mut out: Vec<Entry> = Vec::new();
+    entries_at(markdown).into_iter().map(|(_, e)| e).collect()
+}
+
+/// `entries`, each with where its text starts in `markdown` (a byte offset).
+fn entries_at(markdown: &str) -> Vec<(usize, Entry)> {
+    let mut out: Vec<(usize, Entry)> = Vec::new();
     let mut depth = 0usize;
     let mut buf = String::new();
-    let flush = |buf: &mut String, depth: usize, out: &mut Vec<Entry>| {
+    let mut at = 0;
+    let flush = |buf: &mut String, at: usize, depth: usize, out: &mut Vec<(usize, Entry)>| {
         let text = buf.trim().to_owned();
         buf.clear();
         let placeholder = [Language::En, Language::Vi]
@@ -38,32 +44,40 @@ fn entries(markdown: &str) -> Vec<Entry> {
             return;
         }
         match out.last_mut() {
-            Some(parent) if depth > 1 => parent.children.push(text),
-            _ => out.push(Entry {
-                text,
-                children: Vec::new(),
-            }),
+            Some((_, parent)) if depth > 1 => parent.children.push(text),
+            _ => out.push((
+                at,
+                Entry {
+                    text,
+                    children: Vec::new(),
+                },
+            )),
         }
     };
-    for event in Parser::new(markdown) {
+    for (event, range) in Parser::new(markdown).into_offset_iter() {
         match event {
-            Event::Text(t) | Event::Code(t) => buf.push_str(&t),
+            Event::Text(t) | Event::Code(t) => {
+                if buf.trim().is_empty() {
+                    at = range.start;
+                }
+                buf.push_str(&t);
+            }
             Event::SoftBreak | Event::HardBreak => buf.push(' '),
             Event::Start(Tag::List(_)) => {
-                flush(&mut buf, depth, &mut out);
+                flush(&mut buf, at, depth, &mut out);
                 depth += 1;
             }
             Event::End(TagEnd::List(_)) => {
-                flush(&mut buf, depth, &mut out);
+                flush(&mut buf, at, depth, &mut out);
                 depth = depth.saturating_sub(1);
             }
             Event::Start(Tag::Item) | Event::End(TagEnd::Item | TagEnd::Paragraph) => {
-                flush(&mut buf, depth, &mut out)
+                flush(&mut buf, at, depth, &mut out)
             }
             _ => {}
         }
     }
-    flush(&mut buf, depth, &mut out);
+    flush(&mut buf, at, depth, &mut out);
     out
 }
 
@@ -108,6 +122,7 @@ fn action_line(text: &str) -> ActionItem {
         item: item.to_owned(),
         due: due.to_owned(),
         done: false,
+        task_id: None,
     };
     match parts.as_slice() {
         [owner, item] => make(owner, item, "Not set"),
@@ -154,12 +169,13 @@ pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<
                 .collect();
         }
         SectionKind::ActionItems => {
-            let tasks: Vec<ActionItem> = items.iter().map(|e| action(&e.text)).collect();
+            let mut tasks: Vec<ActionItem> = items.iter().map(|e| action(&e.text)).collect();
             let ticks_only = tasks.len() == doc.action_items.len()
                 && tasks
                     .iter()
                     .zip(&doc.action_items)
                     .all(|(a, b)| same_task(a, b) && a.due.trim() == b.due.trim());
+            carry_links(&mut tasks, &doc.action_items);
             doc.action_items = tasks;
             if ticks_only {
                 section.edited = was_edited;
@@ -200,15 +216,86 @@ pub fn carry_ticks(doc: &mut SummaryDoc, old: &[ActionItem]) {
         }
     }
     if changed {
-        let markdown = super::summarise::action_items_markdown(&doc.action_items);
-        for section in doc
-            .sections
+        show_ticks(doc);
+    }
+}
+
+/// Each item keeps its task in Tasks while it is the same item (`same_task`, as ticks): after a
+/// hand edit, a correction or a re-run. A link goes to one item; an item with one keeps it. The
+/// item in the same place goes first, so of two identical items the linked one stays linked.
+pub fn carry_links(items: &mut [ActionItem], old: &[ActionItem]) {
+    let mut used: Vec<String> = items.iter().filter_map(|t| t.task_id.clone()).collect();
+    for same_place in [true, false] {
+        for (i, item) in items
             .iter_mut()
-            .filter(|s| s.kind == SectionKind::ActionItems)
+            .enumerate()
+            .filter(|(_, t)| t.task_id.is_none())
         {
-            section.markdown = markdown.clone();
+            let link = old
+                .iter()
+                .enumerate()
+                .filter(|&(j, o)| (!same_place || j == i) && same_task(o, item))
+                .find_map(|(_, o)| o.task_id.clone().filter(|id| !used.contains(id)));
+            if let Some(id) = link {
+                used.push(id.clone());
+                item.task_id = Some(id);
+            }
         }
     }
+}
+
+/// The Action items sections show the list's ticks (after a tick in Tasks, or ticks carried
+/// over). A section written from the list is written again; an edited one keeps the owner's text
+/// and only the box on an item's line changes, as a tick in the summary does — item k is the
+/// k-th entry, since `apply_edit` made the list from them.
+pub(crate) fn show_ticks(doc: &mut SummaryDoc) {
+    let fresh = summarise::action_items_markdown(&doc.action_items);
+    for section in doc
+        .sections
+        .iter_mut()
+        .filter(|s| s.kind == SectionKind::ActionItems)
+    {
+        let starts: Vec<usize> = entries_at(&section.markdown)
+            .into_iter()
+            .map(|(at, _)| at)
+            .collect();
+        if !section.edited || starts.len() != doc.action_items.len() {
+            section.markdown = fresh.clone();
+            continue;
+        }
+        let mut rows: Vec<String> = section.markdown.split('\n').map(str::to_owned).collect();
+        for (at, item) in starts.into_iter().zip(&doc.action_items) {
+            let Some(row) = rows.get_mut(section.markdown[..at].matches('\n').count()) else {
+                continue;
+            };
+            // ponytail: an item that isn't a "- " line (a paragraph, "1.") keeps its look, so its
+            // tick shows in the list and the minutes only; give it a box if that ever bites.
+            if let Some((_, text)) = todo_line(row).filter(|&(done, _)| done != item.done) {
+                *row = format!("- [{}] {text}", if item.done { "x" } else { " " });
+            }
+        }
+        section.markdown = rows.join("\n");
+    }
+}
+
+/// A top-level to-do line as the summary's checklist reads it ("- [x] text", "* text"): whether
+/// it is ticked, and its text.
+fn todo_line(row: &str) -> Option<(bool, &str)> {
+    let rest = row.strip_prefix(['-', '*'])?;
+    let text = rest.trim_start();
+    if text.len() == rest.len() {
+        return None; // "-x", "**bold**": no bullet
+    }
+    let boxed = |mark: &str| {
+        text.strip_prefix(mark)
+            .filter(|t| t.starts_with(char::is_whitespace))
+    };
+    let (done, text) = match (boxed("[ ]"), boxed("[x]").or_else(|| boxed("[X]"))) {
+        (Some(t), _) => (false, t.trim_start()),
+        (_, Some(t)) => (true, t.trim_start()),
+        _ => (false, text),
+    };
+    (!text.is_empty()).then_some((done, text))
 }
 
 /// After a re-run: who the owner marked as attending stays so (D-039). The old names are spelled
@@ -335,6 +422,7 @@ pub async fn update_attendees(
         if renamed > 0 {
             tracing::info!("attendee edit renamed {renamed} mention(s) in meeting {meeting_id}");
         }
+        crate::modules::tasks::rename(pool, meeting_id, &pairs).await?;
         let mut email = current.email_md.clone();
         if people::rename_in_text(&mut email, &pairs) > 0 {
             super::save_email(pool, meeting_id, &current.email_subject, &email).await?;
@@ -478,7 +566,8 @@ pub async fn to_trash(path: PathBuf) -> Result<()> {
 }
 
 /// Moves the meeting's recording folder to the Trash, then deletes the meeting (its transcript,
-/// summary and export rows go with it; exported files stay in `exports/`). `job_running`: a
+/// summary and export rows go with it; exported files stay in `exports/`; its tasks stay in
+/// Tasks, no longer linked — `task.meeting_id` is set NULL, D-042). `job_running`: a
 /// transcription or summary job is registered for it (its status may not show that yet).
 pub async fn delete_meeting(
     hub: &WorkspaceHub,
@@ -635,6 +724,7 @@ mod tests {
                 item: "send agenda".into(),
                 due: "Friday".into(),
                 done: false,
+                task_id: None,
             }]
         };
         let mut t = doc();
@@ -650,6 +740,91 @@ mod tests {
         assert!(fresh.action_items[0].done && fresh.sections[3].markdown.starts_with("- [x]"));
 
         assert!(apply_edit(&mut d, 99, "x").is_err());
+    }
+
+    #[test]
+    fn links_follow_the_same_item() {
+        let item = |owner: &str, text: &str, link: Option<&str>| ActionItem {
+            owner: owner.into(),
+            item: text.into(),
+            due: "Friday".into(),
+            done: false,
+            task_id: link.map(Into::into),
+        };
+        let links = |d: &SummaryDoc| {
+            d.action_items
+                .iter()
+                .map(|a| a.task_id.clone())
+                .collect::<Vec<_>>()
+        };
+        let mut d = doc();
+        d.action_items = vec![
+            item("Minh", "send agenda", Some("t1")),
+            item("Lan", "book the room", Some("t2")),
+        ];
+        let ticked =
+            "- [x] **Minh** — send agenda — *Friday*\n- [ ] **Lan** — book the room — *Friday*";
+        assert!(!apply_edit(&mut d, 3, ticked).unwrap());
+        assert_eq!(
+            links(&d),
+            vec![Some("t1".into()), Some("t2".into())],
+            "a tick"
+        );
+        apply_edit(
+            &mut d,
+            3,
+            "- **Lan** — Book the room — *Monday*\n- **Sam** — call the bank",
+        )
+        .unwrap();
+        assert_eq!(links(&d), vec![Some("t2".into()), None], "a hand edit");
+        // A re-run: the same item gets its link back, once.
+        let mut fresh = doc();
+        fresh.action_items = vec![
+            item("Lan", "book the room", None),
+            item("Lan", "book the room", None),
+        ];
+        carry_links(&mut fresh.action_items, &d.action_items);
+        assert_eq!(links(&fresh), vec![Some("t2".into()), None]);
+
+        // Two identical items, the second linked: a tick on it keeps the link where it is.
+        let mut twins = doc();
+        twins.action_items = vec![
+            item("Lan", "book the room", None),
+            item("Lan", "book the room", Some("t3")),
+        ];
+        let ticked =
+            "- [ ] **Lan** — book the room — *Friday*\n- [x] **Lan** — book the room — *Friday*";
+        assert!(!apply_edit(&mut twins, 3, ticked).unwrap());
+        assert_eq!(links(&twins), vec![None, Some("t3".into())]);
+    }
+
+    #[test]
+    fn ticks_show_without_rewriting_an_edited_list() {
+        let mut d = doc();
+        let edited = "Agreed at the end:\n\n- Lan: prepare the budget\n  - with the [2027 figures](budget.xlsx)\n- [ ] **Minh** — Send the deck — *Friday*";
+        apply_edit(&mut d, 3, edited).unwrap();
+        assert_eq!(d.action_items.len(), 3, "the lead-in is an entry too");
+        d.action_items[1].done = true;
+        d.action_items[2].done = true;
+        show_ticks(&mut d);
+        let ticked = "Agreed at the end:\n\n- [x] Lan: prepare the budget\n  - with the [2027 figures](budget.xlsx)\n- [x] **Minh** — Send the deck — *Friday*";
+        assert_eq!(d.sections[3].markdown, ticked, "only the boxes change");
+        assert!(
+            !apply_edit(&mut d, 3, ticked).unwrap(),
+            "the same list, ticked"
+        );
+        let done: Vec<bool> = d.action_items.iter().map(|a| a.done).collect();
+        assert_eq!(done, vec![false, true, true]);
+
+        // A section written from the list is written again.
+        let mut fresh = doc();
+        fresh.action_items = d.action_items.clone();
+        show_ticks(&mut fresh);
+        assert!(
+            fresh.sections[3]
+                .markdown
+                .ends_with("- [x] **Minh** — Send the deck — *Friday*")
+        );
     }
 
     #[test]
@@ -758,6 +933,13 @@ mod tests {
             super::super::save_summary(&pool, "m1", &json, "S", "Duke opened.", None, false)
                 .await
                 .unwrap();
+            sqlx::query(
+                "INSERT INTO task (id, title, owner, meeting_id, source_key, origin) \
+                 VALUES ('t1', 'Send Duke the deck', 'Duke', 'm1', 'k', 'button')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
             let edit = |name: &str, attending: bool, changed: bool| AttendeeEdit {
                 name: name.into(),
                 title: String::new(),
@@ -786,6 +968,16 @@ mod tests {
                 "the rename changed an edited summary"
             );
             assert!(!v.doc.attendees[0].attending);
+            let task: (String, String) =
+                sqlx::query_as("SELECT owner, title FROM task WHERE id = 't1'")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                task,
+                ("Đức".into(), "Send Đức the deck".into()),
+                "the meeting's tasks follow"
+            );
             hub.close_all().await;
         });
         std::fs::remove_dir_all(root).unwrap();

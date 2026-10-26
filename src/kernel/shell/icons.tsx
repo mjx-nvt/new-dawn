@@ -54,6 +54,20 @@ export const LiveIcon = () => (
   </Icon>
 );
 
+/** A checklist: two ticks, two lines (Tasks, D-042). */
+export const TasksIcon = () => (
+  <Icon>
+    <path d="M2 5l1.5 1.5 3-3M2 11l1.5 1.5 3-3M9 5h5M9 11h5" />
+  </Icon>
+);
+
+/** A tick ("In Tasks"). */
+export const CheckIcon = () => (
+  <Icon>
+    <path d="M3 8.5 6.5 12 13 4.5" />
+  </Icon>
+);
+
 export const WorkspaceIcon = () => (
   <Icon>
     <path d="M2.5 14V3.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V14M10.5 7h2a1 1 0 0 1 1 1v6M2 14h12M5 5.5h2M5 8.5h2M5 11.5h2" />

@@ -2,6 +2,18 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-042 — Tasks: your to-dos from meetings, as simple as Apple Reminders
+_2026-10-26_
+
+**Decision** (user: "a Tasks tab right below Live; whatever action item is related to me, the AI recognises it and creates a task; every action item gets an Add-to-task button; keep it simple like Apple Reminders or Microsoft To Do"):
+- **One list per workspace** (like Meetings): Today (incl. overdue), Upcoming, No date, Completed (collapsed). Add a task by typing; a due chip (Today, Tomorrow, Next week, Pick a date, Remove); tick, edit in place, delete. Left out of v1: several lists, an all-workspaces view, notes, steps, repeat, times and reminders, tags, search.
+- **Which items are yours** (`modules/meetings/tasks.rs`), once per meeting after its first summary: rules first — the item's owner is you by name, alias, first/last name or your title here, and isn't another attendee too → a task; every owner is someone else → none; the rest (Unassigned, groups, unknown names, items that name you) → one call to the **Tasks agent** inside the summary session (thinking off; your notes and the transcript lines that bear on each item; an answer of item numbers with a reason, plus a `not_mine` list, which stopped it claiming team items given to others — 12 of 12 live runs right). Nothing happens until your name is set.
+- **Identity**: a task links to its action item by `task_id` stored on the item (renames keep it; re-runs and edits carry it with the same rule as ticks). A deleted task is a tombstone, so it never comes back automatically; "Add to Tasks" restores it. `UNIQUE (meeting_id, source_key)` guards double clicks. Re-runs never auto-add again (`meeting.tasks_at`); the button covers new items. No cross-meeting dedupe in v1 — a visible duplicate beats a hidden task. Migration 0009 (additive: `task`, `meeting.tasks_at`).
+- **Ticks sync both ways** with the summary (a tick is not an edit). Tasks from others' items read "Minh: …".
+- **Due dates** from what was said, counted from the meeting's local day, no AI needed: English and Vietnamese weekdays, today/tomorrow/ngày mai, next week/tuần sau (= that Friday, a deadline), end of month/cuối tháng, explicit dates (day first), "in 2 weeks"; ordinary words that look like dates (thu, mai) only count next to a dating word. Unparsed phrases stay as written; the item's own text is never changed.
+
+---
+
 ## D-041 — Live: Vietnamese captions with the English beside them, as people speak
 _2026-10-26_
 

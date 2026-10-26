@@ -151,6 +151,7 @@ pub fn sample_for(sender: &Sender) -> Value {
         updated_at: String::new(),
         format: crate::modules::meetings::MeetingFormat::Discussion,
         presenter: None,
+        tasks_at: None,
     };
     let doc = SummaryDoc {
         sections: vec![Section {
@@ -179,6 +180,7 @@ pub fn sample_for(sender: &Sender) -> Value {
             item: "Task".into(),
             due: "Friday".into(),
             done: false,
+            task_id: None,
         }],
         open_issues: vec![OpenIssue {
             issue: "Question".into(),
@@ -325,6 +327,7 @@ mod tests {
             updated_at: String::new(),
             format: crate::modules::meetings::MeetingFormat::Discussion,
             presenter: None,
+            tasks_at: None,
         }
     }
 
@@ -380,6 +383,7 @@ mod tests {
                     item: format!("Task {i}"),
                     due: String::new(),
                     done: false,
+                    task_id: None,
                 })
                 .collect(),
             open_issues: vec![OpenIssue {

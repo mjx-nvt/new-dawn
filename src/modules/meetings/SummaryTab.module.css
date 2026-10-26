@@ -235,4 +235,20 @@
 }
 
 .taskDue { color: var(--ink-3); }
+
+/* An action item, then its quiet "Add to Tasks" / "In Tasks" at the end of the line. */
+.taskRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.taskRow > .task {
+  flex: 1;
+  min-width: 0;
+}
+.taskButton {
+  flex: none;
+  min-width: 108px; /* "Add to Tasks" and "In Tasks" alike: the line beside never grows under the pointer */
+  margin-top: -2px; /* centred on the first line of text */
+}
 .untasked { margin-top: var(--space-3); }
