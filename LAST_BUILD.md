@@ -1,4 +1,18 @@
-# Last Build — Tasks: your to-dos from meetings · release 0.7.3
+# Last Build — release pipeline on GitHub (no app changes) · release 0.7.4
+_2026-10-26_
+
+## What changed
+- No app changes. 0.7.4 is the first release built by GitHub instead of the Mac, to prove the hardened path: the workflow runs only when started by hand from a version tag, waits for the owner's approval (the `release` environment, the only place the signing key is stored), and every action is pinned to an exact commit. A run started from a branch stops at once with a plain message.
+- `main` now matches the released branch.
+
+## Manual steps
+1. GitHub → Actions → Release → Run workflow → "Use workflow from" → **Tags** → `v0.7.4` → Run workflow.
+2. Approve it under **Review deployments** (about 10–15 min).
+3. Don't also publish 0.7.4 from the Mac — one path per version.
+
+---
+
+# Tasks: your to-dos from meetings · release 0.7.3
 _2026-10-26_
 
 ## What changed
