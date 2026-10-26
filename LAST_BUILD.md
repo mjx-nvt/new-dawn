@@ -1,4 +1,4 @@
-# Last Build — Live: you and the call apart, how clearly each line was heard, both ways, quick translation · task priority · 0.7.5 (local only — not pushed, not released)
+# Last Build — Live: you and the call apart, how clearly each line was heard, both ways, quick translation · task priority · release 0.7.5
 _2026-10-26_
 
 ## What changed
@@ -19,10 +19,10 @@ _2026-10-26_
 - Reviews: each part had a correctness and a rules/UI review plus a fix pass; a final seven-lens review with adversarial verification confirmed 16 findings — 4 serious: your one-word answers dropped as "overheard", an answer saved before its question, days paired by position, English heard as Vietnamese and "translated" into English — all fixed; the architecture review of the last fixes found nothing. 119 Rust tests; clippy, tsc and the checks clean.
 - **Seen in the running app** (dev build on your data, light and dark; your 13 s Vietnamese clip as the call and an English clip as your microphone): a quick session both ways — labels, VI / EN tags, translations both directions ("Friday" → "thứ Sáu"), then Stop → read-only with Copy all and New session; a saved session → the meeting page with the yellow **Summarising** chip, the summary (it credits your English lines to you) and two tasks from your lines (due Fri 30 Oct and 6 Nov); All people with ⊖; Tasks; Settings → Models. Once warm, lines appeared 2–6 s after each pause (Whisper 1.5–2.5 s, translation 1–2 s); the first line of a session takes about 10 s (the models warming up). Copy all was moved to the app's clipboard (like Copy as email) after the check: the browser's clipboard isn't there in every build. The test meeting and its two tasks were deleted afterwards.
 
-## Not released
-- Branch `v0.7.5` on this Mac only — nothing pushed, no tag. The app's version reads 0.7.5.
-- Your data is back as 0.7.3 knows it: the checks above had run migration 0010 on VIFC (an app that doesn't know a migration refuses the database), so at your choice it was undone — the four new columns dropped and the migration record removed, nothing lost (no line or task used them yet); integrity check OK, same 7 meetings, 331 lines, 14 tasks. Backup from before the undo: `~/Library/Application Support/co.majorisdigital.newdawn/vifc-workspace-before-undo-0010.db`. Installing 0.7.5 later runs 0010 again by itself.
-- To release later: push the branch, tag v0.7.5, run the Release workflow from the tag (or the local release script) — as for 0.7.4.
+## Release
+- Published from the Mac as **v0.7.5** (the .dmg, the signed update bundle and latest.json); `main` is 0.7.5. Installed apps offer it in Settings → About → Check for updates.
+- **Your data was cleared, as you asked — New Dawn on this Mac starts like a new user's** (onboarding, no workspace, no profile, no models): the app's folder (VIFC's meetings, recordings, brand, exports, tasks, people and vocabulary; your profile; the downloaded Whisper model), its browser storage (remembered choices), caches, logs and preferences went to the **Trash** — empty it to delete them for good, or use Put Back. Ollama's text models belong to Ollama and stay. Backups were off, so there were none elsewhere.
+- Earlier the in-app checks had run migration 0010 on VIFC (the installed 0.7.3 then refused it); that was undone at your choice before the reset.
 
 ## To think about (your call)
 1. **Thresholds**: "Unclear" below 0.50 and "May be inaccurate" below 0.70 (Whisper's word confidence) are first guesses; clear test lines scored 0.78–0.98. Real calls will show whether they're too strict.

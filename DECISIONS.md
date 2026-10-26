@@ -3,7 +3,7 @@
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
 ## D-043 — Live 0.7.5: you and the call apart, how clearly each line was heard, both ways, a quick translation that keeps nothing; task priority
-_2026-10-26 · local build, not released_
+_2026-10-26 · release 0.7.5_
 
 **Decision** (user: "live translation should have one presenter or discussion — if 2 people talk at the same time and the app can't separate the transcript, the translation would be badly wrong"; "an option to save or not — sometimes I just need a quick translation when people switch between EN and VI"; "task items should have a priority"; "remove red, add green, or − and +"):
 - **No speaker-recognition model (diarization) yet.** The local options either need Python/ONNX stacks or a third model in memory beside Whisper and Qwen on a 16 GB Mac, are English-first, and none separates two people talking *at once* — they only label turns. Deferred.
