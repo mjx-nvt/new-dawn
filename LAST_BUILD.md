@@ -21,7 +21,7 @@ _2026-10-26_
 
 ## Not released
 - Branch `v0.7.5` on this Mac only — nothing pushed, no tag. The app's version reads 0.7.5.
-- **Your installed New Dawn (0.7.3) can't open VIFC right now**: the checks above ran migration 0010 on it, and an app that doesn't know a migration refuses the database. Either install 0.7.5 or undo 0010 on VIFC (lossless today: nothing uses the new columns yet; keep a backup).
+- Your data is back as 0.7.3 knows it: the checks above had run migration 0010 on VIFC (an app that doesn't know a migration refuses the database), so at your choice it was undone — the four new columns dropped and the migration record removed, nothing lost (no line or task used them yet); integrity check OK, same 7 meetings, 331 lines, 14 tasks. Backup from before the undo: `~/Library/Application Support/co.majorisdigital.newdawn/vifc-workspace-before-undo-0010.db`. Installing 0.7.5 later runs 0010 again by itself.
 - To release later: push the branch, tag v0.7.5, run the Release workflow from the tag (or the local release script) — as for 0.7.4.
 
 ## To think about (your call)
