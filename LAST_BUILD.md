@@ -23,6 +23,7 @@ _2026-10-26_
 - Published from the Mac as **v0.7.5** (the .dmg, the signed update bundle and latest.json); `main` is 0.7.5. Installed apps offer it in Settings → About → Check for updates.
 - **Your data was cleared, as you asked — New Dawn on this Mac starts like a new user's** (onboarding, no workspace, no profile, no models): the app's folder (VIFC's meetings, recordings, brand, exports, tasks, people and vocabulary; your profile; the downloaded Whisper model), its browser storage (remembered choices), caches, logs and preferences went to the **Trash** — empty it to delete them for good, or use Put Back. Ollama's text models belong to Ollama and stay. Backups were off, so there were none elsewhere.
 - Earlier the in-app checks had run migration 0010 on VIFC (the installed 0.7.3 then refused it); that was undone at your choice before the reset.
+- **0.7.5 is installed in /Applications** (built here, the same as the release; the old 0.7.3 is in the Trash). Its first launch is a new user's: macOS asks again for the microphone and System Audio Recording.
 
 ## To think about (your call)
 1. **Thresholds**: "Unclear" below 0.50 and "May be inaccurate" below 0.70 (Whisper's word confidence) are first guesses; clear test lines scored 0.78–0.98. Real calls will show whether they're too strict.
@@ -33,8 +34,9 @@ _2026-10-26_
 6. **Weekdays in the summary**: the summary model read "Thứ hai là mình sẽ dựng…" as "on Monday" where the live translation said "Second". The weekday fix covers live translation only.
 
 ## Manual steps
-1. Discussion on a call: wear headphones (otherwise your microphone hears the call; the page tells you).
-2. Optional: download **Whisper large-v3-turbo** in Settings → Models for faster live lines.
+1. Open New Dawn and go through the setup: allow the microphone and System Audio Recording, download the speech model (**Whisper large-v3-turbo**, the default — lighter and faster for live), create your workspace, then set your name in Settings → General (tasks and the minute-taker need it).
+2. Discussion on a call: wear headphones (otherwise your microphone hears the call; the page tells you).
+3. Empty the Trash to delete the old data for good (or Put Back what you want).
 
 ---
 
