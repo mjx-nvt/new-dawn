@@ -14,7 +14,7 @@ This file is the source of truth for how to work on this codebase. Read it at th
 - **Database**: SQLite via `sqlx` (runtime-tokio). `registry.db` + one `workspace.db` per workspace. Two migration sets: `src-tauri/migrations/registry/` and `src-tauri/migrations/workspace/`.
 - **Search**: SQLite FTS5; later `sqlite-vec`.
 - **AI (keep it simple, like Meetily)**: `whisper-rs` (metal) compiled in, model `large-v3-turbo`; Qwen through Ollama at `http://localhost:11434` (`/api/chat`, streaming, `options.num_ctx` always set), model `qwen3.5:9b` with thinking ON. Exactly two capabilities: `transcribe()` and `complete()`. Jobs run one at a time. No cloud provider exists in this codebase.
-- **Recorder**: `cpal` (mic) + `cidre` Core Audio process tap (system audio) + `rubato` mixer → incremental WAV. Transcription is a batch job after Stop — except a **Live** session (D-041): the mixer offers each 600 ms window to `kernel/ai/live.rs` over a bounded channel; it cuts utterances with the VAD, transcribes each in Vietnamese and translates it to English, writing lines as they arrive.
+- **Recorder**: `cpal` (mic) + `cidre` Core Audio process tap (system audio) + `rubato` mixer → incremental WAV. Transcription is a batch job after Stop — except a **Live** session (D-041): the mixer offers each 600 ms window (the mix, and the microphone and the call apart) to `kernel/ai/live.rs` over a bounded channel; it cuts utterances with the VAD (in a discussion the microphone and the call separately, D-043), transcribes each (Vietnamese, English or both ways) and translates it into the other language, writing lines as they arrive — into the meeting, or only into memory for a quick translation.
 - **Bridge**: `tauri-specta` generates `src/bindings.ts` from Rust commands. UI calls commands only through `src/kernel/bridge/`.
 - **Identity**: product name "New Dawn", bundle id `co.majorisdigital.newdawn`. Never change the bundle id.
 
@@ -71,9 +71,9 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 ## Key files
 - `src-tauri/src/lib.rs` — app setup, plugins, menu, glass, hub, gateway state (`main.rs` only calls `run()`)
 - `src-tauri/src/kernel/registry.rs`, `hub.rs`, `theme.rs`, `glass.rs`, `menu.rs`, `tray.rs`, `permissions.rs`
-- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log}.rs`, `src-tauri/src/kernel/brand/{tokens,logo}.rs`, `src-tauri/src/kernel/export/{model,docx,rebrand,pdf}.rs`, `src-tauri/src/kernel/profile.rs` (owner name + per-workspace title)
+- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log,live,days}.rs`, `src-tauri/src/kernel/brand/{tokens,logo}.rs`, `src-tauri/src/kernel/export/{model,docx,rebrand,pdf}.rs`, `src-tauri/src/kernel/profile.rs` (owner name + per-workspace title)
 - `src-tauri/templates/minutes-base.docx` (the base every generated minutes template is made from; `scripts/make_minutes_base.py`)
 - `src-tauri/src/recorder/{session,mic,system_tap,mixer,saver}.rs`, `src-tauri/src/modules/meetings/{transcribe,summarise,email}.rs`
 - `src-tauri/src/modules/*.rs`, `src-tauri/src/commands/*.rs`
-- `src/kernel/{shell,theme,glass,dossier,bridge}/`, `src/modules/{meetings,tenant-setup,recorder,models,workspace-settings}/`, `src/styles/{base,tokens}.css`
+- `src/kernel/{shell,theme,glass,dossier,bridge}/`, `src/modules/{meetings,live,tasks,tenant-setup,recorder,models,workspace-settings}/`, `src/styles/{base,tokens}.css`
 - `brands/<slug>/tokens.json` starter packs; `schemas/` dossier schemas

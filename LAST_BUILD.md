@@ -1,4 +1,44 @@
-# Last Build — release pipeline on GitHub (no app changes) · release 0.7.4
+# Last Build — Live: you and the call apart, how clearly each line was heard, both ways, quick translation · task priority · 0.7.5 (local only — not pushed, not released)
+_2026-10-26_
+
+## What changed
+- **Settings → Models**: one row per model — name, size, status — with its one action and a ⋯ menu (Update, Remove) on the right; rows line up whether or not they have an action. The Whisper rows the same.
+- **All people**: a red ⊖ (out of the attendees) and a green ⊕ (into them) at the start of each row — Apple's list-editing controls; one click, focus stays with the person. Name and chips on the first line, the role under it.
+- **Task priority**, like Reminders: ! / !! / !!! from the chip left of the due date (High, Medium, Low, None). Today and No date list the highest first; marks and dates line up in columns.
+- **Status chips**: Transcribing and Summarising are yellow (Majoris yellow-100 / yellow-800). Warnings in light mode are a true yellow now too (the recorder banner, the start sheet's notice).
+- **Live — start sheet**: Keep (Save as a meeting | Quick translation), Languages (Tiếng Việt → English | English → Tiếng Việt | Both ways), Format (Discussion | One presenter), remembered on this Mac.
+- **Discussion**: your microphone and the call are transcribed apart, so two people talking at once become two clean lines; **You** / **Them** at each change of speaker. When your microphone only caught the call through the speakers, that copy is dropped (from 3 in a minute the page asks for headphones). Lines read in speaking order.
+- **One presenter**: longer lines, read as paragraphs.
+- **How clearly**: a line Whisper wasn't sure of is translated literally and marked "May be inaccurate"; one it couldn't make out (several voices, a weak signal) is marked **Unclear** and not translated — instead of a confident wrong translation.
+- **Both ways**: each line's language is found as it's spoken (a VI / EN tag) and translated into the other.
+- **Quick translation**: nothing is saved — no meeting, no recording, no summary. After Stop the lines stay on the Live page, with **Copy all** and **New session**, until you start another recording or quit — also when you stopped it from another page.
+- Saved live meetings keep the labels and marks; the summary and the task finder know which lines were yours.
+- **Translation fixes**: weekdays and ordinals are set from what was said ("thứ sáu" came out "Saturday", "Friday" came out "thứ Năm", "Thứ hai là…" came out "First is…"); English → Vietnamese no longer starts ordinary lines with "Vâng," or "Đúng rồi.".
+- **Keeping up** (found in the running app): the speech detector runs on one thread (5× cheaper — on 8 threads it fell behind and the live text skipped 27 s in the first minute; file imports gain too), and a finished line no longer waits for its translation until people pause.
+- New migration 0010 (additive: task priority; who spoke / how clearly / which language per line), reviewed SAFE.
+- Reviews: each part had a correctness and a rules/UI review plus a fix pass; a final seven-lens review with adversarial verification confirmed 16 findings — 4 serious: your one-word answers dropped as "overheard", an answer saved before its question, days paired by position, English heard as Vietnamese and "translated" into English — all fixed; the architecture review of the last fixes found nothing. 119 Rust tests; clippy, tsc and the checks clean.
+- **Seen in the running app** (dev build on your data, light and dark; your 13 s Vietnamese clip as the call and an English clip as your microphone): a quick session both ways — labels, VI / EN tags, translations both directions ("Friday" → "thứ Sáu"), then Stop → read-only with Copy all and New session; a saved session → the meeting page with the yellow **Summarising** chip, the summary (it credits your English lines to you) and two tasks from your lines (due Fri 30 Oct and 6 Nov); All people with ⊖; Tasks; Settings → Models. Once warm, lines appeared 2–6 s after each pause (Whisper 1.5–2.5 s, translation 1–2 s); the first line of a session takes about 10 s (the models warming up). Copy all was moved to the app's clipboard (like Copy as email) after the check: the browser's clipboard isn't there in every build. The test meeting and its two tasks were deleted afterwards.
+
+## Not released
+- Branch `v0.7.5` on this Mac only — nothing pushed, no tag. The app's version reads 0.7.5.
+- **Your installed New Dawn (0.7.3) can't open VIFC right now**: the checks above ran migration 0010 on it, and an app that doesn't know a migration refuses the database. Either install 0.7.5 or undo 0010 on VIFC (lossless today: nothing uses the new columns yet; keep a backup).
+- To release later: push the branch, tag v0.7.5, run the Release workflow from the tag (or the local release script) — as for 0.7.4.
+
+## To think about (your call)
+1. **Thresholds**: "Unclear" below 0.50 and "May be inaccurate" below 0.70 (Whisper's word confidence) are first guesses; clear test lines scored 0.78–0.98. Real calls will show whether they're too strict.
+2. **You / Them**: everyone on the call is "Them" — telling them apart needs speaker recognition (deferred). In a hybrid room, everyone beside you is "You".
+3. **Memory**: Ollama runs Qwen through MLX here; the 4B model grows from ~4 GB to 6–9 GB over a long session. With Whisper large-v3 beside it and your usual apps open, the Mac swapped 5–6 GB and lines slowed down. **Whisper large-v3-turbo** (Settings → Models, 1.5 GB) would make live lighter and faster.
+4. **Quick translation lines** stay in memory until the next recording or quit — or should Stop clear them?
+5. **Stop takes up to ~30 s in a busy session** ("Finishing…"): it transcribes and translates what was said before Stop. Shorter would lose the last lines.
+6. **Weekdays in the summary**: the summary model read "Thứ hai là mình sẽ dựng…" as "on Monday" where the live translation said "Second". The weekday fix covers live translation only.
+
+## Manual steps
+1. Discussion on a call: wear headphones (otherwise your microphone hears the call; the page tells you).
+2. Optional: download **Whisper large-v3-turbo** in Settings → Models for faster live lines.
+
+---
+
+# Release pipeline on GitHub (no app changes) · release 0.7.4
 _2026-10-26_
 
 ## What changed

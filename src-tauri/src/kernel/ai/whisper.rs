@@ -572,10 +572,12 @@ fn threads() -> i32 {
 }
 
 /// The bundled Silero VAD, on the CPU. Batch transcription loads one per job; a live session keeps
-/// one for the whole session.
+/// one for the whole session. One thread: its steps are tiny (one 32 ms frame each), so more threads
+/// only wait for each other — measured on an M1 Pro, 10 s of audio takes 20 ms on 1 thread, 114 ms
+/// on 8, and live runs it on every window for each voice while Whisper and Qwen use the cores.
 pub(in crate::kernel::ai) fn vad_context(vad_model: &Path) -> Result<WhisperVadContext> {
     let mut ctx_params = WhisperVadContextParams::new();
-    ctx_params.set_n_threads(threads());
+    ctx_params.set_n_threads(1);
     let path = vad_model.to_str().context("VAD model path is not UTF-8")?;
     WhisperVadContext::new(path, ctx_params).context("loading the VAD model")
 }
@@ -679,6 +681,7 @@ fn collapse_repeats(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
     use std::path::PathBuf;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;

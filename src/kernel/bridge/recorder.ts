@@ -121,6 +121,11 @@ export function useLiveLines(running: boolean) {
   return useQuery({ queryKey: LIVE_LINES_KEY, queryFn: () => unwrap(commands.liveLines()), refetchInterval: running ? 1000 : false });
 }
 
+/** Copy all: the quick translation's text on the clipboard. */
+export function useCopyLiveText() {
+  return useMutation({ mutationFn: (text: string) => unwrap(commands.copyLiveText(text)) });
+}
+
 export function useMicrophonePermission() {
   return useQuery({ queryKey: MIC_KEY, queryFn: () => unwrap(commands.microphonePermission()) });
 }

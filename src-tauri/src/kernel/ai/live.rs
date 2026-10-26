@@ -62,6 +62,9 @@ const FAST_MODEL: &str = "qwen3.5:4b";
 const LIVE_CTX: u32 = 8_192;
 /// One translation may take this long (the first one loads the model) before it's given up.
 const TRANSLATE_TIMEOUT: Duration = Duration::from_secs(30);
+/// A finished line waits at most this long for its translation while Whisper keeps up (see
+/// `translate_first`).
+const TRANSLATION_WAIT: Duration = Duration::from_secs(6);
 /// Translation failures in a row before the session goes on untranslated.
 const MAX_FAILURES: u32 = 3;
 /// Whisper failures in a row before live gives up (Stop then transcribes the batch way).
@@ -854,8 +857,11 @@ async fn run_loop(
         }
         let text = p.text.as_ref().ok().filter(|_| off.is_none());
         let can_translate = text.is_some() && next < lines.len();
-        // Transcription first; wait for speech only when there's nothing to translate.
-        let utterance = if ended.is_some() {
+        // Transcription first (unless a line has waited long for its translation); wait for speech
+        // only when there's nothing to translate.
+        let utterance = if ended.is_some()
+            || (can_translate && translate_first(lines[next].closed.elapsed(), rx.len()))
+        {
             None
         } else if can_translate {
             match rx.try_recv() {
@@ -1201,6 +1207,15 @@ struct Utterance {
     samples: Vec<f32>,
     closed: Instant,
     speaker: Option<Speaker>,
+}
+
+/// Whether the next line's translation goes before the next utterance: transcription comes first
+/// (a backlog of utterances ends in skipped audio), but in steady talk there's always another
+/// utterance waiting, so a finished line would wait for its translation until the talk pauses. It
+/// goes first once it has waited `TRANSLATION_WAIT`, while fewer than half the utterances the
+/// segmenter may queue are waiting — never when Whisper is that far behind.
+fn translate_first(waited: Duration, waiting: usize) -> bool {
+    waited >= TRANSLATION_WAIT && waiting < UTTERANCE_CAP / 2
 }
 
 /// The segmenter thread: Silero VAD over each stream's open buffer on every window; utterances go
@@ -1613,6 +1628,18 @@ mod tests {
         runs.iter()
             .flat_map(|&(v, ms)| std::iter::repeat_n(v, ms * SAMPLE_RATE / 1000))
             .collect()
+    }
+
+    #[test]
+    fn a_waiting_translation_goes_first_unless_whisper_is_behind() {
+        let (soon, long) = (Duration::from_secs(2), TRANSLATION_WAIT);
+        assert!(!translate_first(soon, 0), "transcription first");
+        assert!(translate_first(long, 0));
+        assert!(translate_first(long, UTTERANCE_CAP / 2 - 1));
+        assert!(
+            !translate_first(long, UTTERANCE_CAP / 2),
+            "Whisper is behind"
+        );
     }
 
     #[test]

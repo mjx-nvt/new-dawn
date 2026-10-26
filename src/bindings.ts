@@ -184,6 +184,12 @@ export const commands = {
 	 *  next recording starts or the app quits.
 	 */
 	liveLines: () => typedError<TranscriptSegment_Serialize[], AppError>(__TAURI_INVOKE("live_lines")),
+	/**
+	 *  Puts a quick translation's lines on the clipboard as plain text (Copy all), through the
+	 *  clipboard plugin like the summary's email: the webview's own clipboard isn't there in every
+	 *  build (the app's pages are served from its own scheme).
+	 */
+	copyLiveText: (text: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_live_text", { text })),
 	/**  The current or last quick translation (None once another recording has started). */
 	lastQuick: () => typedError<QuickSession_Serialize | null, AppError>(__TAURI_INVOKE("last_quick")),
 	microphonePermission: () => typedError<PermissionState, AppError>(__TAURI_INVOKE("microphone_permission")),

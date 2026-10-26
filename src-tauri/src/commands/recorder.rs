@@ -1,4 +1,5 @@
 use tauri::{AppHandle, State};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::error::AppError;
 use crate::kernel::ai::live::{LiveDirection, LiveLines, QuickSession};
@@ -55,6 +56,18 @@ pub async fn start_recording(
 #[specta::specta]
 pub fn live_lines(lines: State<'_, LiveLines>) -> Result<Vec<TranscriptSegment>, AppError> {
     Ok(lines.get())
+}
+
+/// Puts a quick translation's lines on the clipboard as plain text (Copy all), through the
+/// clipboard plugin like the summary's email: the webview's own clipboard isn't there in every
+/// build (the app's pages are served from its own scheme).
+#[tauri::command]
+#[specta::specta]
+pub fn copy_live_text(app: AppHandle, text: String) -> Result<(), AppError> {
+    app.clipboard()
+        .write_text(text)
+        .map_err(anyhow::Error::from)?;
+    Ok(())
 }
 
 /// The current or last quick translation (None once another recording has started).

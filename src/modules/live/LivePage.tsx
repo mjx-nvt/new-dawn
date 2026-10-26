@@ -1,7 +1,7 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useMeeting } from "../../kernel/bridge/meetings";
-import { useLastQuick, useLiveLines, useRecorderStatus, type LiveStatus } from "../../kernel/bridge/recorder";
+import { useCopyLiveText, useLastQuick, useLiveLines, useRecorderStatus, type LiveStatus } from "../../kernel/bridge/recorder";
 import { useCurrentWorkspace, useSetCurrentWorkspace, useWorkspaces } from "../../kernel/bridge/workspaces";
 import { liveStatusWord } from "../meetings/format";
 import TranscriptView, { LiveLines, TranscriptGhost, TranscriptHeads, type TextSize } from "../meetings/TranscriptView";
@@ -185,6 +185,7 @@ function LiveSession({
 /** A quick translation's lines, from memory; once it has ended, Copy all and New session. */
 function QuickLines({ live, running, textSize, onNewSession }: { live: LiveStatus; running: boolean; textSize: TextSize; onNewSession?: () => void }) {
   const lines = useLiveLines(running);
+  const copy = useCopyLiveText();
   const all = lines.data ?? [];
   const [copied, setCopied] = useState<boolean | null>(null); // false: copying failed
   useEffect(() => {
@@ -194,14 +195,7 @@ function QuickLines({ live, running, textSize, onNewSession }: { live: LiveStatu
   }, [copied]);
 
   // Nothing else keeps these lines, so a failed copy says so.
-  async function copyAll() {
-    try {
-      await navigator.clipboard.writeText(copyText(all, live.format));
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
+  const copyAll = () => copy.mutate(copyText(all, live.format), { onSuccess: () => setCopied(true), onError: () => setCopied(false) });
 
   // After the lines, where the follow logic keeps the reader.
   return (
@@ -211,7 +205,7 @@ function QuickLines({ live, running, textSize, onNewSession }: { live: LiveStatu
       {!running && (
         <div className={styles.ended}>
           <div className={styles.actions}>
-            <button type="button" className="btn btnSecondary btnCompact" disabled={!all.length} onClick={() => void copyAll()}>
+            <button type="button" className="btn btnSecondary btnCompact" disabled={!all.length || copy.isPending} onClick={copyAll}>
               {copied ? "Copied" : "Copy all"}
             </button>
             <button type="button" className="btn btnRecord btnCompact" disabled={!onNewSession} onClick={onNewSession}>

@@ -188,6 +188,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::recorder::set_recording_paused,
             commands::recorder::stop_recording,
             commands::recorder::live_lines,
+            commands::recorder::copy_live_text,
             commands::recorder::last_quick,
             commands::recorder::microphone_permission,
             commands::recorder::request_microphone_permission,
