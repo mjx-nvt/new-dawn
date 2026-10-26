@@ -120,6 +120,14 @@
 }
 .done .priority { color: var(--ink-3); }
 
+/* The marks and the due chip line up down the list: the marks (or the ghost "!") in one fixed
+   slot, as wide as "!!!", and the due chip at the start of a slot "Tomorrow" fits. */
+.row .prioritySlot {
+  width: 36px;
+  padding: 0;
+}
+.dueSlot { min-width: 96px; }
+
 .dayField {
   width: auto;
   height: 28px;

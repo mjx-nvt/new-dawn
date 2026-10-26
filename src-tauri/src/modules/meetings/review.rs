@@ -476,8 +476,10 @@ pub async fn update_segment(
         bail!(AppError::not_found("No such transcript line"));
     };
     sqlx::query(
-        // A hand edit wins: the vocabulary's undo slot is cleared so Undo can't discard it.
-        "UPDATE transcript_segment SET text = ?, raw_text = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+        // A hand edit wins: the vocabulary's undo slot is cleared so Undo can't discard it, and an
+        // unclear live line is no longer unclear (an uncertain one keeps the marker on its translation).
+        "UPDATE transcript_segment SET text = ?, raw_text = NULL, clarity = NULLIF(clarity, 'unclear'), \
+         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE meeting_id = ? AND seq = ?",
     )
     .bind(text)

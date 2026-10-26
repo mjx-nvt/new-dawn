@@ -159,7 +159,8 @@ export default function MeetingPage() {
               Transcribe again?
             </p>
             <p className="fieldHint">
-              Lines you corrected are replaced — after a live session, so are its lines and their English. The summary stays until you re-run it.
+              Lines you corrected are replaced — after a live session, so are its lines, their translation and the You / Them labels. The summary stays until you
+              re-run it.
             </p>
           </div>
           <div className={styles.noticeActions}>

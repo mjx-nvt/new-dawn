@@ -16,7 +16,7 @@
 /* Focus lands on the page after ↓ Latest (the button goes away): no ring around all of it. */
 .session:focus { outline: none; }
 
-/* Live: title, the language pair and the status word; A−/A+ on the right. */
+/* Live: title, the languages, the format (and "Not saved") and the status word; A−/A+ on the right. */
 .header {
   display: flex;
   flex-wrap: wrap;
@@ -50,7 +50,22 @@
   padding-top: var(--space-5); /* level with the title */
 }
 
-.dropped { margin-top: var(--space-3); }
+/* Under the header: what the live text skipped; the microphone hearing the call. */
+.hint { margin-top: var(--space-3); }
+
+/* A quick translation that has ended: Copy all and New session, and that nothing is kept. */
+.ended {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
 
 /* Back to the newest line once the reader has scrolled up: pinned to the bottom of the panel,
    in a bar of no height, so showing it never moves the page (and the follow logic with it). */

@@ -754,6 +754,18 @@ mod tests {
                     .is_err(),
                 "a line number is used once"
             );
+            // A hand edit settles an unclear line; an uncertain one keeps its marked translation.
+            super::review::update_segment(&pool, "m1", 1, "Đồng ý với WiredScore nhé")
+                .await
+                .unwrap();
+            super::review::update_segment(&pool, "m1", 2, "Sounds good to me")
+                .await
+                .unwrap();
+            let lines = transcript(&pool, "m1").await.unwrap();
+            assert_eq!(
+                (lines[1].clarity, lines[2].clarity),
+                (Some(Clarity::Uncertain), None)
+            );
             // A batch pass writes no labels (Transcribe again removes them).
             let batch = Segment {
                 start_ms: 0,

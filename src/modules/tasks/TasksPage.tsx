@@ -230,7 +230,7 @@ function PriorityChip({ name, priority, onSet }: { name: string; priority: numbe
   return (
     <div className={level ? undefined : styles.reveal}>
       <MenuButton
-        className={level ? `btn btnGhost btnCompact ${styles.priority}` : "btn btnGhost btnCompact"}
+        className={level ? `btn btnGhost btnCompact ${styles.prioritySlot} ${styles.priority}` : `btn btnGhost btnCompact ${styles.prioritySlot}`}
         label={level ? `Priority ${level[1]}: change the priority of “${name}”` : `Add a priority to “${name}”`}
         items={[
           ...PRIORITIES.map(([value, label, marks]) => ({ label: `${label} ${marks}`, onSelect: () => onSet(value) })),
@@ -294,7 +294,7 @@ function DueChip({ name, due, late, onSet }: { name: string; due: string | null;
   }
   const label = due ? dueLabel(due) : "Add date";
   return (
-    <div ref={focusBack(back)} className={due ? undefined : styles.reveal}>
+    <div ref={focusBack(back)} className={due ? styles.dueSlot : `${styles.dueSlot} ${styles.reveal}`}>
       <MenuButton
         className={late ? `btn btnGhost btnCompact ${styles.late}` : "btn btnGhost btnCompact"}
         label={due ? `Due ${label}: change the date of “${name}”` : `Add date to “${name}”`}

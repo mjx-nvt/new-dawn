@@ -87,7 +87,7 @@
   --status-warning: #7D5C02;               /* yellow-800 */
   --status-negative: #DC2626;              /* red-600 */
   --status-positive-tint: rgba(4, 120, 87, 0.12);
-  --status-warning-tint: rgba(125, 92, 2, 0.12);
+  --status-warning-tint: #FEF9C3;          /* yellow-100, the Majoris badge pair: 12 % of yellow-800 reads grey */
   --status-negative-tint: rgba(220, 38, 38, 0.12);
 }
 

@@ -32,7 +32,8 @@ export default function RecordPill({ onStart }: { onStart: () => void }) {
   return (
     <div className={`${styles.pill} ${styles.live}`} role="group" aria-label="Recording">
       <span className={paused ? styles.dotPaused : `${styles.dot} ${styles.pulse}`} />
-      <span className={styles.clock}>{phase === "stopping" ? "Saving…" : formatClock(elapsed)}</span>
+      {/* A quick translation (no meeting) saves nothing: it only finishes its last lines. */}
+      <span className={styles.clock}>{phase === "stopping" ? (status?.meeting_id ? "Saving…" : "Finishing…") : formatClock(elapsed)}</span>
       <span className={styles.meters} aria-hidden>
         <span title="You" style={{ height: `${Math.max(12, meterHeight(level?.you ?? 0) * 100)}%` }} />
         <span title="Them" className={styles.them} style={{ height: `${Math.max(12, meterHeight(level?.them ?? 0) * 100)}%` }} />

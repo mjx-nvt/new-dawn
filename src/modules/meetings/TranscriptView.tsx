@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { audioUrl, useRestoreSegment, useTranscript, useUpdateSegment, useWaveform, type Meeting, type TranscriptSegment } from "../../kernel/bridge/meetings";
-import { useRecorderStatus } from "../../kernel/bridge/recorder";
+import { useRecorderStatus, type LiveStatus } from "../../kernel/bridge/recorder";
 import { SparkleIcon } from "../../kernel/shell/icons";
-import { formatClock, LANGUAGE_LABEL, pendingEnglish } from "./format";
+import { columnTitles, directionOf, layoutLines, type LineLayout, type SpeakerLabel } from "../live/lines";
+import { formatClock, pendingEnglish } from "./format";
 import styles from "./TranscriptView.module.css";
 import WaveformPlayer, { SKIP_MS } from "./WaveformPlayer";
 
 /** The lines' size: the Live page's A−/A+ steps (--t-md, --t-lg, --t-xl). */
 export type TextSize = "md" | "lg" | "xl";
 
+/** Why an unclear line has no translation (a saved session's tooltip adds what fixes it). */
+const UNCLEAR = "Several voices or a weak signal — not translated.";
+
 /** Player + timestamped rows; clicking a time seeks the player, the playing row is highlighted,
  *  Edit corrects a line (the next summary run reads the correction). A live session's lines
- *  arrive as people speak, with their English beside them (D-041). */
+ *  arrive as people speak, with their translation beside them (D-041), and say who spoke and how
+ *  clearly they were heard (0.7.5). */
 export default function TranscriptView({ slug, meeting, startMs, textSize = "md" }: { slug: string; meeting: Meeting; startMs?: number; textSize?: TextSize }) {
   const { data: recorder } = useRecorderStatus();
   const live = recorder?.meeting_id === meeting.id ? recorder.live : null;
@@ -31,8 +36,12 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
   const waveform = useWaveform(slug, meeting.id, !!meeting.audio_path && !recording);
   const segments = transcript.data ?? [];
   const locked = meeting.status === "transcribing" || recording;
-  // Tiếng Việt | English: during a live session and after it.
+  // Said | translation: during a live session and after it, the way its language says.
   const english = !!live || segments.some((s) => s.translation);
+  const direction = directionOf(meeting.language);
+  // A presenter's paragraphs are a live session's: batch lines stay one row each, as before.
+  const layout = layoutLines(segments, english ? meeting.format : "discussion");
+  const unclear = `${UNCLEAR} Transcribe again${live ? " after Stop" : ""} for a careful pass.`;
   const lastTranslated = segments.reduce((last, s) => (s.translation ? s.seq : last), -1);
   const current = recording ? null : (segments.find((s) => nowMs >= s.start_ms && nowMs < s.end_ms) ?? null);
 
@@ -69,7 +78,7 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
   }
 
   return (
-    // Live: new lines and their English are read out as they arrive (the section is there before the first).
+    // Live: new lines and their translation are read out as they arrive (the section is there before the first).
     <section className="section" aria-live={live ? "polite" : undefined}>
       {meeting.audio_path && !recording && (
         <>
@@ -126,40 +135,32 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
         </p>
       )}
       {english && (
-        <TranscriptHeads source={LANGUAGE_LABEL[meeting.language]}>
-          {live?.translation_off_reason ? (
-            <span className="fieldHint">Off — {live.translation_off_reason}</span>
-          ) : (
-            <span className="fieldHint aiMark">
-              <SparkleIcon /> Translated on this Mac{live?.model ? ` by ${live.model}` : ""}
-            </span>
-          )}
+        <TranscriptHeads columns={columnTitles(direction)}>
+          <TranslationNote live={live} />
         </TranscriptHeads>
       )}
       {segments.length ? (
         <ol className={textSize === "md" ? styles.rows : `${styles.rows} ${styles[textSize]}`} ref={list}>
-          {segments.map((s) => {
+          {segments.map((s, i) => {
             return (
-              <li
-                key={s.seq}
-                data-start={s.start_ms}
-                className={[styles.row, english && styles.bilingual, current?.seq === s.seq && styles.playing].filter(Boolean).join(" ")}
-              >
-                {recording ? (
-                  <span className={styles.time}>{formatClock(s.start_ms)}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.time}
-                    aria-label={`Play from ${formatClock(s.start_ms)}`}
-                    onClick={(e) => {
-                      seek(s.start_ms);
-                      e.currentTarget.blur(); // so Space pauses instead of replaying this line
-                    }}
-                  >
-                    {formatClock(s.start_ms)}
-                  </button>
-                )}
+              <li key={s.seq} data-start={s.start_ms} className={rowClass(layout[i], english, current?.seq === s.seq)}>
+                <Gutter label={layout[i].label}>
+                  {recording ? (
+                    <span className={styles.time}>{formatClock(s.start_ms)}</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={styles.time}
+                      aria-label={`Play from ${formatClock(s.start_ms)}`}
+                      onClick={(e) => {
+                        seek(s.start_ms);
+                        e.currentTarget.blur(); // so Space pauses instead of replaying this line
+                      }}
+                    >
+                      {formatClock(s.start_ms)}
+                    </button>
+                  )}
+                </Gutter>
                 {editing === s.seq && !locked ? (
                   <SegmentEditor
                     segment={s}
@@ -169,7 +170,7 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
                   />
                 ) : (
                   <div className={styles.line}>
-                    <p className={styles.text}>{s.text}</p>
+                    <Said segment={s} both={direction === "both"} unclear={unclear} />
                     {s.raw_text && (
                       <span className={styles.corrected}>
                         <span className="chip chipPrimary" title={`Whisper heard: ${s.raw_text}`}>
@@ -194,12 +195,7 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
                     </button>
                   </div>
                 )}
-                {english &&
-                  (s.translation ? (
-                    <p className={styles.text}>{s.translation}</p>
-                  ) : (
-                    <p className={`ghostText ${styles.text}`}>{pendingEnglish(s.seq, lastTranslated, live)}</p>
-                  ))}
+                {english && <Translation segment={s} pending={pendingEnglish(s.seq, lastTranslated, live)} />}
               </li>
             );
           })}
@@ -211,14 +207,107 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
   );
 }
 
-/** Column heads of a two-language transcript: the spoken language | English, with a note. */
-export function TranscriptHeads({ source, children }: { source: string; children?: ReactNode }) {
+/** A quick translation's lines: nothing is saved, so no player and no editing. `live` is its
+ *  status — the last one seen once it has ended (`running` false). */
+export function LiveLines({ lines, live, running, textSize }: { lines: TranscriptSegment[]; live: LiveStatus; running: boolean; textSize: TextSize }) {
+  const layout = layoutLines(lines, live.format);
+  const lastTranslated = lines.reduce((last, s) => (s.translation ? s.seq : last), -1);
+  return (
+    <section className="section" aria-live={running ? "polite" : undefined}>
+      <TranscriptHeads columns={columnTitles(live.direction)}>
+        <TranslationNote live={live} />
+      </TranscriptHeads>
+      {lines.length ? (
+        <ol className={textSize === "md" ? styles.rows : `${styles.rows} ${styles[textSize]}`}>
+          {lines.map((s, i) => (
+            <li key={s.seq} className={rowClass(layout[i], true)}>
+              <Gutter label={layout[i].label}>
+                <span className={styles.time}>{formatClock(s.start_ms)}</span>
+              </Gutter>
+              <div className={styles.line}>
+                <Said segment={s} both={live.direction === "both"} unclear={UNCLEAR} />
+              </div>
+              {/* Ended: a missing translation reads "Not translated" — unless translation was off (the head says why). */}
+              <Translation segment={s} pending={pendingEnglish(s.seq, lastTranslated, running || live.translation_off_reason ? live : null)} />
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <TranscriptGhost english />
+      )}
+    </section>
+  );
+}
+
+function rowClass(layout: LineLayout, bilingual: boolean, playing = false): string {
+  return [styles.row, bilingual && styles.bilingual, playing && styles.playing, layout.continues && styles.continued].filter(Boolean).join(" ");
+}
+
+/** The time, and who starts speaking there: a discussion's You | Them, at each change. */
+function Gutter({ label, children }: { label: SpeakerLabel | null; children: ReactNode }) {
+  return (
+    <div className={styles.gutter}>
+      {children}
+      {label && <span className={label === "Them" ? "chip chipPrimary" : "chip"}>{label}</span>}
+    </div>
+  );
+}
+
+/** What was said: the language it was heard in (both ways), the text, and "Unclear" — dotted, not
+ *  translated — when Whisper couldn't make it out. */
+function Said({ segment: s, both, unclear }: { segment: TranscriptSegment; both: boolean; unclear: string }) {
+  const isUnclear = s.clarity === "unclear";
+  return (
+    <>
+      {both && s.lang && (
+        <span className={styles.lang} title={s.lang === "vi" ? "Heard in Tiếng Việt" : "Heard in English"}>
+          {s.lang.toUpperCase()}
+        </span>
+      )}
+      <p className={isUnclear ? `${styles.text} ${styles.unclear}` : styles.text}>{s.text}</p>
+      {isUnclear && (
+        <span className="chip" title={unclear}>
+          Unclear
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The translation cell: none for an unclear line, muted and marked when Whisper wasn't sure of
+ *  the line, else the translation or what's still to come (`pending`). */
+function Translation({ segment: s, pending }: { segment: TranscriptSegment; pending: string | null }) {
+  if (s.clarity === "unclear") return <p className={`ghostText ${styles.text}`}>Not translated (unclear)</p>;
+  if (!s.translation) return <p className={`ghostText ${styles.text}`}>{pending}</p>;
+  if (s.clarity !== "uncertain") return <p className={styles.text}>{s.translation}</p>;
+  return (
+    <p className={`${styles.text} ${styles.uncertain}`}>
+      {s.translation}
+      <span className={styles.marker} title="Some words were hard to make out — the translation may be off.">
+        May be inaccurate
+      </span>
+    </p>
+  );
+}
+
+/** The translation column's note: who translated, or why there's no translation. */
+function TranslationNote({ live }: { live: LiveStatus | null }) {
+  if (live?.translation_off_reason) return <span className="fieldHint">Off — {live.translation_off_reason}</span>;
+  return (
+    <span className="fieldHint aiMark">
+      <SparkleIcon /> Translated on this Mac{live?.model ? ` by ${live.model}` : ""}
+    </span>
+  );
+}
+
+/** Column heads of a two-language transcript: what was said | its translation, with a note. */
+export function TranscriptHeads({ columns: [said, translation], children }: { columns: [string, string]; children?: ReactNode }) {
   return (
     <div className={styles.heads}>
       <span />
-      <span className="fieldLabel">{source}</span>
+      <span className="fieldLabel">{said}</span>
       <span className={styles.headNote}>
-        <span className="fieldLabel">English</span>
+        <span className="fieldLabel">{translation}</span>
         {children}
       </span>
     </div>

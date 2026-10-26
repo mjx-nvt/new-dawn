@@ -3,6 +3,11 @@
   color: var(--status-positive);
 }
 
+.pending {
+  background: var(--status-warning-tint);
+  color: var(--status-warning);
+}
+
 .negative {
   background: var(--status-negative-tint);
   color: var(--status-negative);

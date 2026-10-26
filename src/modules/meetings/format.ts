@@ -41,6 +41,9 @@ export const STAGE_LABEL: Record<Stage, string> = {
   saving: "Saving",
 };
 
+/** What a live session still writes with translation off. */
+const UNTRANSLATED: Record<LiveStatus["direction"], string> = { vi_en: "Vietnamese only", en_vi: "English only", both: "Transcript only" };
+
 /** A live session's one status word (D-041). Translation off shows only while waiting for speech. */
 export function liveStatusWord(live: LiveStatus, paused: boolean): string {
   if (paused) return "Paused";
@@ -53,11 +56,11 @@ export function liveStatusWord(live: LiveStatus, paused: boolean): string {
     case "translating":
       return "Translating";
     case "ready":
-      return `Vietnamese only — ${live.translation_off_reason ?? "no text model"}`;
+      return `${UNTRANSLATED[live.direction]} — ${live.translation_off_reason ?? "no text model"}`;
   }
 }
 
-/** The English cell of a line without a translation. Lines are translated in order, so during a
+/** The translation cell of a line without one. Lines are translated in order, so during a
  *  live session a line before the last translated one was skipped; with translation off the
  *  column says why once, in its head (null = leave the cell empty). */
 export function pendingEnglish(seq: number, lastTranslated: number, live: LiveStatus | null): string | null {

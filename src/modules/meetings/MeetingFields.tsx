@@ -12,6 +12,8 @@ interface Props {
   onTypeChange: (typeId: string) => void;
   language: Language;
   onLanguageChange: (language: Language) => void;
+  /** False hides the meeting type: a quick translation makes no meeting. */
+  withType?: boolean;
 }
 
 /** Workspace · meeting type · language, shared by Import audio and New recording.
@@ -55,32 +57,45 @@ export default function MeetingFields(props: Props) {
               ))}
           </select>
         </label>
-        <label className="field">
-          <span className="fieldLabel">Meeting type</span>
-          <select
-            className="input"
-            value={props.typeId}
-            onChange={(e) => {
-              props.onTypeChange(e.target.value);
-              const type = types.data?.find((t) => t.id === e.target.value);
-              if (type) props.onLanguageChange(type.language);
-            }}
-          >
-            <option value="">None</option>
-            {types.data?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {props.withType !== false && (
+          <label className="field">
+            <span className="fieldLabel">Meeting type</span>
+            <select
+              className="input"
+              value={props.typeId}
+              onChange={(e) => {
+                props.onTypeChange(e.target.value);
+                const type = types.data?.find((t) => t.id === e.target.value);
+                if (type) props.onLanguageChange(type.language);
+              }}
+            >
+              <option value="">None</option>
+              {types.data?.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
     </>
   );
 }
 
-/** Discussion, or one main presenter — with their name when the recording may never say it (D-038). */
-export function FormatField({ presentation, presenter, onChange }: { presentation: boolean; presenter: string; onChange: (presentation: boolean, presenter: string) => void }) {
+/** Discussion, or one main presenter — with their name when the recording may never say it (D-038).
+ *  `hint`: what the choice does (the live sheet's). */
+export function FormatField({
+  presentation,
+  presenter,
+  onChange,
+  hint,
+}: {
+  presentation: boolean;
+  presenter: string;
+  onChange: (presentation: boolean, presenter: string) => void;
+  hint?: string;
+}) {
   const id = useId();
   return (
     <div className="field">
@@ -104,6 +119,7 @@ export function FormatField({ presentation, presenter, onChange }: { presentatio
           onChange={(e) => onChange(true, e.target.value)}
         />
       )}
+      {hint && <p className="fieldHint">{hint}</p>}
     </div>
   );
 }
