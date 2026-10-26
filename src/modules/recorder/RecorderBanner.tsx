@@ -7,6 +7,8 @@ export default function RecorderBanner() {
   const { data: status } = useRecorderStatus();
   const live = status?.phase === "recording" || status?.phase === "paused";
   const problem = live && status.system_audio !== "ok" ? status.system_audio : null;
+  // No meeting: a quick translation, which records nothing.
+  const quick = !status?.meeting_id;
 
   return (
     <div role={problem === "silent" ? "alert" : "status"}>
@@ -14,8 +16,8 @@ export default function RecorderBanner() {
         <div className={problem === "silent" ? `${styles.banner} ${styles.warning}` : styles.banner}>
           <p>
             {problem === "silent"
-              ? "Can't hear the other side of the call. Allow New Dawn under System Audio Recording, then start a new recording."
-              : "Recording your microphone only — system audio isn't available on this Mac."}
+              ? `Can't hear the other side of the call. Allow New Dawn under System Audio Recording, then start a new ${quick ? "session" : "recording"}.`
+              : `${quick ? "Listening to" : "Recording"} your microphone only — system audio isn't available on this Mac.`}
           </p>
           {problem === "silent" && (
             <button type="button" className="btn btnSecondary btnCompact" onClick={() => openPrivacySettings(true)}>

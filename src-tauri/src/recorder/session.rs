@@ -24,7 +24,9 @@ use super::saver::{self, WavWriter};
 use super::{mic, system_tap};
 use crate::error::AppError;
 use crate::events::{RecorderLevel, RecorderStatusChanged, TranscriptionFinished};
-use crate::kernel::ai::live::{self, LiveDirection, LiveHandle, LiveMeeting, LiveStatus, Window};
+use crate::kernel::ai::live::{
+    self, LiveDirection, LiveHandle, LiveLines, LiveMeeting, LiveStatus, Window,
+};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::notify;
@@ -231,7 +233,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Option<Meet
     // Live (D-041): claim the AI before anything is created, so a busy AI refuses cleanly. It
     // writes into this meeting once windows arrive; a failed start below drops `live_tx`, which
     // ends the worker.
-    let (live_tx, live, language) = if request.live {
+    let (live_tx, live, language, quick) = if request.live {
         let (tx, rx) = mpsc::sync_channel(live::WINDOW_CAP);
         let meeting = LiveMeeting {
             slug: request.slug.clone(),
@@ -246,10 +248,11 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Option<Meet
                 .filter(|p| !p.is_empty()),
             direction: request.direction,
         };
+        let quick = meeting.quick();
         let handle = live::start(app, meeting, rx).await?;
-        (Some(tx), Some(handle), request.direction.language())
+        (Some(tx), Some(handle), request.direction.language(), quick)
     } else {
-        (None, None, request.language)
+        (None, None, request.language, None)
     };
     // The meeting and its recording's folder, when saved.
     let mut saved: Option<(Meeting, PathBuf)> = None;
@@ -313,6 +316,8 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Option<Meet
             return Err(err);
         }
     };
+    // Started: only now do the last quick translation and its lines go.
+    app.state::<LiveLines>().start(quick);
 
     let active = Active {
         slug: request.slug,
@@ -629,6 +634,7 @@ fn spawn_meter(app: AppHandle) {
                 && status.live.is_none()
                 && status.phase != RecorderPhase::Stopping
             {
+                app.state::<LiveLines>().failed();
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Err(err) = stop(&app).await {
@@ -646,6 +652,10 @@ fn spawn_meter(app: AppHandle) {
             let shown = (status.system_audio, status.live.clone());
             if last.as_ref() != Some(&shown) {
                 last = Some(shown);
+                // A quick translation's status stays with its lines, for after it has ended.
+                if let (None, Some(live)) = (&status.meeting_id, &status.live) {
+                    app.state::<LiveLines>().seen(live);
+                }
                 let _ = RecorderStatusChanged(status).emit(&app);
             }
         }

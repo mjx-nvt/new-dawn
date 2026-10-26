@@ -2,7 +2,7 @@
 // in src/modules/live/lines.ts: `node --experimental-strip-types scripts/check-live.ts` (no test
 // runner in the frontend).
 import assert from "node:assert/strict";
-import { columnTitles, copyText, DIRECTION_LABEL, directionOf, formatLabel, layoutLines, remembered } from "../src/modules/live/lines.ts";
+import { columnTitles, copyText, DIRECTION_LABEL, directionOf, formatLabel, lastTranslated, layoutLines, remembered } from "../src/modules/live/lines.ts";
 import { liveStatusWord, pendingEnglish } from "../src/modules/meetings/format.ts";
 
 const live = {
@@ -38,6 +38,16 @@ assert.equal(pendingEnglish(2, 3, live), "Not translated");
 assert.equal(pendingEnglish(5, 3, off), null);
 // After the session.
 assert.equal(pendingEnglish(5, 3, null), "Not translated");
+// Lines read by time, translated as they arrived: the owner's question (seq 3) waited for the
+// call's answer (seq 2) and reads before it, still on its way.
+const read = [
+  { seq: 0, translation: "Hello." },
+  { seq: 3, translation: null },
+  { seq: 2, translation: "Yes, Thursday." },
+];
+assert.equal(lastTranslated(read), 2);
+assert.equal(pendingEnglish(3, lastTranslated(read), live), "Translating…");
+assert.equal(lastTranslated([]), -1);
 
 // Which way: the chip, the column heads, and a saved meeting's direction from its language.
 assert.deepEqual(columnTitles("vi_en"), ["Tiếng Việt", "English"]);

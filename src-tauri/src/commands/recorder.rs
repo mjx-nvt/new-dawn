@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::error::AppError;
-use crate::kernel::ai::live::{LiveDirection, LiveLines};
+use crate::kernel::ai::live::{LiveDirection, LiveLines, QuickSession};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::permissions::{self, PermissionState};
 use crate::modules::meetings::{Meeting, TranscriptSegment};
@@ -49,12 +49,19 @@ pub async fn start_recording(
     .await?)
 }
 
-/// The current or last quick translation's lines, in memory only until the next live session
-/// starts or the app quits.
+/// The current or last quick translation's lines, in speaking order — in memory only until the
+/// next recording starts or the app quits.
 #[tauri::command]
 #[specta::specta]
 pub fn live_lines(lines: State<'_, LiveLines>) -> Result<Vec<TranscriptSegment>, AppError> {
     Ok(lines.get())
+}
+
+/// The current or last quick translation (None once another recording has started).
+#[tauri::command]
+#[specta::specta]
+pub fn last_quick(lines: State<'_, LiveLines>) -> Result<Option<QuickSession>, AppError> {
+    Ok(lines.quick())
 }
 
 #[tauri::command]

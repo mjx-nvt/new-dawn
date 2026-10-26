@@ -541,8 +541,10 @@ pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
+/// The lines in speaking order: a live discussion numbers them as they arrive, and the owner's
+/// line waits for the call's (the hold rule), so a reply can have the earlier number.
 pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<TranscriptSegment>> {
-    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text, translation, speaker, clarity, lang FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
+    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text, translation, speaker, clarity, lang FROM transcript_segment WHERE meeting_id = ? ORDER BY start_ms, seq")
         .bind(meeting_id)
         .fetch_all(pool)
         .await?)
@@ -766,6 +768,21 @@ mod tests {
                 (lines[1].clarity, lines[2].clarity),
                 (Some(Clarity::Uncertain), None)
             );
+            // The owner's question waited for the call's answer, so it came later (seq 3); it
+            // still reads first.
+            let question = TranscriptSegment {
+                start_ms: 5_000,
+                speaker: Some(Speaker::You),
+                ..line(3, "Anh gửi trước thứ sáu được không?")
+            };
+            append_segment(&pool, "m1", &question).await.unwrap();
+            let order: Vec<u32> = transcript(&pool, "m1")
+                .await
+                .unwrap()
+                .iter()
+                .map(|l| l.seq)
+                .collect();
+            assert_eq!(order, [0, 1, 3, 2]);
             // A batch pass writes no labels (Transcribe again removes them).
             let batch = Segment {
                 start_ms: 0,

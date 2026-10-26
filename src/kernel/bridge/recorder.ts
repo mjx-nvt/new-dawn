@@ -7,6 +7,7 @@ import {
   type LiveDirection,
   type LiveStatus_Serialize,
   type PermissionState,
+  type QuickSession_Serialize,
   type RecorderLevel,
   type RecorderStatus_Serialize,
   type SystemAudio,
@@ -15,6 +16,8 @@ import { unwrap } from "./unwrap";
 
 export type RecorderStatus = RecorderStatus_Serialize;
 export type LiveStatus = LiveStatus_Serialize;
+/** A quick translation: its workspace, its last status, and whether it stopped on its own. */
+export type QuickSession = QuickSession_Serialize;
 export type { PermissionState, SystemAudio };
 
 const STATUS_KEY = ["recorder-status"] as const;
@@ -22,34 +25,29 @@ const MIC_KEY = ["microphone-permission"] as const;
 const LIVE_LINES_KEY = ["live-lines"] as const;
 const LAST_QUICK_KEY = ["last-quick"] as const;
 
-/** A quick translation's workspace and its last status. */
-export interface QuickSession {
-  slug: string;
-  live: LiveStatus;
-}
-
 export function useRecorderStatus() {
   return useQuery({ queryKey: STATUS_KEY, queryFn: () => unwrap(commands.recorderStatus()) });
 }
 
-/** Keeps the recorder status query live from `RecorderStatusChanged`, and the last quick
- *  translation's status (`useLastQuick`) until a recording that saves starts. Mount once per window. */
+/** Keeps the recorder status query live from `RecorderStatusChanged`, and the last quick translation
+ *  (`useLastQuick`): its status while it runs, the recorder's copy once a session has ended or a
+ *  quick one has failed. Mount once per window. */
 export function useRecorderSync() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const unlisten = events.recorderStatusChanged.listen(({ payload }) => {
       queryClient.setQueryData(STATUS_KEY, payload);
-      if (payload.live?.quick && payload.workspace_slug) queryClient.setQueryData<QuickSession>(LAST_QUICK_KEY, { slug: payload.workspace_slug, live: payload.live });
-      else if (payload.meeting_id) queryClient.setQueryData(LAST_QUICK_KEY, null);
+      if (payload.live?.quick && payload.workspace_slug) queryClient.setQueryData<QuickSession>(LAST_QUICK_KEY, { slug: payload.workspace_slug, live: payload.live, failed: false });
+      else if (!payload.live && !payload.meeting_id) void queryClient.invalidateQueries({ queryKey: LAST_QUICK_KEY });
     });
     return () => void unlisten.then((stop) => stop());
   }, [queryClient]);
 }
 
-/** The last quick translation (written by `useRecorderSync`): once it has ended, wherever it was
- *  stopped, the Live page still shows its lines (they stay in memory) to read and copy. */
+/** The current or last quick translation, as the recorder keeps it with its lines: once it has
+ *  ended, wherever it was stopped — and after a reload — the Live page shows it to read and copy. */
 export function useLastQuick(): QuickSession | null {
-  return useQuery<QuickSession | null>({ queryKey: LAST_QUICK_KEY, queryFn: () => null, enabled: false, gcTime: Infinity }).data ?? null;
+  return useQuery({ queryKey: LAST_QUICK_KEY, queryFn: () => unwrap(commands.lastQuick()) }).data ?? null;
 }
 
 /** The 10 Hz meter (you / them / elapsed) while recording; null when idle. */
@@ -86,14 +84,15 @@ export function useStartRecording() {
   return useMutation({
     mutationFn: (input: StartRecordingInput) =>
       unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter, input.live, input.save ?? true, input.direction ?? "vi_en")),
-    // A live session clears the last quick translation's lines as it starts.
-    onSuccess: (_, input) => {
-      if (input.live) queryClient.setQueryData(LIVE_LINES_KEY, []);
+    // A recording clears the last quick translation and its lines as it starts.
+    onSuccess: () => {
+      queryClient.setQueryData(LIVE_LINES_KEY, []);
     },
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: MIC_KEY }),
         queryClient.invalidateQueries({ queryKey: ["meetings"] }),
+        queryClient.invalidateQueries({ queryKey: LAST_QUICK_KEY }),
       ]),
   });
 }

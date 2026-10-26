@@ -180,10 +180,12 @@ export const commands = {
 	 */
 	stopRecording: () => typedError<Meeting_Serialize | null, AppError>(__TAURI_INVOKE("stop_recording")),
 	/**
-	 *  The current or last quick translation's lines, in memory only until the next live session
-	 *  starts or the app quits.
+	 *  The current or last quick translation's lines, in speaking order — in memory only until the
+	 *  next recording starts or the app quits.
 	 */
 	liveLines: () => typedError<TranscriptSegment_Serialize[], AppError>(__TAURI_INVOKE("live_lines")),
+	/**  The current or last quick translation (None once another recording has started). */
+	lastQuick: () => typedError<QuickSession_Serialize | null, AppError>(__TAURI_INVOKE("last_quick")),
 	microphonePermission: () => typedError<PermissionState, AppError>(__TAURI_INVOKE("microphone_permission")),
 	requestMicrophonePermission: () => typedError<PermissionState, AppError>(__TAURI_INVOKE("request_microphone_permission")),
 	/**  Opens System Settings at Microphone or at Screen & System Audio Recording. */
@@ -675,8 +677,8 @@ export type LiveStatus_Deserialize = {
 	/**  The presenter's name, in a presentation. */
 	presenter?: string | null,
 	/**
-	 *  Microphone lines dropped because the call had just said the same words: the microphone
-	 *  hears the speakers ("use headphones").
+	 *  Microphone lines dropped in the last minute because the call had just said the same words:
+	 *  the microphone hears the speakers ("use headphones" — gone once they're on).
 	 */
 	overheard: number,
 };
@@ -702,8 +704,8 @@ export type LiveStatus_Serialize = {
 	/**  The presenter's name, in a presentation. */
 	presenter: string | null,
 	/**
-	 *  Microphone lines dropped because the call had just said the same words: the microphone
-	 *  hears the speakers ("use headphones").
+	 *  Microphone lines dropped in the last minute because the call had just said the same words:
+	 *  the microphone hears the speakers ("use headphones" — gone once they're on).
 	 */
 	overheard: number,
 };
@@ -1037,6 +1039,36 @@ export type ProfilePatch_Deserialize = {
 export type ProfilePatch_Serialize = {
 	name: string | null,
 	everyone_attends: boolean | null,
+};
+
+/**
+ *  The current or last quick translation, kept with its lines so the Live page can show it once
+ *  it has ended — after a reload of the window too.
+ */
+export type QuickSession = QuickSession_Serialize | QuickSession_Deserialize;
+
+/**
+ *  The current or last quick translation, kept with its lines so the Live page can show it once
+ *  it has ended — after a reload of the window too.
+ */
+export type QuickSession_Deserialize = {
+	slug: string,
+	/**  Its status as the recorder last sent it. */
+	live: LiveStatus_Deserialize,
+	/**  It stopped on its own: live transcription failed. */
+	failed: boolean,
+};
+
+/**
+ *  The current or last quick translation, kept with its lines so the Live page can show it once
+ *  it has ended — after a reload of the window too.
+ */
+export type QuickSession_Serialize = {
+	slug: string,
+	/**  Its status as the recorder last sent it. */
+	live: LiveStatus_Serialize,
+	/**  It stopped on its own: live transcription failed. */
+	failed: boolean,
 };
 
 export type Radius = Radius_Serialize | Radius_Deserialize;

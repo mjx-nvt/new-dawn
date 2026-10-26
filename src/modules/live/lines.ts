@@ -60,6 +60,13 @@ export function layoutLines(lines: Line[], format: MeetingFormat): LineLayout[] 
   });
 }
 
+/** The last line translated so far (-1 before the first). Lines are translated in the order they
+ *  arrived (`seq`), not always the order they're read in: an owner's line that waited for the
+ *  call's reply reads before it but comes after it. */
+export function lastTranslated(lines: { seq: number; translation?: string | null }[]): number {
+  return lines.reduce((last, line) => (line.translation ? Math.max(last, line.seq) : last), -1);
+}
+
 /** Copy all, as plain text: a block per line (per paragraph, for a presenter) — its time and who
  *  starts speaking, what was said, then the translation (left out when there is none at all). */
 export function copyText(lines: Line[], format: MeetingFormat): string {

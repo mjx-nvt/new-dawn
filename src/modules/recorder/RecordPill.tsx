@@ -29,8 +29,10 @@ export default function RecordPill({ onStart }: { onStart: () => void }) {
 
   const paused = phase === "paused";
   const elapsed = level?.elapsed_ms ?? status?.elapsed_ms ?? 0;
+  // A quick translation (no meeting) records nothing: its controls don't say "recording".
+  const what = status?.meeting_id ? " recording" : "";
   return (
-    <div className={`${styles.pill} ${styles.live}`} role="group" aria-label="Recording">
+    <div className={`${styles.pill} ${styles.live}`} role="group" aria-label={what ? "Recording" : "Quick translation"}>
       <span className={paused ? styles.dotPaused : `${styles.dot} ${styles.pulse}`} />
       {/* A quick translation (no meeting) saves nothing: it only finishes its last lines. */}
       <span className={styles.clock}>{phase === "stopping" ? (status?.meeting_id ? "Saving…" : "Finishing…") : formatClock(elapsed)}</span>
@@ -41,13 +43,13 @@ export default function RecordPill({ onStart }: { onStart: () => void }) {
       <button
         type="button"
         className={styles.icon}
-        aria-label={paused ? "Resume recording" : "Pause recording"}
+        aria-label={`${paused ? "Resume" : "Pause"}${what}`}
         disabled={phase === "stopping" || setPaused.isPending}
         onClick={() => setPaused.mutate(!paused)}
       >
         {paused ? "▶" : "❚❚"}
       </button>
-      <button type="button" className={styles.icon} aria-label="Stop recording" disabled={phase === "stopping" || stopping} onClick={stop}>
+      <button type="button" className={styles.icon} aria-label={`Stop${what}`} disabled={phase === "stopping" || stopping} onClick={stop}>
         ■
       </button>
       {error && (

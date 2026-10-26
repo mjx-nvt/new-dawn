@@ -16,7 +16,7 @@ const SIZES: TextSize[] = ["md", "lg", "xl"];
 const SIZE_KEY = "newdawn.liveTextSize";
 /** This close to the bottom still counts as reading the newest line. */
 const BOTTOM_SLACK = 32;
-/** Microphone lines dropped as copies of the call before the page asks for headphones. */
+/** Microphone lines dropped as copies of the call in the last minute: the page asks for headphones. */
 const OVERHEARD_HINT = 3;
 
 /** Live: what's said, written down and translated as people speak (D-041). A saved session is a
@@ -35,9 +35,9 @@ export default function LivePage() {
   const live = status?.live ?? null;
   const paused = status?.phase === "paused";
   // A quick translation that has ended (Stop from anywhere, or it stopped on its own) stays here,
-  // read-only, until another session starts.
+  // read-only, until another session starts — the recorder keeps it, so a reload doesn't lose it.
   const lastQuick = useLastQuick();
-  const quick = live?.quick && slug ? { slug, live } : lastQuick;
+  const quick = live?.quick && slug ? { slug, live, failed: false } : meetingId ? null : lastQuick;
   const nameOf = (slug: string) => workspaces?.find((w) => w.slug === slug)?.name ?? "";
   const openStart = () => void navigate({ to: "/live", search: { start: true } });
 
@@ -56,6 +56,7 @@ export default function LivePage() {
           slug={quick.slug}
           live={quick.live}
           running={!!live?.quick}
+          failed={quick.failed}
           paused={paused}
           eyebrow={nameOf(quick.slug)}
           onNewSession={idle && workspace ? openStart : undefined}
@@ -97,6 +98,7 @@ function LiveSession({
   meetingId,
   live,
   running,
+  failed = false,
   paused,
   eyebrow,
   onNewSession,
@@ -107,6 +109,8 @@ function LiveSession({
   live: LiveStatus;
   /** False once a quick translation has ended (its last status stays). */
   running: boolean;
+  /** The quick translation stopped on its own: live transcription failed. */
+  failed?: boolean;
   paused: boolean;
   eyebrow: string;
   /** An ended quick translation's New session; absent while something else records. */
@@ -133,7 +137,7 @@ function LiveSession({
             <span className="chip chipPrimary">{DIRECTION_LABEL[live.direction]}</span>
             <span className="chip">{formatLabel(live.format, live.presenter)}</span>
             {live.quick && <span className="chip">Not saved</span>}
-            <span>{running ? liveStatusWord(live, paused) : "Stopped"}</span>
+            <span>{running ? liveStatusWord(live, paused) : failed ? "Stopped on its own" : "Stopped"}</span>
           </div>
         </div>
         <div className={styles.size} role="group" aria-label="Text size">
@@ -155,6 +159,7 @@ function LiveSession({
         {running && live.format === "discussion" && live.overheard >= OVERHEARD_HINT && (
           <p className={`fieldHint ${styles.hint}`}>Your microphone hears the call — use headphones.</p>
         )}
+        {failed && <p className={`fieldHint ${styles.hint}`}>Stopped on its own — live transcription failed. The lines so far are below.</p>}
       </div>
       {!meetingId ? (
         <QuickLines live={live} running={running} textSize={size} onNewSession={onNewSession} />

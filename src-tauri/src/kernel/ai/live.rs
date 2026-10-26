@@ -29,6 +29,7 @@ use sqlx::SqlitePool;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 use tokio::sync::mpsc::{self, error::TryRecvError};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::error::AppError;
 use crate::kernel::ai::days;
@@ -77,6 +78,10 @@ const FINISH_TIMEOUT: Duration = Duration::from_secs(60);
 // ponytail: a starting value, not a measurement; log the mixer's system backlog per window (or
 // extend the `live_capture` test) and tune it.
 const LAG_MS: u32 = 600;
+/// The headphones hint counts the microphone lines dropped as overheard within this long.
+const OVERHEARD_RECENT: Duration = Duration::from_secs(60);
+/// From this many words, a microphone line is judged a copy of the call by its word pairs alone.
+const SHORT_LINE: usize = 4;
 /// Microphone lines waiting for the call; beyond this the oldest goes before the call settles.
 const HELD_CAP: usize = 16;
 /// The lines a quick translation keeps in memory (the oldest go first).
@@ -163,8 +168,8 @@ pub struct LiveStatus {
     pub format: MeetingFormat,
     /// The presenter's name, in a presentation.
     pub presenter: Option<String>,
-    /// Microphone lines dropped because the call had just said the same words: the microphone
-    /// hears the speakers ("use headphones").
+    /// Microphone lines dropped in the last minute because the call had just said the same words:
+    /// the microphone hears the speakers ("use headphones" — gone once they're on).
     pub overheard: u32,
 }
 
@@ -197,15 +202,69 @@ pub struct LiveMeeting {
     pub direction: LiveDirection,
 }
 
-/// The lines of the current or last quick translation: in memory only, kept after Stop until the
-/// next live session starts or the app quits. Each says its language (`lang`): there's no meeting.
+impl LiveMeeting {
+    /// A quick translation as it starts, to keep with its lines (`LiveLines::start`).
+    pub fn quick(&self) -> Option<QuickSession> {
+        self.id.is_none().then(|| QuickSession {
+            slug: self.slug.clone(),
+            live: LiveStatus::new(self),
+            failed: false,
+        })
+    }
+}
+
+/// The current or last quick translation, kept with its lines so the Live page can show it once
+/// it has ended — after a reload of the window too.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct QuickSession {
+    pub slug: String,
+    /// Its status as the recorder last sent it.
+    pub live: LiveStatus,
+    /// It stopped on its own: live transcription failed.
+    pub failed: bool,
+}
+
+/// The current or last quick translation and its lines: in memory only, kept after Stop until the
+/// next recording starts or the app quits.
 #[derive(Default)]
-pub struct LiveLines(Mutex<Vec<TranscriptSegment>>);
+pub struct LiveLines {
+    lines: Mutex<Vec<TranscriptSegment>>,
+    quick: Mutex<Option<QuickSession>>,
+}
 
 impl LiveLines {
+    /// In speaking order: a microphone line waits for the call (the hold rule), so the reply it
+    /// waited for can have the earlier number (`seq`).
     // ponytail: the whole list on every poll (≤ 2,000 lines); add a `since` cursor if it shows.
     pub fn get(&self) -> Vec<TranscriptSegment> {
-        lock(&self.0).clone()
+        let mut lines = lock(&self.lines).clone();
+        lines.sort_by_key(|l| (l.start_ms, l.seq));
+        lines
+    }
+
+    pub fn quick(&self) -> Option<QuickSession> {
+        lock(&self.quick).clone()
+    }
+
+    /// A recording has started (not before: a start that fails keeps the last one): the last
+    /// quick translation and its lines go; `quick` is this one, when it is one.
+    pub fn start(&self, quick: Option<QuickSession>) {
+        lock(&self.lines).clear();
+        *lock(&self.quick) = quick;
+    }
+
+    /// The quick translation's status, as the recorder sent it.
+    pub fn seen(&self, live: &LiveStatus) {
+        if let Some(quick) = lock(&self.quick).as_mut() {
+            quick.live.clone_from(live);
+        }
+    }
+
+    /// It stopped on its own: live transcription failed.
+    pub fn failed(&self) {
+        if let Some(quick) = lock(&self.quick).as_mut() {
+            quick.failed = true;
+        }
     }
 }
 
@@ -300,9 +359,6 @@ pub async fn start(
                 let _ = ready_tx.send(false);
                 return Ok(false);
             };
-            // A new session: the last quick translation's lines go before Start returns (a
-            // refused start keeps them).
-            lock(&app.state::<LiveLines>().0).clear();
             let _ = ready_tx.send(true);
             let speech = SpeechModel {
                 id: spec.id,
@@ -646,7 +702,7 @@ impl<'a> Sink<'a> {
         match self {
             Sink::Meeting(id) => meetings::append_segment(pool, id, line).await,
             Sink::Memory(memory) => {
-                let mut lines = lock(&memory.0);
+                let mut lines = lock(&memory.lines);
                 let excess = (lines.len() + 1).saturating_sub(QUICK_LINES);
                 lines.drain(..excess);
                 lines.push(line.clone());
@@ -659,7 +715,7 @@ impl<'a> Sink<'a> {
         match self {
             Sink::Meeting(id) => meetings::set_translation(pool, id, seq, translation).await,
             Sink::Memory(memory) => {
-                if let Some(line) = lock(&memory.0).iter_mut().rev().find(|l| l.seq == seq) {
+                if let Some(line) = lock(&memory.lines).iter_mut().rev().find(|l| l.seq == seq) {
                     line.translation = Some(translation.to_owned());
                 }
                 Ok(())
@@ -672,7 +728,7 @@ impl<'a> Sink<'a> {
         match self {
             Sink::Meeting(id) => meetings::label_owner_lines(pool, id).await,
             Sink::Memory(memory) => {
-                for line in lock(&memory.0).iter_mut() {
+                for line in lock(&memory.lines).iter_mut() {
                     line.speaker.get_or_insert(Speaker::You);
                 }
                 Ok(())
@@ -781,11 +837,15 @@ async fn run_loop(
     let mut languages: [Option<Lang>; 3] = [None; 3];
     // Once the call has a line, the microphone's lines are the owner's (in a room, anyone's).
     let mut labelled = false;
-    let set = |phase: LivePhase, behind: usize, off: &Option<String>| {
+    // When microphone lines were dropped as overheard; the status counts the recent ones.
+    let mut drops: Vec<Instant> = Vec::new();
+    let set = |phase: LivePhase, behind: usize, off: &Option<String>, drops: &mut Vec<Instant>| {
+        drops.retain(|at| at.elapsed() < OVERHEARD_RECENT);
         if let Some(status) = lock(p.status).as_mut() {
             status.phase = phase;
             status.behind = behind as u32;
             status.translation_off_reason.clone_from(off);
+            status.overheard = drops.len() as u32;
         }
     };
     loop {
@@ -812,7 +872,7 @@ async fn run_loop(
             } else {
                 LivePhase::Listening
             };
-            set(idle, rx.len(), &off);
+            set(idle, rx.len(), &off, &mut drops);
             let received = rx.recv().await;
             if received.is_none() {
                 ended = Some(Instant::now());
@@ -822,7 +882,7 @@ async fn run_loop(
 
         if let Some(utterance) = utterance {
             let utterance = utterance?; // the segmenter's errors come down the same channel
-            set(LivePhase::Transcribing, rx.len(), &off);
+            set(LivePhase::Transcribing, rx.len(), &off, &mut drops);
             let started = Instant::now();
             let voice = match utterance.speaker {
                 None => 0,
@@ -830,7 +890,7 @@ async fn run_loop(
                 Some(Speaker::Them) => 2,
             };
             let heard = tokio::task::block_in_place(|| {
-                hear(p, &decoder, &utterance.samples, &mut languages[voice])
+                hear(p, &decoder, &utterance.samples, languages[voice])
             });
             let took = started.elapsed();
             *whisper_time += took;
@@ -874,12 +934,13 @@ async fn run_loop(
                         "live: a microphone line ({:.1} s) repeated the call: dropped",
                         (utterance.end_ms - utterance.start_ms) as f32 / 1000.0
                     );
-                    if let Some(status) = lock(p.status).as_mut() {
-                        status.overheard += 1;
-                    }
+                    drops.push(Instant::now());
                     continue;
                 }
             }
+            // Kept: its voice speaks that language now. A line dropped above (an echo of the prompt
+            // or of the call) leaves the voice's language as it was.
+            languages[voice] = Some(lang);
             let speaker = match utterance.speaker {
                 Some(Speaker::Them) => {
                     if !labelled {
@@ -903,10 +964,9 @@ async fn run_loop(
                 translation: None,
                 speaker,
                 clarity,
-                // When lines can be in either language, and in a quick translation (no meeting to
-                // say); else it's the meeting's.
-                lang: (p.direction == LiveDirection::Both || p.sink.meeting_id().is_none())
-                    .then_some(lang),
+                // Every live line says it: a quick translation has no meeting to say it, and it
+                // marks a saved meeting's lines as live (a presenter's paragraphs).
+                lang: Some(lang),
             };
             p.sink.append(p.pool, &segment).await?;
             let line = Line {
@@ -960,7 +1020,7 @@ async fn run_loop(
                 _ => break, // out of time: the rest stays untranslated
             },
         };
-        set(LivePhase::Translating, rx.len(), &off);
+        set(LivePhase::Translating, rx.len(), &off, &mut drops);
         let line = &lines[next];
         // The last pairs in the line's own language, so they show the direction asked for.
         let history: Vec<(String, &str)> = lines[..next]
@@ -1031,14 +1091,15 @@ async fn run_loop(
 }
 
 /// Whisper on one utterance in its voice's `language` (None before the voice's first line: the
-/// session's first language). Both ways, a voice's first line and any line Whisper wasn't sure of
-/// get their language checked (an extra encoder pass); when the other language is likelier, the
-/// line is heard again in it, and that becomes the voice's language.
+/// session's first language), and the language it was heard in — the caller makes that the
+/// voice's once it keeps the line. Both ways, a voice's first line, any line Whisper wasn't sure
+/// of and any that doesn't look like its language get their language checked (an extra encoder
+/// pass); when the other language is likelier, the line is heard again in it.
 fn hear(
     p: &Pipeline<'_>,
     decoder: &LiveDecoder,
     samples: &[f32],
-    language: &mut Option<Lang>,
+    language: Option<Lang>,
 ) -> Result<Option<(Heard, Lang)>> {
     let current = language.unwrap_or(p.direction.first());
     let Some(heard) = p
@@ -1047,21 +1108,33 @@ fn hear(
     else {
         return Ok(None);
     };
-    let in_doubt = language.is_none() || clarity(&heard).is_some();
+    let in_doubt =
+        language.is_none() || clarity(&heard).is_some() || !looks_like(&heard.text, current);
     if p.direction != LiveDirection::Both || !in_doubt {
-        *language = Some(current);
         return Ok(Some((heard, current)));
     }
     let (vi, en) = p.engine.language_odds(p.model, samples)?;
     let likelier = likelier(current, vi, en);
     tracing::info!("live: language check, vi {vi:.2} / en {en:.2}: {likelier:?}");
-    *language = Some(likelier);
     if likelier == current {
         return Ok(Some((heard, current)));
     }
     Ok(p.engine
         .transcribe_utterance(p.model, decoder, samples, likelier.into())?
         .map(|h| (h, likelier)))
+}
+
+/// Whether Whisper's text reads as `lang`: Vietnamese shows its letters or tone marks in any line of
+/// three words or more, English none. Made to hear one language, Whisper can write clear speech
+/// in the other as it was said, sure of it ("I just finished sending…" heard as Vietnamese).
+fn looks_like(text: &str, lang: Lang) -> bool {
+    let marked = text
+        .nfd()
+        .any(|c| unicode_normalization::char::is_combining_mark(c) || matches!(c, 'đ' | 'Đ'));
+    match lang {
+        Lang::Vi => marked || text.split_whitespace().count() < 3,
+        Lang::En => !marked,
+    }
 }
 
 /// Both ways: Vietnamese or English, whichever the detector finds likelier; a tie keeps `current`.
@@ -1091,7 +1164,13 @@ fn clarity(heard: &Heard) -> Option<Clarity> {
 /// The microphone line is the call heard through the speakers: at least half its syllable pairs
 /// (its words, for a one-word line) are in call lines near it in time — the overlap widened by
 /// `LAG_MS` + 300 ms either side (r2 §1). Pairs, not single syllables: common ones (là, có,
-/// không) would make unrelated lines share a third of their words. `calls`: (start, end, text).
+/// không) would make unrelated lines share a third of their words. A line under `SHORT_LINE` words
+/// is measured only against call lines not much longer than it: a question holds its own answer
+/// ("có … không?" → "Không."), while a copy is longer than that (the microphone may cut a long
+/// call line in pieces). `calls`: (start, end, text).
+// ponytail: words and timing only — on speakers a 1–3-word piece of a long call line stays as a
+// "you" line, and a longer reply that repeats the call ("Dạ em gửi rồi") can go; correlate the
+// microphone's audio with the call's (an echo is a delayed copy) if either shows.
 fn overheard(start_ms: u32, end_ms: u32, said: &str, calls: &[(u32, u32, &str)]) -> bool {
     let (from, to) = (start_ms.saturating_sub(LAG_MS + 300), end_ms + LAG_MS + 300);
     let mine = people::words(said);
@@ -1106,7 +1185,9 @@ fn overheard(start_ms: u32, end_ms: u32, said: &str, calls: &[(u32, u32, &str)])
     let theirs: HashSet<String> = calls
         .iter()
         .filter(|(start, end, _)| *start <= to && *end >= from)
-        .flat_map(|(_, _, text)| grams(people::words(text)))
+        .map(|(_, _, text)| people::words(text))
+        .filter(|call| mine.len() >= SHORT_LINE || call.len() <= mine.len() * 2 + 1)
+        .flat_map(grams)
         .collect();
     let mine = grams(mine);
     !mine.is_empty() && mine.iter().filter(|g| theirs.contains(*g)).count() * 2 >= mine.len()
@@ -1647,6 +1728,26 @@ mod tests {
                 (11, Some(Speaker::Them), 3_200, 6_304),
             ]
         );
+        // A quick answer (2.5–5.0 s): the question waits for the open answer and goes out after
+        // it, numbered after it — transcripts read by time (`start_ms`), so it still reads first.
+        let answer = track(&[(0.0, 2_500), (0.5, 2_500), (0.0, 3_000)]);
+        let mut streams = Streams::new(MeetingFormat::Discussion);
+        let mut got = Vec::new();
+        for (i, window) in session_windows(&question, Some(&answer))
+            .into_iter()
+            .enumerate()
+        {
+            for line in streams.push(window, &mut vad).unwrap() {
+                got.push((i, line.speaker, line.start_ms, line.end_ms));
+            }
+        }
+        assert_eq!(
+            got,
+            [
+                (9, Some(Speaker::Them), 2_208, 5_312),
+                (9, Some(Speaker::You), 704, 2_304),
+            ]
+        );
 
         // A flush (a pause, Stop) lets a held line go at once.
         let mut streams = Streams::new(MeetingFormat::Discussion);
@@ -1685,6 +1786,21 @@ mod tests {
             "chúng ta sẽ ký hợp đồng với đối tác vào thứ 6 tuần này.",
             &calls
         ));
+        // …or a piece of them: the microphone's quieter copy of a long line, cut at its own pause.
+        let long = "Thứ hai là mình sẽ dựng được cái đường chuẩn. Cái đường chuẩn này dựa theo đường chuẩn này để hiệu chỉnh lại kết quả của suy âm kia. Và nếu kết quả";
+        assert!(overheard(
+            300,
+            3_400,
+            "Thứ hai là mình sẽ dựng được các điều chuẩn",
+            &[(0, 9_200, long)]
+        ));
+        // …or the first half of them.
+        assert!(overheard(
+            10_300,
+            12_300,
+            "Chúng ta sẽ ký hợp đồng với",
+            &calls
+        ));
         // The owner's own words over the call: kept, even sharing common syllables.
         assert!(!overheard(
             11_000,
@@ -1694,9 +1810,29 @@ mod tests {
         ));
         // The same words 20 s later (someone quoting them): kept.
         assert!(!overheard(30_000, 34_000, call, &calls));
-        // A one-word reply inside the call's line compares words; one the call didn't say stays.
-        assert!(overheard(12_000, 12_500, "Ký.", &calls));
+        // A short reply isn't measured against a long line: inside it, the word is the owner's.
+        assert!(!overheard(12_000, 12_500, "Ký.", &calls));
         assert!(!overheard(12_000, 12_500, "Vâng.", &calls));
+        // A question holds its own answer ("có … không?"): the answer right after it stays…
+        let question = [(
+            9_700,
+            12_300,
+            "Anh có đồng ý gửi báo cáo trước thứ sáu không?",
+        )];
+        for answer in ["Không.", "Có.", "Đồng ý.", "Em đồng ý."] {
+            assert!(!overheard(12_200, 13_200, answer, &question), "{answer}");
+        }
+        // …and so does "dạ" (folded like "đã") during "Bên em đã gửi rồi".
+        let telling = [(10_000, 12_000, "Bên em đã gửi rồi")];
+        assert!(!overheard(11_000, 11_500, "Dạ.", &telling));
+        // A short call line copied whole is still overheard.
+        assert!(overheard(5_300, 5_800, "Vâng.", &[(5_000, 5_500, "Vâng.")]));
+        assert!(overheard(
+            5_300,
+            6_300,
+            "Đồng ý ạ.",
+            &[(5_000, 6_000, "Đồng ý ạ.")]
+        ));
         assert!(!overheard(10_300, 14_300, call, &[]));
     }
 
@@ -1774,6 +1910,16 @@ mod tests {
             "a tie keeps the language"
         );
         assert_eq!(likelier(Lang::En, 0.0, 0.0), Lang::En);
+        // A clear line is checked too when it doesn't look like the language it was heard in.
+        assert!(!looks_like(
+            "I just finished sending an email to June of WiredScore Singapore.",
+            Lang::Vi
+        ));
+        assert!(looks_like("Dạ, em nghe rõ ạ.", Lang::Vi));
+        assert!(looks_like("Đi.", Lang::Vi));
+        assert!(looks_like("OK anh.", Lang::Vi), "too short to tell");
+        assert!(!looks_like("Dạ em nghe rõ ạ", Lang::En));
+        assert!(looks_like("Can you hear me?", Lang::En));
         assert_eq!(LiveDirection::Both.first(), Lang::Vi);
         assert_eq!(LiveDirection::EnVi.first(), Lang::En);
         assert_eq!(LiveDirection::Both.language(), Language::Auto);
@@ -1791,6 +1937,7 @@ mod tests {
             assert_eq!(sink.meeting_id(), None, "ai_log rows name no meeting");
             let line = |seq: u32, speaker| TranscriptSegment {
                 seq,
+                start_ms: seq * 1_000,
                 text: format!("line {seq}"),
                 speaker,
                 ..TranscriptSegment::default()
@@ -1812,8 +1959,16 @@ mod tests {
                     (1, Some(Speaker::Them), Some("Hello"))
                 ]
             );
+            // A microphone line that waited for the call's reply reads before it.
+            let held = TranscriptSegment {
+                start_ms: 500,
+                ..line(2, Some(Speaker::You))
+            };
+            sink.append(&pool, &held).await.unwrap();
+            let order: Vec<u32> = memory.get().iter().map(|l| l.seq).collect();
+            assert_eq!(order, [0, 2, 1]);
             // Only the newest lines stay.
-            for seq in 2..QUICK_LINES as u32 + 5 {
+            for seq in 3..QUICK_LINES as u32 + 5 {
                 sink.append(&pool, &line(seq, None)).await.unwrap();
             }
             let lines = memory.get();
@@ -1824,6 +1979,28 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(saved, 0, "nothing is written to the workspace");
+
+            // A recording starting clears them, and keeps what it is when it's a quick one: its
+            // status as last sent, and whether it stopped on its own.
+            let quick = LiveMeeting {
+                id: None,
+                ..setup(MeetingFormat::Discussion)
+            };
+            memory.start(quick.quick());
+            assert!(memory.get().is_empty());
+            let last = LiveStatus {
+                dropped: 2,
+                ..LiveStatus::new(&quick)
+            };
+            memory.seen(&last);
+            memory.failed();
+            let kept = memory.quick().expect("the quick translation");
+            assert_eq!(
+                (kept.slug.as_str(), kept.live, kept.failed),
+                ("test", last, true)
+            );
+            memory.start(setup(MeetingFormat::Discussion).quick());
+            assert!(memory.quick().is_none(), "a saved session isn't one");
             hub.close_all().await;
         });
         std::fs::remove_dir_all(root).unwrap();
@@ -2106,7 +2283,7 @@ mod tests {
                 Err((_, reason)) => format!("none ({reason})"),
             };
             eprintln!(
-                "\n{about} — {audio_s:.1} s of audio, {:?}, {:?}, Whisper {}, translator {model}: {} lines, {} overheard, done {:.1?} after start\n",
+                "\n{about} — {audio_s:.1} s of audio, {:?}, {:?}, Whisper {}, translator {model}: {} lines, {} overheard in the last minute, done {:.1?} after start\n",
                 setup.format,
                 setup.direction,
                 spec.id,
@@ -2140,7 +2317,9 @@ mod tests {
                     line.translation.as_deref().unwrap_or("(not translated)")
                 );
             }
-            let saved = meetings::transcript(&pool, "live").await.unwrap();
+            // Read in speaking order; `lines` are in the order they arrived.
+            let mut saved = meetings::transcript(&pool, "live").await.unwrap();
+            saved.sort_by_key(|row| row.seq);
             assert_eq!(
                 saved.len(),
                 lines.len(),
@@ -2231,7 +2410,7 @@ mod tests {
             .filter(|l| l.speaker == Some(Speaker::Them))
             .count();
         eprintln!(
-            "\n{calls} call lines kept, {} microphone lines dropped as overheard, {} microphone lines kept",
+            "\n{calls} call lines kept, {} microphone lines dropped as overheard in the last minute, {} microphone lines kept",
             status.overheard,
             lines.len() - calls
         );

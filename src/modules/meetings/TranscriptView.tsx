@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { audioUrl, useRestoreSegment, useTranscript, useUpdateSegment, useWaveform, type Meeting, type TranscriptSegment } from "../../kernel/bridge/meetings";
 import { useRecorderStatus, type LiveStatus } from "../../kernel/bridge/recorder";
 import { SparkleIcon } from "../../kernel/shell/icons";
-import { columnTitles, directionOf, layoutLines, type LineLayout, type SpeakerLabel } from "../live/lines";
+import { columnTitles, directionOf, lastTranslated, layoutLines, type LineLayout, type SpeakerLabel } from "../live/lines";
 import { formatClock, pendingEnglish } from "./format";
 import styles from "./TranscriptView.module.css";
 import WaveformPlayer, { SKIP_MS } from "./WaveformPlayer";
@@ -39,10 +39,12 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
   // Said | translation: during a live session and after it, the way its language says.
   const english = !!live || segments.some((s) => s.translation);
   const direction = directionOf(meeting.language);
-  // A presenter's paragraphs are a live session's: batch lines stay one row each, as before.
-  const layout = layoutLines(segments, english ? meeting.format : "discussion");
+  // A presenter's paragraphs are a live session's (its lines say their language, translated or
+  // not): batch lines stay one row each, as before.
+  const fromLive = english || segments.some((s) => s.lang);
+  const layout = layoutLines(segments, fromLive ? meeting.format : "discussion");
   const unclear = `${UNCLEAR} Transcribe again${live ? " after Stop" : ""} for a careful pass.`;
-  const lastTranslated = segments.reduce((last, s) => (s.translation ? s.seq : last), -1);
+  const translatedUpTo = lastTranslated(segments);
   const current = recording ? null : (segments.find((s) => nowMs >= s.start_ms && nowMs < s.end_ms) ?? null);
 
   // Space plays/pauses, ← → skip 10 s — unless you're typing or on a control that uses them.
@@ -195,7 +197,7 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
                     </button>
                   </div>
                 )}
-                {english && <Translation segment={s} pending={pendingEnglish(s.seq, lastTranslated, live)} />}
+                {english && <Translation segment={s} pending={pendingEnglish(s.seq, translatedUpTo, live)} />}
               </li>
             );
           })}
@@ -211,7 +213,7 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
  *  status — the last one seen once it has ended (`running` false). */
 export function LiveLines({ lines, live, running, textSize }: { lines: TranscriptSegment[]; live: LiveStatus; running: boolean; textSize: TextSize }) {
   const layout = layoutLines(lines, live.format);
-  const lastTranslated = lines.reduce((last, s) => (s.translation ? s.seq : last), -1);
+  const translatedUpTo = lastTranslated(lines);
   return (
     <section className="section" aria-live={running ? "polite" : undefined}>
       <TranscriptHeads columns={columnTitles(live.direction)}>
@@ -228,7 +230,7 @@ export function LiveLines({ lines, live, running, textSize }: { lines: Transcrip
                 <Said segment={s} both={live.direction === "both"} unclear={UNCLEAR} />
               </div>
               {/* Ended: a missing translation reads "Not translated" — unless translation was off (the head says why). */}
-              <Translation segment={s} pending={pendingEnglish(s.seq, lastTranslated, running || live.translation_off_reason ? live : null)} />
+              <Translation segment={s} pending={pendingEnglish(s.seq, translatedUpTo, running || live.translation_off_reason ? live : null)} />
             </li>
           ))}
         </ol>
