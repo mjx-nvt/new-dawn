@@ -15,7 +15,19 @@ permissions:
   contents: write
 
 jobs:
+  # A run from a branch (the form's default, main) would only meet the environment's refusal;
+  # say plainly what to pick instead, before anything else happens.
+  tag-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Started from a version tag?
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::Start this from a version tag, not the branch '${{ github.ref_name }}': Run workflow → Use workflow from → Tags → the new version (e.g. v0.7.4). Tags up to v0.7.3 predate this workflow and can't be used."
+          exit 1
+
   build:
+    needs: tag-only
     runs-on: macos-15
     environment: release # the key lives here; each run waits for the owner's approval
     steps:
