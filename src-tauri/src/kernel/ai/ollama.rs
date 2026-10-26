@@ -62,6 +62,8 @@ pub fn valid_name(name: &str) -> bool {
 pub const NUM_CTX: u32 = 32_768;
 /// How long Ollama keeps Qwen loaded after a call (several calls per summary reuse it).
 const KEEP_ALIVE: &str = "5m";
+/// Sampling temperature unless a session sets its own.
+const TEMPERATURE: f32 = 0.3;
 
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct OllamaStatus {
@@ -316,6 +318,24 @@ pub async fn unload() {
     unload_one(&app).await;
 }
 
+/// Asks Ollama to load `name` now (an empty chat with the usual `num_ctx`, so the first real call
+/// neither waits for the load nor reloads). Best effort.
+pub async fn preload(name: String) {
+    let body = serde_json::json!({
+        "model": name,
+        "messages": [],
+        "keep_alive": KEEP_ALIVE,
+        "options": { "num_ctx": NUM_CTX },
+    });
+    if let Ok(client) = client(Duration::from_secs(120)) {
+        let _ = client
+            .post(format!("{BASE}/api/chat"))
+            .json(&body)
+            .send()
+            .await;
+    }
+}
+
 async fn unload_one(name: &str) {
     let body = serde_json::json!({ "model": name, "keep_alive": 0 });
     if let Ok(client) = client(Duration::from_secs(10)) {
@@ -356,6 +376,7 @@ pub struct TextSession<'a> {
     agent: Option<&'static str>,
     /// Fixed for the whole session (a pick in Settings waits for the queue anyway).
     model: String,
+    temperature: f32,
 }
 
 /// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
@@ -391,23 +412,35 @@ pub async fn session<'a>(
         ));
     }
     app.state::<WhisperEngine>().unload_now();
+    Ok(session_on(turn, pool, meeting_id, chosen).await)
+}
+
+/// A session on a turn the caller already holds, with Whisper left loaded: the live worker keeps
+/// both models for its whole session (D-041). `model` must be installed (see `status`).
+pub async fn session_on<'a>(
+    turn: MutexGuard<'a, ()>,
+    pool: SqlitePool,
+    meeting_id: Option<&str>,
+    model: String,
+) -> TextSession<'a> {
     // Never two text models at once: drop the previous one when an agent uses another.
     let previous = std::mem::replace(
         &mut *LOADED
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
-        chosen.clone(),
+        model.clone(),
     );
-    if !previous.is_empty() && previous != chosen {
+    if !previous.is_empty() && previous != model {
         unload_one(&previous).await;
     }
-    Ok(TextSession {
+    TextSession {
         _turn: turn,
         pool,
         meeting_id: meeting_id.map(str::to_owned),
         agent: None,
-        model: chosen,
-    })
+        model,
+        temperature: TEMPERATURE,
+    }
 }
 
 #[cfg(test)]
@@ -432,6 +465,7 @@ impl<'a> TextSession<'a> {
             meeting_id: None,
             agent: None,
             model: model(),
+            temperature: TEMPERATURE,
         }
     }
 }
@@ -446,6 +480,12 @@ impl TextSession<'_> {
     /// agents in a row, so the queue is held once and Whisper isn't reloaded in between).
     pub fn for_agent(&mut self, agent: &'static str) -> &mut Self {
         self.agent = Some(agent);
+        self
+    }
+
+    /// Sampling temperature for the calls that follow (live translation runs cooler).
+    pub fn set_temperature(&mut self, temperature: f32) -> &mut Self {
+        self.temperature = temperature;
         self
     }
 
@@ -534,7 +574,7 @@ impl TextSession<'_> {
             "stream": true,
             "think": request.think,
             "keep_alive": KEEP_ALIVE,
-            "options": { "num_ctx": NUM_CTX, "num_predict": request.max_tokens, "temperature": 0.3 },
+            "options": { "num_ctx": NUM_CTX, "num_predict": request.max_tokens, "temperature": self.temperature },
         });
         let response = client(Duration::from_secs(180))? // the first token can wait for the model to load
             .post(format!("{BASE}/api/chat"))

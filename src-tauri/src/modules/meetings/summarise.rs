@@ -915,6 +915,15 @@ impl SummaryJobs {
             .contains_key(meeting_id)
     }
 
+    /// Some meeting is being summarised (or waits for its turn).
+    pub fn any(&self) -> bool {
+        !self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_empty()
+    }
+
     pub fn cancel(&self, meeting_id: &str) {
         if let Some(flag) = self
             .0
@@ -1073,9 +1082,10 @@ async fn run(
             .to_owned();
         if !people.is_empty() {
             notes.push_str(&format!(
-                "\n\nKnown people — reference only: they may not be in this meeting. List someone \
-                 as an attendee only if the transcript mentions them; when you do, use this spelling, \
-                 title and organisation:\n{}",
+                "\n\nKnown people — reference only: they may not be in this meeting. Never name \
+                 them, or their organisations, anywhere in the summary unless the transcript or the \
+                 notes do. List someone as an attendee only if the transcript mentions them; when you \
+                 do, use this spelling, title and organisation:\n{}",
                 people::prompt_block(&people)
             ));
         }
@@ -1724,6 +1734,7 @@ mod live_tests {
                 end_ms: n as u32 * 9_000 + 8_000,
                 text: t.into(),
                 raw_text: None,
+                translation: None,
             })
             .collect();
         let root = std::env::temp_dir().join(format!("newdawn-sum-{}", uuid::Uuid::now_v7()));

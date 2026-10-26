@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@t
 import { getOnboardingDone } from "./kernel/bridge/onboarding";
 import type { SettingsTab } from "./kernel/bridge/settings";
 import AppLayout from "./kernel/shell/AppLayout";
+import LivePage from "./modules/live/LivePage";
 import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/MeetingPage";
 import MeetingsPage, { type MeetingsSearch } from "./modules/meetings/MeetingsPage";
 import { SORTS, STATUS_FILTERS, WHEN_FILTERS } from "./modules/meetings/listing";
@@ -51,6 +52,15 @@ const meetingRoute = createRoute({
   }),
   component: MeetingPage,
   staticData: { title: "Meeting", breadcrumb: "Meetings" },
+});
+
+// Live transcription and translation (D-041); ?start=true opens the start sheet, like ?import=true.
+const liveRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/live",
+  validateSearch: (search: Record<string, unknown>): { start?: true } => (search.start === true ? { start: true as const } : {}),
+  component: LivePage,
+  staticData: { title: "Live" },
 });
 
 const workspaceRoute = createRoute({
@@ -104,7 +114,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

@@ -4,6 +4,7 @@ import {
   commands,
   events,
   type Language,
+  type LiveStatus_Serialize,
   type PermissionState,
   type RecorderLevel,
   type RecorderStatus_Serialize,
@@ -12,6 +13,7 @@ import {
 import { unwrap } from "./unwrap";
 
 export type RecorderStatus = RecorderStatus_Serialize;
+export type LiveStatus = LiveStatus_Serialize;
 export type { PermissionState, SystemAudio };
 
 const STATUS_KEY = ["recorder-status"] as const;
@@ -51,13 +53,15 @@ export interface StartRecordingInput {
   meetingTypeId: string | null;
   presentation: boolean;
   presenter: string | null;
+  /** Transcribe (Vietnamese) and translate (English) as people speak (D-041). */
+  live: boolean;
 }
 
 export function useStartRecording() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: StartRecordingInput) =>
-      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter)),
+      unwrap(commands.startRecording(input.slug, input.title, input.language, input.meetingTypeId, input.presentation, input.presenter, input.live)),
     onSettled: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: MIC_KEY }),
@@ -74,7 +78,9 @@ export function useStopRecording() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => unwrap(commands.stopRecording()),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["meetings"] }),
+    // The meeting and its lines too: a live session's page, if open, gets no transcription event
+    // until the recording is compressed (D-041).
+    onSettled: () => Promise.all(["meetings", "meeting", "transcript"].map((key) => queryClient.invalidateQueries({ queryKey: [key] }))),
   });
 }
 

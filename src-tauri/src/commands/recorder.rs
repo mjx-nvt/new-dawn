@@ -12,8 +12,12 @@ pub fn recorder_status(recorder: State<'_, Recorder>) -> Result<RecorderStatus, 
     Ok(recorder.status())
 }
 
+/// `live`: transcribe (Vietnamese) and translate (English) as people speak (D-041); the meeting is
+/// then Vietnamese. Live refuses with `ai_busy` while another AI job runs, `model_missing` without
+/// a Whisper model.
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)] // the bridge passes each field
 pub async fn start_recording(
     app: AppHandle,
     slug: String,
@@ -22,6 +26,7 @@ pub async fn start_recording(
     meeting_type_id: Option<String>,
     presentation: bool,
     presenter: Option<String>,
+    live: bool,
 ) -> Result<Meeting, AppError> {
     Ok(session::start(
         &app,
@@ -32,6 +37,7 @@ pub async fn start_recording(
             meeting_type_id,
             presenter,
             presentation,
+            live,
         },
     )
     .await?)
@@ -43,7 +49,8 @@ pub fn set_recording_paused(app: AppHandle, paused: bool) -> Result<RecorderStat
     Ok(session::pause(&app, paused)?)
 }
 
-/// Finalises the WAV, marks the meeting `recorded` and queues transcription.
+/// Finalises the WAV, marks the meeting `recorded` and queues transcription — or, after a live
+/// session, waits for its last lines and marks it `transcribed`.
 #[tauri::command]
 #[specta::specta]
 pub async fn stop_recording(app: AppHandle) -> Result<Meeting, AppError> {

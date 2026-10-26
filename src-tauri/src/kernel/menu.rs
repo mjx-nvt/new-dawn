@@ -52,6 +52,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         )?)
         .item(&item(
             app,
+            "new-live",
+            "New Live Translation…",
+            Some("CmdOrCtrl+Shift+R"),
+            true,
+        )?)
+        .item(&item(
+            app,
             "import-audio",
             "Import Audio…",
             Some("CmdOrCtrl+Shift+I"),
@@ -150,6 +157,7 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
         "import-audio" => forward(app, MenuAction::ImportAudio),
         "run-setup" => forward(app, MenuAction::RunSetup),
         "new-recording" | "record" => forward(app, MenuAction::ToggleRecording),
+        "new-live" => forward(app, MenuAction::NewLive),
         "reveal-data" => reveal_data_folder(app),
         "open-app" => {
             windows::show_main(app);

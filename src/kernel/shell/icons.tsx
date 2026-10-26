@@ -46,6 +46,14 @@ export const MeetingsIcon = () => (
   </Icon>
 );
 
+/** A speech bubble with lines: captions as people speak (Live, D-041). */
+export const LiveIcon = () => (
+  <Icon>
+    <path d="M3 2.5h10A1.5 1.5 0 0 1 14.5 4v6a1.5 1.5 0 0 1-1.5 1.5H8.5L5 14v-2.5H3A1.5 1.5 0 0 1 1.5 10V4A1.5 1.5 0 0 1 3 2.5z" />
+    <path d="M4.5 5.5h7M4.5 8.5h4.5" />
+  </Icon>
+);
+
 export const WorkspaceIcon = () => (
   <Icon>
     <path d="M2.5 14V3.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V14M10.5 7h2a1 1 0 0 1 1 1v6M2 14h12M5 5.5h2M5 8.5h2M5 11.5h2" />

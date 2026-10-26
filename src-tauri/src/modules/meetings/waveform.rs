@@ -40,7 +40,11 @@ pub async fn get(pool: &SqlitePool, meeting_id: &str) -> Result<Waveform> {
         .to_path_buf();
     if let Ok(bytes) = tokio::fs::read(folder.join(FILE)).await {
         if let Ok(cached) = serde_json::from_slice::<Waveform>(&bytes) {
-            if cached.peaks.len() == BUCKETS {
+            // Cached from a file still being recorded (≤ 0.7.1): shorter than the meeting, redo it.
+            let cut_short = meeting
+                .duration_ms
+                .is_some_and(|ms| ms.saturating_sub(cached.duration_ms) > 1_000);
+            if cached.peaks.len() == BUCKETS && !cut_short {
                 return Ok(cached);
             }
         }

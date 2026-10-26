@@ -32,6 +32,15 @@ impl TranscriptionJobs {
             .contains_key(meeting_id)
     }
 
+    /// Some meeting is being transcribed (or waits for its turn).
+    pub fn any(&self) -> bool {
+        !self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_empty()
+    }
+
     pub fn cancel(&self, meeting_id: &str) {
         if let Some(flag) = self
             .0

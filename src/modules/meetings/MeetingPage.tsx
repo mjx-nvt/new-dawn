@@ -158,7 +158,9 @@ export default function MeetingPage() {
             <p id="retranscribe-title" className={styles.noticeTitle}>
               Transcribe again?
             </p>
-            <p className="fieldHint">Lines you corrected are replaced. The summary stays until you re-run it.</p>
+            <p className="fieldHint">
+              Lines you corrected are replaced — after a live session, so are its lines and their English. The summary stays until you re-run it.
+            </p>
           </div>
           <div className={styles.noticeActions}>
             <button type="button" className="btn btnGhost btnCompact" autoFocus onClick={() => setConfirmRetranscribe(false)}>

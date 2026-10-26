@@ -1,11 +1,12 @@
 //! Recording session: Idle → Recording ⇄ Paused → Stopping → Idle.
 //! A capture thread owns the (non-Send) mic stream and the system tap; a mixer thread writes the
 //! WAV. Start creates the meeting (`recording`); Stop finalises the file, marks it `recorded` and
-//! queues transcription.
+//! queues transcription. A live session (D-041) also feeds the live worker, which writes the
+//! transcript as people speak; its Stop marks the meeting `transcribed` instead.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Sender, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -20,12 +21,13 @@ use super::mixer::{self, Shared, Source};
 use super::saver::{self, WavWriter};
 use super::{mic, system_tap};
 use crate::error::AppError;
-use crate::events::{RecorderLevel, RecorderStatusChanged};
+use crate::events::{RecorderLevel, RecorderStatusChanged, TranscriptionFinished};
+use crate::kernel::ai::live::{self, LiveHandle, LiveMeeting, LiveStatus, Window};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::notify;
 use crate::kernel::permissions::{self, PermissionState};
-use crate::modules::meetings::{self, Meeting, MeetingStatus, NewMeeting, transcribe};
+use crate::modules::meetings::{self, Meeting, MeetingStatus, NewMeeting, summarise, transcribe};
 use sqlx::SqlitePool;
 
 /// Bounded channel size per source: 50 × ~100 ms = 5 s of slack before chunks are dropped.
@@ -60,6 +62,9 @@ pub struct RecorderStatus {
     pub meeting_id: Option<String>,
     pub elapsed_ms: u32,
     pub system_audio: SystemAudio,
+    /// A live session's transcription and translation (D-041); None for a plain recording, and
+    /// once live has failed (Stop then transcribes the recording the batch way).
+    pub live: Option<LiveStatus>,
 }
 
 pub struct StartRequest {
@@ -70,6 +75,8 @@ pub struct StartRequest {
     /// A presentation by one main presenter (else a discussion), D-038.
     pub presenter: Option<String>,
     pub presentation: bool,
+    /// Transcribe (Vietnamese) and translate (English) as people speak (D-041).
+    pub live: bool,
 }
 
 struct Active {
@@ -83,6 +90,7 @@ struct Active {
     paused_total: Duration,
     tap_available: bool,
     stopping: bool,
+    live: Option<LiveHandle>,
 }
 
 impl Active {
@@ -108,12 +116,22 @@ impl Active {
         } else {
             SystemAudio::Ok
         };
+        let live = self
+            .live
+            .as_ref()
+            .and_then(LiveHandle::status)
+            .map(|mut live| {
+                let dropped = self.shared.live_dropped.load(Ordering::Relaxed);
+                live.dropped = u32::try_from(dropped).unwrap_or(u32::MAX);
+                live
+            });
         RecorderStatus {
             phase,
             workspace_slug: Some(self.slug.clone()),
             meeting_id: Some(self.meeting_id.clone()),
             elapsed_ms: self.elapsed().as_millis() as u32,
             system_audio,
+            live,
         }
     }
 }
@@ -149,6 +167,7 @@ impl Recorder {
                 meeting_id: None,
                 elapsed_ms: 0,
                 system_audio: SystemAudio::Ok,
+                live: None,
             })
     }
 
@@ -156,6 +175,9 @@ impl Recorder {
     pub fn shutdown(&self) {
         let active = self.lock().take();
         if let Some(mut active) = active {
+            if let Some(live) = &active.live {
+                live.cancel();
+            }
             let _ = active.stop.send(());
             if let Some(handle) = active.capture.take() {
                 let _ = handle.join();
@@ -186,6 +208,22 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     let workspace = hub.workspace(&request.slug).await?;
     let pool = hub.pool(&request.slug)?;
     let id = meetings::new_id();
+    // Live (D-041): claim the AI before anything is created, so a busy AI refuses cleanly. It
+    // writes into this meeting once windows arrive; a failed start below drops `live_tx`, which
+    // ends the worker.
+    let (live_tx, live, language) = if request.live {
+        let (tx, rx) = mpsc::sync_channel(live::WINDOW_CAP);
+        let meeting = LiveMeeting {
+            slug: request.slug.clone(),
+            id: id.clone(),
+            title: title.clone(),
+            presenter: request.presenter.clone().filter(|_| request.presentation),
+        };
+        let handle = live::start(app, meeting, rx).await?;
+        (Some(tx), Some(handle), Language::Vi) // live is Vietnamese → English
+    } else {
+        (None, None, request.language)
+    };
     let folder = Path::new(&workspace.folder_path)
         .join("recordings")
         .join(&id);
@@ -203,7 +241,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
             meeting_type_id: request.meeting_type_id.as_deref(),
             title: &title,
             held_at_unix: now,
-            language: request.language,
+            language,
             audio_path: &path.to_string_lossy(),
             status: MeetingStatus::Recording,
         },
@@ -222,7 +260,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
     let shared = Arc::new(Shared::default());
     let (stop_tx, stop_rx) = mpsc::channel::<()>();
     let (ready_tx, ready_rx) = mpsc::channel::<Result<bool>>();
-    let capture = spawn_capture(path, shared.clone(), stop_rx, ready_tx);
+    let capture = spawn_capture(path, shared.clone(), stop_rx, ready_tx, live_tx);
     let ready = tokio::task::spawn_blocking(move || {
         ready_rx
             .recv()
@@ -253,6 +291,7 @@ pub async fn start(app: &AppHandle, request: StartRequest) -> Result<Meeting> {
         paused_total: Duration::ZERO,
         tap_available,
         stopping: false,
+        live,
     };
     let status = active.status();
     *app.state::<Recorder>().lock() = Some(active);
@@ -284,7 +323,7 @@ pub fn pause(app: &AppHandle, paused: bool) -> Result<RecorderStatus> {
 }
 
 pub async fn stop(app: &AppHandle) -> Result<Meeting> {
-    let (slug, meeting_id, capture, stop) = {
+    let (slug, meeting_id, capture, stop, shared, live) = {
         let recorder = app.state::<Recorder>();
         let mut guard = recorder.lock();
         let active = guard
@@ -300,6 +339,8 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
             active.meeting_id.clone(),
             active.capture.take(),
             active.stop.clone(),
+            active.shared.clone(),
+            active.live.as_mut().and_then(LiveHandle::finishing),
         )
     };
     let _ = stop.send(());
@@ -316,6 +357,17 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
             Err(_) => Err(anyhow!("capture did not stop within {STOP_TIMEOUT:?}")),
         },
         None => Ok(0),
+    };
+    // Live: the worker writes the last lines (the mixer has closed its windows) while the pill
+    // still says Saving…; None = live failed, so the batch path below transcribes the recording.
+    // Some(false): the live text has gaps (it fell behind and the mixer dropped windows, Whisper
+    // failed on an utterance, or Stop cut it short).
+    let live_done = match live {
+        Some(finishing) => finishing
+            .wait()
+            .await
+            .map(|complete| complete && shared.live_dropped.load(Ordering::Relaxed) == 0),
+        None => None,
     };
     // Whatever happened above, the session is over.
     app.state::<Recorder>().lock().take();
@@ -340,7 +392,28 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
         }
     };
     let duration_ms = saver::duration_ms(samples);
-    meetings::finish_recording(&pool, &meeting_id, duration_ms).await?;
+    if let Some(complete) = live_done {
+        meetings::finish_recording(&pool, &meeting_id, duration_ms, MeetingStatus::Transcribed)
+            .await?;
+        after_live(app, &slug, &meeting_id, complete);
+        let meeting = meetings::get(&pool, &meeting_id).await?;
+        let saved = if complete {
+            "transcript saved"
+        } else {
+            "the live text has gaps: Transcribe again for the full transcript"
+        };
+        notify::show(
+            app,
+            "Recording stopped",
+            &format!(
+                "{} · {} — {saved}",
+                meeting.title,
+                notify::clock(duration_ms)
+            ),
+        );
+        return Ok(meeting);
+    }
+    meetings::finish_recording(&pool, &meeting_id, duration_ms, MeetingStatus::Recorded).await?;
     let queued = transcribe::start(app, &slug, &meeting_id).await;
     if let Err(err) = &queued {
         tracing::warn!("could not queue transcription: {err:#}");
@@ -359,13 +432,49 @@ pub async fn stop(app: &AppHandle) -> Result<Meeting> {
     Ok(meeting)
 }
 
+/// After a live session, what the batch path does once a transcript is saved: shrink the WAV
+/// (D-031), tell the UI the transcript is final, then the summary follows (D-021) — unless the
+/// live text has gaps: Transcribe again fills them (the recording has it all), or Summarise takes
+/// it as it is. In the background, so Stop returns at once.
+fn after_live(app: &AppHandle, slug: &str, meeting_id: &str, complete: bool) {
+    let (app, slug, meeting_id) = (app.clone(), slug.to_owned(), meeting_id.to_owned());
+    tauri::async_runtime::spawn(async move {
+        let compressed = async {
+            let pool = app.state::<WorkspaceHub>().pool(&slug)?;
+            if let Some(path) = meetings::get(&pool, &meeting_id).await?.audio_path {
+                crate::kernel::storage::compress_meeting(&pool, &meeting_id, Path::new(&path))
+                    .await?;
+            }
+            anyhow::Ok(())
+        }
+        .await;
+        if let Err(err) = compressed {
+            tracing::warn!("could not compress the recording: {err:#}");
+        }
+        let _ = TranscriptionFinished {
+            workspace_slug: slug.clone(),
+            meeting_id: meeting_id.clone(),
+            error: None,
+        }
+        .emit(&app);
+        if !complete {
+            return;
+        }
+        if let Err(err) = summarise::start(&app, &slug, &meeting_id, false, true).await {
+            tracing::warn!("could not queue the summary: {err:#}");
+        }
+    });
+}
+
 /// Recordings cut short by a quit or crash: repair the WAV from its length and mark them
-/// `recorded` (at most ~2 s lost); `failed` when nothing usable is left. Runs at launch.
+/// `recorded` (at most ~2 s lost); `failed` when nothing usable is left. Runs at launch. A live
+/// session's lines stay until the meeting is transcribed again.
 pub async fn recover(pool: &SqlitePool) -> Result<()> {
     for (id, path) in meetings::interrupted_recordings(pool).await? {
         match repair_file(path).await {
             Ok(samples) if samples > 0 => {
-                meetings::finish_recording(pool, &id, saver::duration_ms(samples)).await?
+                let duration_ms = saver::duration_ms(samples);
+                meetings::finish_recording(pool, &id, duration_ms, MeetingStatus::Recorded).await?
             }
             other => {
                 tracing::warn!("recording {id} could not be recovered: {:?}", other.err());
@@ -383,11 +492,13 @@ async fn repair_file(path: Option<String>) -> Result<u64> {
 
 /// Capture thread: owns the mic stream and the tap (neither is Send), runs the mixer, and keeps
 /// both alive until `stop`. Reports `Ok(tap_available)` or the start error through `ready`.
+/// `live`: a live session's worker, fed by the mixer.
 fn spawn_capture(
     path: PathBuf,
     shared: Arc<Shared>,
     stop: mpsc::Receiver<()>,
     ready: Sender<Result<bool>>,
+    live: Option<SyncSender<Window>>,
 ) -> JoinHandle<Result<u64>> {
     std::thread::Builder::new()
         .name("recorder-capture".into())
@@ -428,7 +539,7 @@ fn spawn_capture(
             let mixer_shared = shared.clone();
             let mixer = std::thread::Builder::new()
                 .name("recorder-mixer".into())
-                .spawn(move || mixer::run(mic_source, sys_source, mixer_shared, wav))?;
+                .spawn(move || mixer::run(mic_source, sys_source, mixer_shared, wav, live))?;
 
             let _ = stop.recv(); // stop requested (or the session vanished)
             drop(tap); // closes the system channel
@@ -443,10 +554,10 @@ fn spawn_capture(
 }
 
 /// Emits `RecorderLevel` at 10 Hz while a session is active (also re-emits status when the
-/// system-audio state changes).
+/// system-audio state or the live status changes).
 fn spawn_meter(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut last_system = None;
+        let mut last = None;
         loop {
             tokio::time::sleep(Duration::from_millis(100)).await;
             let snapshot = {
@@ -463,8 +574,9 @@ fn spawn_meter(app: AppHandle) {
                 elapsed_ms: status.elapsed_ms,
             }
             .emit(&app);
-            if last_system != Some(status.system_audio) {
-                last_system = Some(status.system_audio);
+            let shown = (status.system_audio, status.live.clone());
+            if last.as_ref() != Some(&shown) {
+                last = Some(shown);
                 let _ = RecorderStatusChanged(status).emit(&app);
             }
         }
@@ -498,7 +610,7 @@ mod tests {
         let shared = Arc::new(Shared::default());
         let (stop_tx, stop_rx) = mpsc::channel();
         let (ready_tx, ready_rx) = mpsc::channel();
-        let capture = spawn_capture(path.clone(), shared.clone(), stop_rx, ready_tx);
+        let capture = spawn_capture(path.clone(), shared.clone(), stop_rx, ready_tx, None);
         let tap = ready_rx.recv().unwrap().expect("capture should start");
         eprintln!("system tap available: {tap}");
 

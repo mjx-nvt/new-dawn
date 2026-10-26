@@ -13,6 +13,23 @@
   transition: background 150ms ease-out;
 }
 
+/* Tiếng Việt | English: during a live session and after it (D-041). */
+.bilingual,
+.heads,
+.ghostLine {
+  display: grid;
+  grid-template-columns: 64px 1fr 1fr;
+  gap: var(--space-3) var(--space-5);
+}
+.heads { padding: 0 var(--space-2) var(--space-2); }
+.ghostLine { padding: 0 var(--space-2); }
+.headNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
 .playing { background: var(--primary-tint-soft); }
 
 .time {
@@ -24,13 +41,15 @@
   font-variant-numeric: tabular-nums;
   text-align: left;
 }
-.time:hover { text-decoration: underline; }
+button.time:hover { text-decoration: underline; }
 
 .text {
   font-size: var(--t-md);
   line-height: 1.6;
   user-select: text;
 }
+.lg .text { font-size: var(--t-lg); }
+.xl .text { font-size: var(--t-xl); }
 
 .empty { margin-bottom: var(--space-3); }
 

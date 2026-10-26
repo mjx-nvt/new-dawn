@@ -6,6 +6,9 @@ import { SparkleIcon } from "../../kernel/shell/icons";
 import { formatWhen } from "../meetings/format";
 import styles from "./AgentsPanel.module.css";
 
+/** The Live agent's default when installed, before the app model (FAST_MODEL in kernel/ai/live.rs). */
+const FAST_MODEL = "qwen3.5:4b";
+
 /** Workspace → Agents: each AI task's guide (the human-tunable part of its prompt), editable
  *  in place, with its last run. The code keeps the data fence and the JSON shape (D-035). */
 export default function AgentsPanel({ slug }: { slug: string }) {
@@ -71,6 +74,8 @@ function AgentCard({
   useEffect(() => setDraft(guide.guide), [guide.guide]);
   const dirty = draft.trim() !== guide.guide.trim();
   const run = guide.last_run;
+  const fast = guide.agent === "live" && installed.includes(FAST_MODEL);
+  const fallback = fast ? FAST_MODEL : appModel;
 
   return (
     <div className={`card ${styles.card}`}>
@@ -94,8 +99,8 @@ function AgentCard({
           <label className={styles.model}>
             <span className="fieldLabel">Model</span>
             <select className="input" value={guide.model ?? ""} onChange={(e) => onModel(e.target.value || null)}>
-              <option value="">App default{appModel ? ` (${appModel})` : ""}</option>
-              {guide.model && !installed.includes(guide.model) && <option value={guide.model}>{guide.model} (not installed — uses the app default)</option>}
+              <option value="">{fast ? "Fast" : "App"} default{fallback ? ` (${fallback})` : ""}</option>
+              {guide.model && !installed.includes(guide.model) && <option value={guide.model}>{guide.model} (not installed — uses the {fast ? "fast" : "app"} default)</option>}
               {installed.map((m) => (
                 <option key={m} value={m}>
                   {m}

@@ -1,0 +1,65 @@
+/* Idle: the one action under the intro. */
+.start { margin-top: var(--space-5); }
+
+/* A plain recording is running: it, and why Start waits. */
+.running {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  margin-top: var(--space-5);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+
+/* Focus lands on the page after ↓ Latest (the button goes away): no ring around all of it. */
+.session:focus { outline: none; }
+
+/* Live: title, the language pair and the status word; A−/A+ on the right. */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.heading {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.size {
+  display: flex;
+  flex: none;
+  gap: var(--space-1);
+  padding-top: var(--space-5); /* level with the title */
+}
+
+.dropped { margin-top: var(--space-3); }
+
+/* Back to the newest line once the reader has scrolled up: pinned to the bottom of the panel,
+   in a bar of no height, so showing it never moves the page (and the follow logic with it). */
+.latestBar {
+  position: sticky;
+  bottom: var(--space-5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 0;
+}
+.latest { box-shadow: var(--shadow-raised); }

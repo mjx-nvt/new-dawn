@@ -107,6 +107,10 @@ export default function AppLayout() {
       case "import_audio":
         void navigate({ to: "/meetings", search: { import: true } });
         break;
+      case "new_live":
+        // While a recording runs, the Live page shows it (Start is off until it stops).
+        void navigate({ to: "/live", search: !recorder || recorder.phase === "idle" ? { start: true } : {} });
+        break;
       case "open_tenant_setup":
         void navigate({ to: "/setup", search: { step: "identity" } });
         break;

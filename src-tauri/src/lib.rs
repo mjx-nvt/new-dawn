@@ -15,6 +15,7 @@ mod events;
 
 mod kernel {
     pub mod ai {
+        pub mod live;
         pub mod log;
         pub mod models;
         pub mod ollama;
@@ -357,9 +358,14 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-                    handle
-                        .state::<kernel::ai::whisper::WhisperEngine>()
-                        .unload_if_idle();
+                    // Not while an AI job holds the queue: a live session keeps Whisper loaded
+                    // through its silences (D-041).
+                    let queue = handle.state::<kernel::ai::queue::AiQueue>();
+                    if let Some(_turn) = queue.inner().try_acquire() {
+                        handle
+                            .state::<kernel::ai::whisper::WhisperEngine>()
+                            .unload_if_idle();
+                    }
                 }
             });
             Ok(())

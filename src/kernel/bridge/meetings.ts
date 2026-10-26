@@ -56,11 +56,13 @@ export function useMeeting(slug: string | undefined, id: string) {
   });
 }
 
-export function useTranscript(slug: string | undefined, id: string) {
+/** `live`: a live session is writing it (D-041), so new lines arrive by polling every second. */
+export function useTranscript(slug: string | undefined, id: string, live = false) {
   return useQuery({
     queryKey: keys.transcript(slug ?? "", id),
     queryFn: () => unwrap(commands.getTranscript(slug ?? "", id)),
     enabled: !!slug,
+    refetchInterval: live ? 1000 : false,
   });
 }
 

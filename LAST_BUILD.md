@@ -1,4 +1,24 @@
-# Last Build — All people & attendees, your profile, a brand from logo + slogan + colour, minutes template made from it · release 0.7.1
+# Last Build — Live: Vietnamese captions with English as people speak · release 0.7.2
+_2026-10-26_
+
+## What changed
+- **Live** tab (right below Meetings; File → New Live Translation…, ⇧⌘R): start a live session, speak Vietnamese (or let the call speak) and the lines appear with their English beside them — about 2 s (Vietnamese) and 3–4 s (English) after each pause on this Mac. A−/A+ for text size; it follows the newest line unless you scroll up ("↓ Latest" brings you back). Pause and Stop are on the red pill as usual.
+- The session is a normal meeting: the lines and their English are saved as they arrive, Stop skips the long re-transcription, and the summary runs automatically. The meeting's Transcript tab shows both columns.
+- While live runs, the AI is reserved for it (other AI jobs wait for Stop); translation uses the fast `qwen3.5:4b` unless you pick another model for the **Live translation** agent in Workspace → Agents. If Ollama isn't running, live shows Vietnamese only.
+- New migration 0008 (additive: `transcript_segment.translation`), reviewed SAFE.
+- Reviews: backend and UI each had a correctness and a rules/UI review plus a fix pass; a final cross-review (rules, a whole session end to end, failure cases) found no blockers and 7 improvements, all applied — notably Stop never throws away the live lines (a session cut short keeps them, marks the gaps and skips the automatic summary).
+- **Seen in the running app** (dev build on your data; your 13 s Vietnamese recording fed through the recorder 3 times): 9 lines, Vietnamese shown 2.3–4.2 s after each pause (Whisper large-v3 2.2–3.1 s), English 0.7–2.8 s later (qwen3.5:4b); "Thứ hai" → "Second", and your vocabulary turned "suy âm" into "siêu âm" ("ultrasound"). Stop → the meeting page with both columns and the player, then the automatic summary (written by qwen3.5:9b about a minute later). Screens checked: the Live page idle and live, the meeting's two-language transcript.
+- Also: the summary no longer names people from your people memory that the meeting never mentions (seen in the test: "Marina Center, Keppel Land" in an overview).
+- Two test meetings named **"Live test"** are in VIFC (the first from a cut-short test run) — delete them whenever you like.
+
+## Manual steps
+1. Use **headphones** for live sessions on a call: speaker sound feeds the microphone and doubles the lines.
+2. Optional: download **large-v3-turbo** in Settings → Models for faster live lines — note it then also becomes the model for normal transcriptions.
+3. Vietnamese letters such as ệ, ở, ữ come from the system font, because DM Sans has no Vietnamese glyphs — more visible at large live text sizes. Say if you want a font change (the project rules fix DM Sans).
+
+---
+
+# All people & attendees, your profile, a brand from logo + slogan + colour, minutes template made from it · release 0.7.1
 _2026-10-26_
 
 ## What changed

@@ -1,6 +1,6 @@
 # New Dawn
 
-Native macOS personal workspace for a professional who works across several companies. One app, many **tenants / workspaces** (one per company), each with its own SQLite database, brand pack and meeting types. **v1 is the meeting machine**: record a call (mic + system audio, no bot) → full transcript after Stop → detailed executive summary (email body) → designed meeting-minutes DOCX/PDF in the tenant's brand. **All AI runs locally** (Whisper for speech, Qwen via Ollama for text), kept simple: one speech model, one text model, never concurrent. Tasks/cockpit, notes, knowledge and live transcription come later.
+Native macOS personal workspace for a professional who works across several companies. One app, many **tenants / workspaces** (one per company), each with its own SQLite database, brand pack and meeting types. **v1 is the meeting machine**: record a call (mic + system audio, no bot) → full transcript after Stop → detailed executive summary (email body) → designed meeting-minutes DOCX/PDF in the tenant's brand. **All AI runs locally** (Whisper for speech, Qwen via Ollama for text), kept simple: one speech model, one text model, never concurrent — except a **Live** session (0.7.2, D-041), which keeps Whisper and the fast text model loaded together and holds the AI queue until Stop. Tasks/cockpit, notes and knowledge come later.
 
 This file is the source of truth for how to work on this codebase. Read it at the start of every session, then `docs/plan.md` (v2). For AI features also read `docs/ai-engine.md`; when porting audio/transcription read `docs/meetily-teardown.md` and the reference code at `../Ref/meetily`; for the minutes document read `docs/document-export.md`. The build prompts live in `docs/playbook.md` (v2).
 
@@ -14,7 +14,7 @@ This file is the source of truth for how to work on this codebase. Read it at th
 - **Database**: SQLite via `sqlx` (runtime-tokio). `registry.db` + one `workspace.db` per workspace. Two migration sets: `src-tauri/migrations/registry/` and `src-tauri/migrations/workspace/`.
 - **Search**: SQLite FTS5; later `sqlite-vec`.
 - **AI (keep it simple, like Meetily)**: `whisper-rs` (metal) compiled in, model `large-v3-turbo`; Qwen through Ollama at `http://localhost:11434` (`/api/chat`, streaming, `options.num_ctx` always set), model `qwen3.5:9b` with thinking ON. Exactly two capabilities: `transcribe()` and `complete()`. Jobs run one at a time. No cloud provider exists in this codebase.
-- **Recorder**: `cpal` (mic) + `cidre` Core Audio process tap (system audio) + `rubato` mixer → incremental WAV. **No live transcription in v1** — transcription is a batch job after Stop.
+- **Recorder**: `cpal` (mic) + `cidre` Core Audio process tap (system audio) + `rubato` mixer → incremental WAV. Transcription is a batch job after Stop — except a **Live** session (D-041): the mixer offers each 600 ms window to `kernel/ai/live.rs` over a bounded channel; it cuts utterances with the VAD, transcribes each in Vietnamese and translates it to English, writing lines as they arrive.
 - **Bridge**: `tauri-specta` generates `src/bindings.ts` from Rust commands. UI calls commands only through `src/kernel/bridge/`.
 - **Identity**: product name "New Dawn", bundle id `co.majorisdigital.newdawn`. Never change the bundle id.
 

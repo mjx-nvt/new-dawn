@@ -10,13 +10,17 @@ function defaultTitle(): string {
   return `Meeting · ${now}`;
 }
 
-/** ⌘R / ● Record: pick tenant, meeting type, title and language, then start capturing. */
-export default function StartRecordingDialog({ onClose }: { onClose: () => void }) {
+/** A live session is Vietnamese: the meeting type's language mustn't replace it. */
+const KEEP_LANGUAGE = () => {};
+
+/** ⌘R / ● Record: pick tenant, meeting type, title and language, then start capturing.
+ *  `live` (the Live page): Vietnamese, written down and translated as people speak (D-041). */
+export default function StartRecordingDialog({ live = false, onClose }: { live?: boolean; onClose: () => void }) {
   const { data: current } = useCurrentWorkspace();
   const [chosenSlug, setSlug] = useState("");
   const slug = chosenSlug || current?.slug || "";
   const [title, setTitle] = useState(defaultTitle);
-  const [language, setLanguage] = useState<Language>("en");
+  const [language, setLanguage] = useState<Language>(live ? "vi" : "en");
   const [presentation, setPresentation] = useState(false);
   const [presenter, setPresenter] = useState("");
   const [typeId, setTypeId] = useState("");
@@ -33,7 +37,7 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
 
   function submit() {
     start.mutate(
-      { slug, title, language, meetingTypeId: typeId || null, presentation, presenter: presenter.trim() || null },
+      { slug, title, language, meetingTypeId: typeId || null, presentation, presenter: presenter.trim() || null, live },
       {
         onSuccess: () => {
           onClose();
@@ -58,7 +62,9 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
       onPointerDown={(e) => e.target === e.currentTarget && close()}
     >
       <div className="sheetBody">
-        <h2 id="record-title" className="sheetHeading">New recording</h2>
+        <h2 id="record-title" className="sheetHeading">
+          {live ? "Start live translation" : "New recording"}
+        </h2>
 
         <MeetingFields
           slug={slug}
@@ -66,7 +72,7 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
           typeId={typeId}
           onTypeChange={setTypeId}
           language={language}
-          onLanguageChange={setLanguage}
+          onLanguageChange={live ? KEEP_LANGUAGE : setLanguage}
         />
         <FormatField
           presentation={presentation}
@@ -82,7 +88,7 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
-        <LanguageField id="record-language" value={language} onChange={setLanguage} />
+        {!live && <LanguageField id="record-language" value={language} onChange={setLanguage} />}
 
         {micBlocked ? (
           <div className={styles.notice}>
@@ -93,7 +99,9 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
           </div>
         ) : (
           <p className="fieldHint">
-            Records your microphone and the call's audio from this Mac — no bot joins. Use headphones for a clean recording.
+            {live
+              ? "Records your microphone and the call's audio, writes down the Vietnamese as people speak and translates each line into English — all on this Mac. Use headphones for a clean recording."
+              : "Records your microphone and the call's audio from this Mac — no bot joins. Use headphones for a clean recording."}
             {mic.data === "not_determined" && " macOS will ask for microphone access."}
           </p>
         )}
@@ -111,7 +119,7 @@ export default function StartRecordingDialog({ onClose }: { onClose: () => void 
             onClick={submit}
           >
             <span className="recordDot" />
-            {start.isPending ? "Starting…" : "Start recording"}
+            {start.isPending ? "Starting…" : live ? "Start live translation" : "Start recording"}
           </button>
         </div>
       </div>

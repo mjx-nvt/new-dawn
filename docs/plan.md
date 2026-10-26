@@ -33,7 +33,7 @@ _2026-10-23. Supersedes `plan v1` (kept in the Project as history). Decisions ca
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-**Keep the AI simple (like Meetily).** Two functions: `transcribe(wav, language) → segments` and `complete(prompt, think) → text`. One Whisper model (`large-v3-turbo`), one text model (`qwen3.5:9b`, thinking on). They never run at the same time, because v1 has no live transcription — so no scheduler, no tiers, no fallbacks. Every call is still logged (`ai_log`) and nothing but `localhost` is ever contacted.
+**Keep the AI simple (like Meetily).** Two functions: `transcribe(wav, language) → segments` and `complete(prompt, think) → text`. One Whisper model (`large-v3-turbo`), one text model (`qwen3.5:9b`, thinking on). They never run at the same time — except a Live session (0.7.2, D-041), which holds the AI queue and keeps Whisper and the fast tier (`qwen3.5:4b`, thinking off) loaded together until Stop — so no scheduler, no tiers beyond that, no fallbacks. Every call is still logged (`ai_log`) and nothing but `localhost` is ever contacted.
 
 ## 3. Tenants
 

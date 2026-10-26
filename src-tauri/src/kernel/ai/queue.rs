@@ -8,4 +8,9 @@ impl AiQueue {
     pub async fn acquire(&self) -> MutexGuard<'_, ()> {
         self.0.lock().await
     }
+
+    /// The turn, only if nobody holds it now (a live session never waits behind a job, D-041).
+    pub fn try_acquire(&self) -> Option<MutexGuard<'_, ()>> {
+        self.0.try_lock().ok()
+    }
 }

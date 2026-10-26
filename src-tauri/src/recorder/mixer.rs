@@ -3,12 +3,13 @@
 //! laptop speakers feeding the mic measured 4.7× full scale), an 80 Hz high-pass and loudness
 //! normalisation towards −23 LUFS; both are aligned in 600 ms windows, summed with proportional scaling above ±1, and
 //! written to the WAV unless paused. Per-source levels and the "system audio is silent" flag are
-//! published through `Shared` for the 10 Hz meter.
+//! published through `Shared` for the 10 Hz meter. In a live session each written window is also
+//! offered to the live worker (D-041), never waiting for it.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -17,6 +18,7 @@ use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Async, FixedAsync, Resampler, SincInterpolationParameters};
 
 use super::saver::{RATE, WavWriter};
+use crate::kernel::ai::live::Window;
 
 const WINDOW: usize = RATE as usize * 600 / 1000;
 /// If system audio runs ahead of the mic by more than this, the oldest excess is dropped.
@@ -35,6 +37,8 @@ pub struct Shared {
     pub system_silent: AtomicBool,
     /// Chunks dropped because a bounded channel was full (callbacks never wait).
     pub dropped: AtomicU64,
+    /// Windows the live worker didn't get because it was behind (the WAV has them all).
+    pub live_dropped: AtomicU64,
 }
 
 impl Shared {
@@ -52,11 +56,13 @@ pub struct Source {
 }
 
 /// Runs until the mic channel closes (the session dropped the streams). Returns samples written.
+/// `live`: a live session's worker, handed a copy of every window written.
 pub fn run(
     mic: Source,
     system: Option<Source>,
     shared: Arc<Shared>,
     mut wav: WavWriter,
+    mut live: Option<SyncSender<Window>>,
 ) -> Result<u64> {
     let mut mic_chain = MicChain::new(mic.rate)?;
     let mut sys_resampler = match &system {
@@ -66,6 +72,7 @@ pub fn run(
     let mut mic_q: VecDeque<f32> = VecDeque::new();
     let mut sys_q: VecDeque<f32> = VecDeque::new();
     let mut zero_ms = 0u32;
+    let mut written = 0u64; // the recording's clock, in samples
 
     loop {
         match mic.rx.recv_timeout(Duration::from_millis(200)) {
@@ -103,6 +110,8 @@ pub fn run(
             let window = mix_window(&mut mic_q, &mut sys_q, WINDOW);
             if !shared.paused.load(Ordering::Relaxed) {
                 wav.write(&window)?;
+                offer_live(&mut live, &shared, written, &window);
+                written += window.len() as u64;
             }
         }
     }
@@ -112,8 +121,26 @@ pub fn run(
         let len = mic_q.len();
         let window = mix_window(&mut mic_q, &mut sys_q, len);
         wav.write(&window)?;
+        offer_live(&mut live, &shared, written, &window);
     }
     wav.finish()
+}
+
+/// Hands the live worker a copy of a written window without ever waiting: a full channel drops
+/// it (counted), a closed one (the worker has ended) stops the copies.
+fn offer_live(live: &mut Option<SyncSender<Window>>, shared: &Shared, at: u64, window: &[f32]) {
+    let Some(tx) = live else { return };
+    let window = Window {
+        at,
+        samples: window.to_vec(),
+    };
+    match tx.try_send(window) {
+        Ok(()) => {}
+        Err(TrySendError::Full(_)) => {
+            shared.live_dropped.fetch_add(1, Ordering::Relaxed);
+        }
+        Err(TrySendError::Disconnected(_)) => *live = None,
+    }
 }
 
 /// Takes `len` mic samples and up to `len` system samples (silence-padded), sums them and scales
@@ -292,6 +319,21 @@ mod tests {
         assert!((out[1] - 1.0 / 1.6).abs() < 1e-6);
         assert!((out[2] - 0.5).abs() < 1e-6);
         assert!(mic.is_empty() && sys.is_empty());
+    }
+
+    #[test]
+    fn live_copies_never_wait() {
+        let shared = Shared::default();
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let mut live = Some(tx);
+        offer_live(&mut live, &shared, 0, &[0.1; 4]);
+        offer_live(&mut live, &shared, 4, &[0.2; 4]); // full: dropped and counted
+        assert_eq!(shared.live_dropped.load(Ordering::Relaxed), 1);
+        let first = rx.recv().unwrap();
+        assert_eq!((first.at, first.samples.len()), (0, 4));
+        drop(rx); // the worker ended: no more copies
+        offer_live(&mut live, &shared, 8, &[0.3; 4]);
+        assert!(live.is_none());
     }
 
     #[test]

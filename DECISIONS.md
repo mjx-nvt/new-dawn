@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-041 — Live: Vietnamese captions with the English beside them, as people speak
+_2026-10-26_
+
+**Decision** (user: "live transcription and translation, a tab right below Meetings; learn from Transync AI; a very simple version first: live transcript VI and translate to EN"):
+- **A live session is a recording** (`live: true`): the same recorder, pill, banner, ⌘R/tray Stop and crash-safe WAV; it becomes a normal meeting in Vietnamese. No second capture path.
+- **Pipeline** (`kernel/ai/live.rs`, the only new AI path): the mixer offers each 600 ms 16 kHz window over a **bounded** channel (`try_send`; drops counted and shown). A segmenter thread cuts utterances with Silero VAD — after ≥ 600 ms of silence or at 10 s (cut at the least speech-like 100 ms), hysteresis 0.5 / 0.35, 300 ms kept either side, shorter than 250 ms dropped. The AI loop transcribes each utterance (Vietnamese forced, greedy, one segment, the vocabulary prompt with the owner, the echo filter and the corrections) and translates each finished line once (**Live translation agent**, thinking off, temperature 0.2, the last 3 pairs as context, the people/terms list as glossary). Transcription comes first; a shown line is never rewritten.
+- **The one exception to "one model at a time"**: the session holds the AI queue from Start to Stop, with Whisper and the translation model both loaded. Translation defaults to the fast tier `qwen3.5:4b` (large-v3 + 4b ≈ 7–8 GB on the 16 GB M1 Pro; 9b next to Whisper risks the grey-window kills of D-034). Start refuses while another AI job runs; batch jobs wait for Stop. Without Ollama it runs Vietnamese only. If live fails mid-session, a notification says so and Stop transcribes the recording the normal way.
+- **Saved as it goes**: lines into `transcript_segment` with the English in `translation` (migration 0008, additive; search still indexes the Vietnamese). Stop doesn't re-transcribe: the meeting becomes transcribed, the WAV is compressed and the automatic summary runs. Transcribe again replaces the live lines and their English (its confirm says so); editing a Vietnamese line keeps its English.
+- **UI**: Live under Meetings (File → New Live Translation…, ⇧⌘R); Tiếng Việt | English columns, "Translating…", one status word (Listening / Transcribing / Translating / Behind by N / Vietnamese only), A−/A+ text size, follow-the-latest with a "↓ Latest" capsule, the AI marker "Translated on this Mac by {model}". The meeting page shows both columns afterwards.
+- **Measured** on the 13 s test recording: Vietnamese ≈ 2 s and English ≈ 3–4 s after each pause, from a cold start. Not word by word in v1.
+- Learned from Transync's public pages only — its terms forbid reverse engineering, and it runs in the cloud. Later, in order of value: a floating subtitle window, word-by-word partial text, "you / them" labels, two-way, translation-only view.
+- Supersedes D-007's "no live transcription" and, for live sessions only, "never two models at once".
+
+---
+
 ## D-040 — A brand from a logo, a slogan and a colour; the minutes template is made from it
 _2026-10-26_
 

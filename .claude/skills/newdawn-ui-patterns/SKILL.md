@@ -115,6 +115,9 @@ Always a native `<select className="input">` — `components.css` makes it a 28 
 ## Record
 One control: `.btn.btnRecord` (red `--status-negative` fill, white; a `.recordDot` before the label) — the toolbar button when idle and the dialog's Start recording. No sidebar entry. Red is for record and destructive only.
 
+## Live (D-041)
+Sidebar **Live** right below Meetings (speech-bubble icon, never red). The page: idle = title, one line, red "Start live translation" (it records) over the two-column structure with ghost rows; live = the meeting title, a fixed "Tiếng Việt → English" chip, one status word, A−/A+ (3 steps, per-Mac), and `TranscriptView` in two languages (`64px 1fr 1fr`; English cell `ghostText` "Translating…" until it lands; AI marker on the English head). Follow the newest line while the user is at the bottom; scrolled up → a "↓ Latest" capsule. Pause/Stop stay on the pill. Never rewrite a shown line.
+
 ## Menus
 `MenuButton` → `.glass.menu`: macOS menu geometry — 5 px inset, 10 px radius, rows 24 px / 13 px / 10 px side padding / 5 px radius, hover and keyboard focus = `--focus` (system accent) fill with white text, `.menuSeparator` hairline with 5 px / 10 px margins, min-width 180. Danger rows red text.
 

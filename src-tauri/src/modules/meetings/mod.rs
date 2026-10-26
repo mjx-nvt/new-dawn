@@ -70,6 +70,8 @@ pub struct TranscriptSegment {
     pub text: String,
     /// What Whisper wrote, when the vocabulary corrected this line (D-036).
     pub raw_text: Option<String>,
+    /// The English of a line written during a live session (D-041); None until translated.
+    pub translation: Option<String>,
 }
 
 /// Just enough of a meeting type for pickers (full editing arrives with tenant setup, P1.4).
@@ -340,10 +342,17 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn finish_recording(pool: &SqlitePool, id: &str, duration_ms: u32) -> Result<()> {
+/// The recording ended: its length, and `recorded` (or `transcribed` after a live session, D-041).
+pub async fn finish_recording(
+    pool: &SqlitePool,
+    id: &str,
+    duration_ms: u32,
+    status: MeetingStatus,
+) -> Result<()> {
     sqlx::query(
-        "UPDATE meeting SET status = 'recorded', duration_ms = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
+        "UPDATE meeting SET status = ?, duration_ms = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     )
+    .bind(status)
     .bind(duration_ms)
     .bind(id)
     .execute(pool)
@@ -483,7 +492,7 @@ pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
 }
 
 pub async fn transcript(pool: &SqlitePool, meeting_id: &str) -> Result<Vec<TranscriptSegment>> {
-    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
+    Ok(sqlx::query_as("SELECT seq, start_ms, end_ms, text, raw_text, translation FROM transcript_segment WHERE meeting_id = ? ORDER BY seq")
         .bind(meeting_id)
         .fetch_all(pool)
         .await?)
@@ -549,11 +558,118 @@ pub async fn save_transcript(
     Ok(())
 }
 
+/// Appends one line of a live session (D-041) as it arrives; the FTS trigger indexes it like any
+/// other. `raw` is what Whisper wrote when the vocabulary corrected the line.
+pub async fn append_segment(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    seq: u32,
+    segment: &Segment,
+    raw: Option<&str>,
+) -> Result<()> {
+    sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(new_id())
+        .bind(meeting_id)
+        .bind(seq)
+        .bind(segment.start_ms)
+        .bind(segment.end_ms)
+        .bind(&segment.text)
+        .bind(raw)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Stores the English of a live line (D-041).
+pub async fn set_translation(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    seq: u32,
+    translation: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE transcript_segment SET translation = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+         WHERE meeting_id = ? AND seq = ?",
+    )
+    .bind(translation)
+    .bind(meeting_id)
+    .bind(seq)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MeetingStatus, NewMeeting, create, fts_query, save_transcript, search};
+    use super::{
+        MeetingStatus, NewMeeting, append_segment, create, fts_query, save_transcript, search,
+        set_translation, transcript,
+    };
     use crate::kernel::ai::whisper::{Language, Segment};
     use crate::kernel::hub::WorkspaceHub;
+
+    #[test]
+    fn live_lines_append_and_take_their_translation() {
+        let root = std::env::temp_dir().join(format!("newdawn-live-db-{}", uuid::Uuid::now_v7()));
+        tauri::async_runtime::block_on(async {
+            let hub = WorkspaceHub::open(root.clone()).await.unwrap();
+            hub.create_workspace("Test", "test").await.unwrap();
+            let pool = hub.pool("test").unwrap();
+            let new = NewMeeting {
+                id: "m1",
+                meeting_type_id: None,
+                title: "Live",
+                held_at_unix: 0,
+                language: Language::Vi,
+                audio_path: "/tmp/x.wav",
+                status: MeetingStatus::Recording,
+            };
+            create(&pool, new).await.unwrap();
+            let line = |start_ms, text: &str| Segment {
+                start_ms,
+                end_ms: start_ms + 2_000,
+                text: text.into(),
+            };
+            append_segment(&pool, "m1", 0, &line(0, "Chào mọi người"), None)
+                .await
+                .unwrap();
+            append_segment(
+                &pool,
+                "m1",
+                1,
+                &line(3_000, "Đồng ý với WiredScore"),
+                Some("Đồng ý với Wired Score"),
+            )
+            .await
+            .unwrap();
+            set_translation(&pool, "m1", 1, "Agreed with WiredScore")
+                .await
+                .unwrap();
+
+            let lines = transcript(&pool, "m1").await.unwrap();
+            assert_eq!(lines.len(), 2);
+            assert_eq!((lines[0].seq, lines[0].translation.as_deref()), (0, None));
+            assert_eq!(lines[1].start_ms, 3_000);
+            assert_eq!(lines[1].raw_text.as_deref(), Some("Đồng ý với Wired Score"));
+            assert_eq!(
+                lines[1].translation.as_deref(),
+                Some("Agreed with WiredScore")
+            );
+            assert_eq!(
+                search(&pool, "dong y").await.unwrap().len(),
+                1,
+                "live lines are searchable as they arrive"
+            );
+            assert!(
+                append_segment(&pool, "m1", 1, &line(5_000, "again"), None)
+                    .await
+                    .is_err(),
+                "a line number is used once"
+            );
+            hub.close_all().await;
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn fts_query_is_safe() {

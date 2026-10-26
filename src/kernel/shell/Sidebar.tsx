@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { openSettings } from "../bridge/settings";
-import { CodeIcon, CollapseIcon, MeetingsIcon, SettingsIcon, WorkspaceIcon } from "./icons";
+import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, SettingsIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -34,6 +34,9 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
       <div className={styles.section}>
         <Link to="/meetings" search={{}} className={styles.item} activeProps={{ className: styles.active }} title={tip("Meetings")}>
           {label("Meetings", <MeetingsIcon />)}
+        </Link>
+        <Link to="/live" search={{}} className={styles.item} activeProps={{ className: styles.active }} title={tip("Live")}>
+          {label("Live", <LiveIcon />)}
         </Link>
         <Link
           to="/workspace"

@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { audioUrl, useRestoreSegment, useTranscript, useUpdateSegment, useWaveform, type Meeting, type TranscriptSegment } from "../../kernel/bridge/meetings";
-import { formatClock } from "./format";
+import { useRecorderStatus } from "../../kernel/bridge/recorder";
+import { SparkleIcon } from "../../kernel/shell/icons";
+import { formatClock, LANGUAGE_LABEL, pendingEnglish } from "./format";
 import styles from "./TranscriptView.module.css";
 import WaveformPlayer, { SKIP_MS } from "./WaveformPlayer";
 
+/** The lines' size: the Live page's A−/A+ steps (--t-md, --t-lg, --t-xl). */
+export type TextSize = "md" | "lg" | "xl";
+
 /** Player + timestamped rows; clicking a time seeks the player, the playing row is highlighted,
- *  Edit corrects a line (the next summary run reads the correction). */
-export default function TranscriptView({ slug, meeting, startMs }: { slug: string; meeting: Meeting; startMs?: number }) {
-  const transcript = useTranscript(slug, meeting.id);
+ *  Edit corrects a line (the next summary run reads the correction). A live session's lines
+ *  arrive as people speak, with their English beside them (D-041). */
+export default function TranscriptView({ slug, meeting, startMs, textSize = "md" }: { slug: string; meeting: Meeting; startMs?: number; textSize?: TextSize }) {
+  const { data: recorder } = useRecorderStatus();
+  const live = recorder?.meeting_id === meeting.id ? recorder.live : null;
+  const transcript = useTranscript(slug, meeting.id, !!live);
   const player = useRef<HTMLAudioElement>(null);
   const list = useRef<HTMLOListElement>(null);
   const [nowMs, setNowMs] = useState(startMs ?? 0);
@@ -18,10 +26,15 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
   const [playerError, setPlayerError] = useState<string | null>(null);
   const update = useUpdateSegment(slug, meeting.id);
   const restore = useRestoreSegment(slug, meeting.id);
-  const waveform = useWaveform(slug, meeting.id, !!meeting.audio_path);
+  // Still being written: no player, and no waveform cached from half a file.
+  const recording = meeting.status === "recording";
+  const waveform = useWaveform(slug, meeting.id, !!meeting.audio_path && !recording);
   const segments = transcript.data ?? [];
-  const locked = meeting.status === "transcribing";
-  const current = segments.find((s) => nowMs >= s.start_ms && nowMs < s.end_ms) ?? null;
+  const locked = meeting.status === "transcribing" || recording;
+  // Tiếng Việt | English: during a live session and after it.
+  const english = !!live || segments.some((s) => s.translation);
+  const lastTranslated = segments.reduce((last, s) => (s.translation ? s.seq : last), -1);
+  const current = recording ? null : (segments.find((s) => nowMs >= s.start_ms && nowMs < s.end_ms) ?? null);
 
   // Space plays/pauses, ← → skip 10 s — unless you're typing or on a control that uses them.
   useEffect(() => {
@@ -56,8 +69,9 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
   }
 
   return (
-    <section className="section">
-      {meeting.audio_path && (
+    // Live: new lines and their English are read out as they arrive (the section is there before the first).
+    <section className="section" aria-live={live ? "polite" : undefined}>
+      {meeting.audio_path && !recording && (
         <>
           <audio
             ref={player}
@@ -111,22 +125,41 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
           })()}
         </p>
       )}
+      {english && (
+        <TranscriptHeads source={LANGUAGE_LABEL[meeting.language]}>
+          {live?.translation_off_reason ? (
+            <span className="fieldHint">Off — {live.translation_off_reason}</span>
+          ) : (
+            <span className="fieldHint aiMark">
+              <SparkleIcon /> Translated on this Mac{live?.model ? ` by ${live.model}` : ""}
+            </span>
+          )}
+        </TranscriptHeads>
+      )}
       {segments.length ? (
-        <ol className={styles.rows} ref={list}>
+        <ol className={textSize === "md" ? styles.rows : `${styles.rows} ${styles[textSize]}`} ref={list}>
           {segments.map((s) => {
             return (
-              <li key={s.seq} data-start={s.start_ms} className={current?.seq === s.seq ? `${styles.row} ${styles.playing}` : styles.row}>
-                <button
-                  type="button"
-                  className={styles.time}
-                  aria-label={`Play from ${formatClock(s.start_ms)}`}
-                  onClick={(e) => {
-                    seek(s.start_ms);
-                    e.currentTarget.blur(); // so Space pauses instead of replaying this line
-                  }}
-                >
-                  {formatClock(s.start_ms)}
-                </button>
+              <li
+                key={s.seq}
+                data-start={s.start_ms}
+                className={[styles.row, english && styles.bilingual, current?.seq === s.seq && styles.playing].filter(Boolean).join(" ")}
+              >
+                {recording ? (
+                  <span className={styles.time}>{formatClock(s.start_ms)}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.time}
+                    aria-label={`Play from ${formatClock(s.start_ms)}`}
+                    onClick={(e) => {
+                      seek(s.start_ms);
+                      e.currentTarget.blur(); // so Space pauses instead of replaying this line
+                    }}
+                  >
+                    {formatClock(s.start_ms)}
+                  </button>
+                )}
                 {editing === s.seq && !locked ? (
                   <SegmentEditor
                     segment={s}
@@ -161,19 +194,54 @@ export default function TranscriptView({ slug, meeting, startMs }: { slug: strin
                     </button>
                   </div>
                 )}
+                {english &&
+                  (s.translation ? (
+                    <p className={styles.text}>{s.translation}</p>
+                  ) : (
+                    <p className={`ghostText ${styles.text}`}>{pendingEnglish(s.seq, lastTranslated, live)}</p>
+                  ))}
               </li>
             );
           })}
         </ol>
       ) : (
-        <>
-          <p className={`ghostText ${styles.empty}`}>Not yet captured</p>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className={`${styles.ghostRow} ghostCard`} />
-          ))}
-        </>
+        <TranscriptGhost english={english} />
       )}
     </section>
+  );
+}
+
+/** Column heads of a two-language transcript: the spoken language | English, with a note. */
+export function TranscriptHeads({ source, children }: { source: string; children?: ReactNode }) {
+  return (
+    <div className={styles.heads}>
+      <span />
+      <span className="fieldLabel">{source}</span>
+      <span className={styles.headNote}>
+        <span className="fieldLabel">English</span>
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/** Before the first line: "Not yet captured" over three dashed rows, in two columns with English. */
+export function TranscriptGhost({ english }: { english: boolean }) {
+  return (
+    <>
+      <p className={`ghostText ${styles.empty}`}>Not yet captured</p>
+      {[0, 1, 2].map((i) =>
+        english ? (
+          <div key={i} className={styles.ghostLine}>
+            <span />
+            <span className={`${styles.ghostRow} ghostCard`} />
+            <span className={`${styles.ghostRow} ghostCard`} />
+          </div>
+        ) : (
+          <div key={i} className={`${styles.ghostRow} ghostCard`} />
+        ),
+      )}
+    </>
   );
 }
 

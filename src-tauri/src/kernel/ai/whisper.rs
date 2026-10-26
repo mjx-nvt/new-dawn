@@ -1,9 +1,10 @@
 //! Speech → text with whisper.cpp (whisper-rs, Metal). One model in memory, loaded on first use
-//! and dropped after an idle period; one `WhisperState` per job; whisper.cpp's built-in Silero VAD.
+//! and dropped after an idle period; one `WhisperState` per job (per utterance in a live session,
+//! `live.rs`); whisper.cpp's built-in Silero VAD.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -179,6 +180,7 @@ pub struct Segment {
 }
 
 /// Which downloaded Whisper model to use.
+#[derive(Clone, Copy)]
 pub(in crate::kernel::ai) struct SpeechModel<'a> {
     pub id: &'a str,
     pub path: &'a Path,
@@ -241,24 +243,8 @@ impl WhisperEngine {
         }
     }
 
-    /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
-    /// `transcribe()` gateway above instead, which adds the queue and `ai_log`.
-    /// `progress` gets 0.0–1.0; `cancel` is checked between and inside segments.
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::kernel::ai) fn transcribe(
-        &self,
-        model: SpeechModel<'_>,
-        vad_model: &Path,
-        samples: &[f32],
-        language: Language,
-        prompt: Option<&str>,
-        cancel: &Arc<AtomicBool>,
-        mut progress: impl FnMut(f32),
-    ) -> Result<Vec<Segment>> {
-        let prompt = prompt.map(|p| p.replace('\0', " "));
-        let threads = std::thread::available_parallelism().map_or(8, |n| n.get().min(8)) as i32;
-        let speech = detect_speech(vad_model, samples, threads)?;
-
+    /// The engine, locked, with `model` loaded (a different one is freed first). Blocking.
+    fn with_model(&self, model: SpeechModel<'_>) -> Result<MutexGuard<'_, Option<Loaded>>> {
         let mut guard = self.loaded.lock().unwrap_or_else(PoisonError::into_inner);
         if guard.as_ref().is_none_or(|l| l.model_id != model.id) {
             *guard = None; // free the old model before loading the new one
@@ -277,6 +263,66 @@ impl WhisperEngine {
                 last_used: Instant::now(),
             });
         }
+        Ok(guard)
+    }
+
+    /// Loads `model` now, so a live session's first line doesn't wait for it (D-041). Blocking;
+    /// takes no queue turn (the live worker holds it).
+    pub(in crate::kernel::ai) fn load(&self, model: SpeechModel<'_>) -> Result<()> {
+        if let Some(loaded) = self.with_model(model)?.as_mut() {
+            loaded.last_used = Instant::now();
+        }
+        Ok(())
+    }
+
+    /// One utterance of a live session (D-041): no VAD (the live segmenter cut it), the session's
+    /// `LiveDecoder` settings, a fresh state per call, language-safe cleanup. Blocking; takes no
+    /// queue turn. None when nothing real was said.
+    pub(in crate::kernel::ai) fn transcribe_utterance(
+        &self,
+        model: SpeechModel<'_>,
+        decoder: &LiveDecoder,
+        samples: &[f32],
+    ) -> Result<Option<String>> {
+        let mut guard = self.with_model(model)?;
+        let loaded = guard.as_mut().expect("model loaded above");
+        let mut state = loaded
+            .ctx
+            .create_state()
+            .context("creating a Whisper state")?;
+        if let Err(err) = state.full(decoder.params.clone(), samples) {
+            if decoder.cancel.load(Ordering::Relaxed) {
+                bail!(AppError::new("cancelled", "Live transcription stopped"));
+            }
+            return Err(err).context("running Whisper");
+        }
+        let mut parts = Vec::new();
+        for segment in state.as_iter() {
+            parts.extend(clean_text(&segment.to_str_lossy()?));
+        }
+        loaded.last_used = Instant::now();
+        Ok((!parts.is_empty()).then(|| parts.join(" ")))
+    }
+
+    /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
+    /// `transcribe()` gateway above instead, which adds the queue and `ai_log`.
+    /// `progress` gets 0.0–1.0; `cancel` is checked between and inside segments.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::kernel::ai) fn transcribe(
+        &self,
+        model: SpeechModel<'_>,
+        vad_model: &Path,
+        samples: &[f32],
+        language: Language,
+        prompt: Option<&str>,
+        cancel: &Arc<AtomicBool>,
+        mut progress: impl FnMut(f32),
+    ) -> Result<Vec<Segment>> {
+        let prompt = prompt.map(|p| p.replace('\0', " "));
+        let threads = threads();
+        let speech = detect_speech(vad_model, samples)?;
+
+        let mut guard = self.with_model(model)?;
         let loaded = guard.as_mut().expect("model loaded above");
         let mut state = loaded
             .ctx
@@ -353,19 +399,73 @@ impl WhisperEngine {
     }
 }
 
+/// Decoding settings for a live session's utterances (D-041), built once per session and cloned
+/// per call: Vietnamese forced (no detection pass), greedy with one candidate, one segment with no
+/// timestamps (the times come from the segmenter), at most 128 tokens, the vocabulary prompt, and
+/// whisper.cpp's default `no_context` (true: nothing carries over between calls). It owns the
+/// cancel flag its abort callback points to, so the pointer outlives every use of the settings.
+pub(in crate::kernel::ai) struct LiveDecoder {
+    params: FullParams<'static, 'static>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl LiveDecoder {
+    pub fn new(prompt: &str, cancel: Arc<AtomicBool>) -> Self {
+        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+        params.set_n_threads(threads());
+        params.set_language(Some(Language::Vi.code()));
+        let prompt = prompt.replace('\0', " ");
+        if !prompt.trim().is_empty() {
+            params.set_initial_prompt(&prompt); // leaked once per session (see `transcribe`)
+        }
+        params.set_translate(false);
+        params.set_single_segment(true);
+        params.set_no_timestamps(true);
+        params.set_max_tokens(128);
+        params.set_suppress_blank(true);
+        params.set_suppress_nst(true);
+        params.set_temperature(0.0);
+        params.set_entropy_thold(2.4);
+        params.set_logprob_thold(-1.0);
+        params.set_no_speech_thold(0.55);
+        params.set_print_progress(false);
+        params.set_print_realtime(false);
+        params.set_print_special(false);
+        params.set_print_timestamps(false);
+        // SAFETY: the pointer is to the flag `Self` owns, and the settings (and their clones) are
+        // only used through `&self`, so the flag outlives every whisper call that reads it.
+        unsafe {
+            params.set_abort_callback(Some(abort_when_cancelled));
+            params.set_abort_callback_user_data(Arc::as_ptr(&cancel) as *mut std::ffi::c_void);
+        }
+        Self { params, cancel }
+    }
+}
+
 /// whisper.cpp abort callback: `user_data` is the job's `AtomicBool` cancel flag.
 unsafe extern "C" fn abort_when_cancelled(user_data: *mut std::ffi::c_void) -> bool {
     // SAFETY: set from `Arc::as_ptr` on a flag that outlives the whisper call (see `transcribe`).
     unsafe { (*(user_data as *const AtomicBool)).load(Ordering::Relaxed) }
 }
 
-/// Speech ranges as sample indices: threshold 0.5, min speech 250 ms, 2000 ms of silence ends a
-/// segment (file-import "redemption"), segments capped at 25 s, 300 ms padding (D-014).
-fn detect_speech(vad_model: &Path, samples: &[f32], threads: i32) -> Result<Vec<(usize, usize)>> {
+fn threads() -> i32 {
+    std::thread::available_parallelism().map_or(8, |n| n.get().min(8)) as i32
+}
+
+/// The bundled Silero VAD, on the CPU. Batch transcription loads one per job; a live session keeps
+/// one for the whole session.
+pub(in crate::kernel::ai) fn vad_context(vad_model: &Path) -> Result<WhisperVadContext> {
     let mut ctx_params = WhisperVadContextParams::new();
-    ctx_params.set_n_threads(threads);
+    ctx_params.set_n_threads(threads());
     let path = vad_model.to_str().context("VAD model path is not UTF-8")?;
-    let mut vad = WhisperVadContext::new(path, ctx_params).context("loading the VAD model")?;
+    WhisperVadContext::new(path, ctx_params).context("loading the VAD model")
+}
+
+/// Speech ranges as sample indices: threshold 0.5, min speech 250 ms, 2000 ms of silence ends a
+/// segment (file-import "redemption"), segments capped at 25 s, 300 ms padding (D-014). Live
+/// sessions cut their own utterances from the VAD's probabilities instead (`live::cut`).
+fn detect_speech(vad_model: &Path, samples: &[f32]) -> Result<Vec<(usize, usize)>> {
+    let mut vad = vad_context(vad_model)?;
     vad.detect_speech(samples).context("detecting speech")?;
 
     let mut params = WhisperVadParams::new();

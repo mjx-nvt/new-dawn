@@ -28,6 +28,8 @@ pub enum MenuAction {
     /// View → Back / Forward (⌘[ / ⌘]): in-app history.
     GoBack,
     GoForward,
+    /// File → New Live Translation… (⇧⌘R): the Live page's start sheet (D-041).
+    NewLive,
 }
 
 /// Ask an already-open Settings window to show a tab.
