@@ -14,8 +14,8 @@ use sqlx::SqlitePool;
 use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Manager};
 use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperVadContext,
-    WhisperVadContextParams, WhisperVadParams,
+    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
+    WhisperVadContext, WhisperVadContextParams, WhisperVadParams,
 };
 
 use crate::error::AppError;
@@ -177,6 +177,49 @@ pub struct Segment {
     pub start_ms: u32,
     pub end_ms: u32,
     pub text: String,
+    /// The language it was written in (Vietnamese or English); None when not known.
+    #[serde(default)]
+    pub lang: Option<Language>,
+}
+
+/// Whisper's odds for one of the two languages at least this share of their sum: written in
+/// that language only; below, written both ways (D-046).
+const SURE: f32 = 0.85;
+/// Written both ways, the other language replaces the likelier one only when Whisper is clearly
+/// surer of it (mean log-probability): a translation can score within a hair of what was said.
+const CLEARLY: f32 = 0.03;
+
+/// Which languages to write a stretch of speech in, from Whisper's odds that it is Vietnamese and
+/// English: the likelier one, and the other too when it's a close call (D-046).
+fn candidates(vi: f32, en: f32) -> Vec<Language> {
+    let (first, second) = if vi >= en {
+        (Language::Vi, Language::En)
+    } else {
+        (Language::En, Language::Vi)
+    };
+    if vi.max(en) >= SURE * (vi + en) {
+        vec![first]
+    } else {
+        vec![first, second]
+    }
+}
+
+/// How likely `samples` are Vietnamese and English, by Whisper's language detection (one encoder
+/// pass over the first 30 s).
+fn vi_en_odds(state: &mut WhisperState, samples: &[f32]) -> Result<(f32, f32)> {
+    let threads = threads() as usize;
+    state
+        .pcm_to_mel(samples, threads)
+        .context("reading the speech")?;
+    let (_, probs) = state
+        .lang_detect(0, threads)
+        .context("detecting the language")?;
+    let odds = |language: Language| {
+        whisper_rs::get_lang_id(language.code())
+            .and_then(|id| probs.get(id as usize).copied())
+            .unwrap_or(0.0)
+    };
+    Ok((odds(Language::Vi), odds(Language::En)))
 }
 
 /// Which downloaded Whisper model to use.
@@ -347,20 +390,9 @@ impl WhisperEngine {
             .ctx
             .create_state()
             .context("creating a Whisper state")?;
-        let threads = threads() as usize;
-        state
-            .pcm_to_mel(samples, threads)
-            .context("reading the utterance")?;
-        let (_, probs) = state
-            .lang_detect(0, threads)
-            .context("detecting the language")?;
+        let odds = vi_en_odds(&mut state, samples)?;
         loaded.last_used = Instant::now();
-        let odds = |language: Language| {
-            whisper_rs::get_lang_id(language.code())
-                .and_then(|id| probs.get(id as usize).copied())
-                .unwrap_or(0.0)
-        };
-        Ok((odds(Language::Vi), odds(Language::En)))
+        Ok(odds)
     }
 
     /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
@@ -388,17 +420,16 @@ impl WhisperEngine {
             .create_state()
             .context("creating a Whisper state")?;
 
-        let mut segments = Vec::new();
-        for (index, &(start, end)) in speech.iter().enumerate() {
-            if cancel.load(Ordering::Relaxed) {
-                bail!(AppError::new("cancelled", "Transcription cancelled"));
-            }
+        let eot = loaded.ctx.token_eot();
+        // One stretch of speech written in `lang`: its lines, and how sure Whisper was (the mean
+        // log-probability of its words; a translation scores lower than what was said).
+        let decode = |state: &mut WhisperState, lang: Language, start: usize, end: usize| {
             let mut params = FullParams::new(SamplingStrategy::BeamSearch {
                 beam_size: 3,
                 patience: -1.0,
             });
             params.set_n_threads(threads);
-            params.set_language(Some(language.code()));
+            params.set_language(Some(lang.code()));
             if let Some(prompt) = &prompt {
                 // ponytail: whisper-rs never frees this CString (~700 bytes per speech segment, a
                 // few hundred KB for a long meeting); upstream fix or one FullParams per job if it matters.
@@ -436,7 +467,17 @@ impl WhisperEngine {
 
             let offset_ms = (start * 1000 / SAMPLE_RATE) as u32;
             let limit_ms = (end * 1000 / SAMPLE_RATE) as u32;
+            let (mut lines, mut plogs) = (Vec::new(), Vec::new());
             for segment in state.as_iter() {
+                for i in 0..segment.n_tokens() {
+                    let data = segment
+                        .get_token(i)
+                        .context("reading a token")?
+                        .token_data();
+                    if data.id < eot {
+                        plogs.push(data.plog);
+                    }
+                }
                 let Some(text) = clean_text(&segment.to_str_lossy()?) else {
                     continue;
                 };
@@ -444,12 +485,45 @@ impl WhisperEngine {
                 let start_ms = offset_ms + (segment.start_timestamp().max(0) as u32) * 10;
                 let end_ms =
                     (offset_ms + (segment.end_timestamp().max(0) as u32) * 10).min(limit_ms);
-                segments.push(Segment {
+                lines.push(Segment {
                     start_ms,
                     end_ms: end_ms.max(start_ms),
                     text,
+                    lang: Some(lang),
                 });
             }
+            // Nothing written in this language can't beat what the other one wrote.
+            let sure = if lines.is_empty() {
+                f32::NEG_INFINITY
+            } else {
+                plogs.iter().sum::<f32>() / plogs.len().max(1) as f32
+            };
+            Ok((sure, lines))
+        };
+
+        let mut segments = Vec::new();
+        for (index, &(start, end)) in speech.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                bail!(AppError::new("cancelled", "Transcription cancelled"));
+            }
+            // "Auto" is Vietnamese or English, chosen for each stretch of speech (D-046): left to
+            // pick among its 99 languages, Whisper wrote English it took for Vietnamese as a
+            // Vietnamese translation, and once as Malay.
+            let tries = match language {
+                Language::Auto => {
+                    let (vi, en) = vi_en_odds(&mut state, &samples[start..end])?;
+                    candidates(vi, en)
+                }
+                fixed => vec![fixed],
+            };
+            let mut best: Option<(f32, Vec<Segment>)> = None;
+            for lang in tries {
+                let (sure, lines) = decode(&mut state, lang, start, end)?;
+                if best.as_ref().is_none_or(|(most, _)| sure > most + CLEARLY) {
+                    best = Some((sure, lines));
+                }
+            }
+            segments.extend(best.map(|(_, lines)| lines).unwrap_or_default());
             progress((index + 1) as f32 / speech.len().max(1) as f32);
         }
 
@@ -687,7 +761,7 @@ mod tests {
     use std::sync::atomic::AtomicBool;
 
     use super::{Language, SpeechModel, WhisperEngine, clean_text};
-    use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore};
+    use crate::kernel::ai::models::{BUNDLED_VAD, CATALOGUE, ModelStore};
     use crate::kernel::hub::WorkspaceHub;
     use crate::modules::meetings::{self, NewMeeting, audio};
 
@@ -761,6 +835,15 @@ mod tests {
     /// Whisper model. `NEWDAWN_EVAL_AUDIO=<file> NEWDAWN_EVAL_SEGMENTS=<out .json>
     /// [NEWDAWN_EVAL_PEOPLE_SQL=<.sql>] cargo test eval_transcribe -- --ignored --nocapture`.
     #[test]
+    fn writes_a_close_call_both_ways_likelier_first() {
+        use super::candidates;
+        assert_eq!(candidates(0.95, 0.03), vec![Language::Vi]);
+        assert_eq!(candidates(0.0, 0.98), vec![Language::En]);
+        assert_eq!(candidates(0.55, 0.40), vec![Language::Vi, Language::En]);
+        assert_eq!(candidates(0.15, 0.27), vec![Language::En, Language::Vi]);
+    }
+
+    #[test]
     #[ignore]
     fn eval_transcribe() {
         use crate::modules::meetings::eval;
@@ -773,6 +856,17 @@ mod tests {
         let (spec, model_path) = models
             .preferred_speech_model()
             .expect("download a Whisper model first");
+        // NEWDAWN_EVAL_WHISPER: another downloaded model's file (e.g. the full large-v3).
+        let (spec, model_path) = match eval::var("NEWDAWN_EVAL_WHISPER") {
+            Some(file) => (
+                CATALOGUE
+                    .iter()
+                    .find(|s| s.file == file)
+                    .expect("a catalogue file name"),
+                app_data.join("models").join(&file),
+            ),
+            None => (spec, model_path),
+        };
         let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
             .join(BUNDLED_VAD);

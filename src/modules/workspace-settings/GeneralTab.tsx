@@ -3,6 +3,7 @@ import { useGlassStatus } from "../../kernel/bridge/glass";
 import { useProfile, useSetProfile } from "../../kernel/bridge/profile";
 import { openPrivacySettings, useMicrophonePermission, useRequestMicrophone, type PermissionState } from "../../kernel/bridge/recorder";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
+import { SUMMARY_LANGS } from "../meetings/format";
 import styles from "./Settings.module.css";
 
 const MIC_LABEL: Record<PermissionState, string> = {
@@ -72,6 +73,33 @@ export default function GeneralTab() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+      <p className="groupTitle">Summaries</p>
+      <div className="group">
+        <div className="groupRow">
+          <div className="rowText">
+            <p className="rowLabel">Second language</p>
+            <p className="rowHint">Summaries are written in English. The Summary tab offers this language beside it, translated on this Mac when you ask.</p>
+          </div>
+          <div className="rowControl">
+            <select
+              className="input"
+              aria-label="Second language"
+              value={profile?.summary_language ?? "vi"}
+              disabled={!profile || setProfile.isPending}
+              onChange={(e) => {
+                const lang = SUMMARY_LANGS.find((l) => l.id === e.target.value)?.id;
+                if (lang) setProfile.mutate({ summary_language: lang });
+              }}
+            >
+              {SUMMARY_LANGS.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

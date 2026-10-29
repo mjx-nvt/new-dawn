@@ -13,6 +13,7 @@ pub mod summarise;
 pub mod tasks;
 pub mod template;
 pub mod transcribe;
+pub mod translations;
 pub mod waveform;
 
 use anyhow::{Result, bail};
@@ -590,7 +591,7 @@ pub async fn save_transcript(
         .execute(&mut *tx)
         .await?;
     for (seq, segment) in segments.iter().enumerate() {
-        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(new_id())
             .bind(meeting_id)
             .bind(seq as u32)
@@ -598,6 +599,7 @@ pub async fn save_transcript(
             .bind(segment.end_ms)
             .bind(&segment.text)
             .bind(raw.get(seq).cloned().flatten())
+            .bind(segment.lang)
             .execute(&mut *tx)
             .await?;
     }
@@ -790,6 +792,7 @@ mod tests {
                 start_ms: 0,
                 end_ms: 1_000,
                 text: "Chào".into(),
+                lang: None,
             };
             save_transcript(&pool, "m1", &[batch], &[], 1_000)
                 .await
@@ -842,6 +845,7 @@ mod tests {
                 start_ms,
                 end_ms: start_ms + 1000,
                 text: text.into(),
+                lang: None,
             };
             save_transcript(
                 &pool,

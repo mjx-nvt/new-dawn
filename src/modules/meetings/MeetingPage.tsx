@@ -39,7 +39,7 @@ export type MeetingTab = (typeof MEETING_TABS)[number]["id"];
  *  Transcript | Summary | Minutes (the tab lives in the URL). */
 export default function MeetingPage() {
   const { meetingId } = route.useParams();
-  const { tab, t } = route.useSearch();
+  const { tab, t, lang } = route.useSearch();
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug ?? "";
@@ -210,7 +210,14 @@ export default function MeetingPage() {
 
       <div role="tabpanel">
         {tab === "transcript" && m && workspace && <TranscriptView key={m.id} slug={slug} meeting={m} startMs={t} />}
-        {tab === "summary" && m && workspace && <SummaryTab slug={slug} meeting={m} />}
+        {tab === "summary" && m && workspace && (
+          <SummaryTab
+            slug={slug}
+            meeting={m}
+            lang={lang}
+            onLang={(next) => void navigate({ to: "/meetings/$meetingId", params: { meetingId }, search: { tab: "summary", ...(next ? { lang: next } : {}) }, replace: true })}
+          />
+        )}
         {tab === "minutes" && m && workspace && <MinutesTab slug={slug} meeting={m} />}
       </div>
       {deleting && m && workspace && <DeleteSheet slug={slug} meetingId={meetingId} title={m.title} onClose={() => setDeleting(false)} />}

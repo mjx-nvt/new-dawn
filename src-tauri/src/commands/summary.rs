@@ -3,11 +3,13 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{self, OllamaStatus};
+use crate::kernel::ai::translate::SummaryLang;
 use crate::kernel::hub::WorkspaceHub;
 use crate::modules::meetings::corrections::{self, CorrectionsOutcome};
 use crate::modules::meetings::naming::{self, NameDecision};
 use crate::modules::meetings::review;
 use crate::modules::meetings::summarise::{self, SummaryJobs, SummaryView};
+use crate::modules::meetings::translations::{self, SummaryTranslation};
 use crate::modules::people::AttendeeEdit;
 
 #[tauri::command]
@@ -115,6 +117,30 @@ pub async fn copy_summary_email(
         .write_html(html, Some(plain))
         .map_err(anyhow::Error::from)?;
     Ok(subject)
+}
+
+/// The summary in `lang`, if it was translated (D-046).
+#[tauri::command]
+#[specta::specta]
+pub async fn get_summary_translation(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    lang: SummaryLang,
+) -> Result<Option<SummaryTranslation>, AppError> {
+    Ok(translations::get(&hub.pool(&slug)?, &meeting_id, lang).await?)
+}
+
+/// Translates the summary into `lang` on this Mac and keeps it.
+#[tauri::command]
+#[specta::specta]
+pub async fn translate_summary(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    meeting_id: String,
+    lang: SummaryLang,
+) -> Result<SummaryTranslation, AppError> {
+    Ok(translations::translate(&hub.pool(&slug)?, &meeting_id, lang).await?)
 }
 
 /// Writes the cover note again with the email agent.

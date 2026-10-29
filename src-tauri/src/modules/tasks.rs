@@ -524,6 +524,7 @@ mod tests {
                 ProfilePatch {
                     name: Some("Tien Nguyen".into()),
                     everyone_attends: None,
+                    summary_language: None,
                 },
             )
             .await

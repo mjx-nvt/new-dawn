@@ -13,7 +13,7 @@ This file is the source of truth for how to work on this codebase. Read it at th
 - **Native look**: real Liquid Glass shell on macOS 26+ via the `window-vibrancy` crate (`apply_liquid_glass`), `apply_vibrancy` fallback on older macOS.
 - **Database**: SQLite via `sqlx` (runtime-tokio). `registry.db` + one `workspace.db` per workspace. Two migration sets: `src-tauri/migrations/registry/` and `src-tauri/migrations/workspace/`.
 - **Search**: SQLite FTS5; later `sqlite-vec`.
-- **AI (keep it simple, like Meetily)**: `whisper-rs` (metal) compiled in, model `large-v3-turbo`; Qwen through Ollama at `http://localhost:11434` (`/api/chat`, streaming, `options.num_ctx` always set), model `qwen3.5:9b` with thinking ON. Exactly two capabilities: `transcribe()` and `complete()`. Jobs run one at a time. No cloud provider exists in this codebase.
+- **AI (keep it simple, like Meetily)**: `whisper-rs` (metal) compiled in, model `large-v3-turbo`; Qwen through Ollama at `http://localhost:11434` (`/api/chat`, streaming, `options.num_ctx` always set), model `qwen3.5:9b` with thinking ON. Three capabilities: `transcribe()`, `complete()` and `translate()` — the last is Apple's on-device Translation framework through the bundled `newdawn-translate` helper (`src-tauri/helpers/translate.swift`, built by `build.rs`), not a model of ours, and it takes no queue turn (D-046). Whisper and Qwen jobs run one at a time. No cloud provider exists in this codebase.
 - **Recorder**: `cpal` (mic) + `cidre` Core Audio process tap (system audio) + `rubato` mixer → incremental WAV. Transcription is a batch job after Stop — except a **Live** session (D-041): the mixer offers each 600 ms window (the mix, and the microphone and the call apart) to `kernel/ai/live.rs` over a bounded channel; it cuts utterances with the VAD (in a discussion the microphone and the call separately, D-043), transcribes each (Vietnamese, English or both ways) and translates it into the other language, writing lines as they arrive — into the meeting, or only into memory for a quick translation.
 - **Bridge**: `tauri-specta` generates `src/bindings.ts` from Rust commands. UI calls commands only through `src/kernel/bridge/`.
 - **Identity**: product name "New Dawn", bundle id `co.majorisdigital.newdawn`. Never change the bundle id.
@@ -24,7 +24,7 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 
 ## Architecture rules (non-negotiable)
 1. **Everything data goes through `kernel/hub.rs` (WorkspaceHub).** No module opens a database file. Cross-workspace views fan out across open pools in the hub.
-2. **Everything AI goes through `kernel/ai/`.** No feature calls Ollama or Whisper directly. `ai/` owns the two models, a sequential job queue (one AI job at a time), streaming and `ai_log`.
+2. **Everything AI goes through `kernel/ai/`.** No feature calls Ollama, Whisper or the translation helper directly. `ai/` owns the two models, the translator, a sequential job queue (one Whisper/Qwen job at a time), streaming and `ai_log`.
 3. **No network except `localhost`** — with one exception: `src-tauri/src/kernel/ai/models.rs` downloads model files from `huggingface.co` (redirects only to its `*.hf.co` CDN) at a pinned commit, only when the user clicks Download, SHA-256 verified (D-014). `scripts/check-localhost-only.sh` must pass: only `localhost`/`127.0.0.1` URLs in `src-tauri/src` and `src` (documentation links in comments and that one file excepted).
 4. **The recorder never blocks the UI.** Audio callbacks push into bounded channels; everything else is async tasks.
 5. **Thin commands.** `#[tauri::command]` functions in `commands/` validate input and call a module; they contain no logic.
@@ -71,9 +71,9 @@ Bridge between sessions: `LAST_BUILD.md` (what was built, manual steps) and `DEC
 ## Key files
 - `src-tauri/src/lib.rs` — app setup, plugins, menu, glass, hub, gateway state (`main.rs` only calls `run()`)
 - `src-tauri/src/kernel/registry.rs`, `hub.rs`, `theme.rs`, `glass.rs`, `menu.rs`, `tray.rs`, `permissions.rs`
-- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log,live,days}.rs`, `src-tauri/src/kernel/brand/{tokens,logo}.rs`, `src-tauri/src/kernel/export/{model,docx,rebrand,pdf}.rs`, `src-tauri/src/kernel/profile.rs` (owner name + per-workspace title)
+- `src-tauri/src/kernel/ai/{mod,ollama,whisper,queue,log,live,days,translate}.rs`, `src-tauri/helpers/translate.swift`, `src-tauri/src/kernel/brand/{tokens,logo}.rs`, `src-tauri/src/kernel/export/{model,docx,rebrand,pdf}.rs`, `src-tauri/src/kernel/profile.rs` (owner name + per-workspace title)
 - `src-tauri/templates/minutes-base.docx` (the base every generated minutes template is made from; `scripts/make_minutes_base.py`)
-- `src-tauri/src/recorder/{session,mic,system_tap,mixer,saver}.rs`, `src-tauri/src/modules/meetings/{transcribe,summarise,email}.rs`
+- `src-tauri/src/recorder/{session,mic,system_tap,mixer,saver}.rs`, `src-tauri/src/modules/meetings/{transcribe,summarise,email,translations}.rs`
 - `src-tauri/src/modules/*.rs`, `src-tauri/src/commands/*.rs`
 - `src/kernel/{shell,theme,glass,dossier,bridge}/`, `src/modules/{meetings,live,tasks,tenant-setup,recorder,models,workspace-settings}/`, `src/styles/{base,tokens}.css`
 - `brands/<slug>/tokens.json` starter packs; `schemas/` dossier schemas

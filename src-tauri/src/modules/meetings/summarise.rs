@@ -217,6 +217,10 @@ pub fn default_structure(language: Language) -> Vec<SectionSpec> {
     ]
 }
 
+/// Summaries, their email and the minutes are written in English, whatever was spoken, from the
+/// lines as spoken (D-046): one language to read and compare; the Summary tab translates on request.
+pub(super) const SUMMARY_LANGUAGE: Language = Language::En;
+
 fn language_name(language: Language) -> &'static str {
     match language {
         Language::En => "English",
@@ -1271,7 +1275,7 @@ async fn run(
             notes.push_str(&format!("\n\n{note}"));
         }
         let notes = notes.trim();
-        let structure = default_structure(meeting.language);
+        let structure = default_structure(SUMMARY_LANGUAGE);
         let guide = agents::guide(std::path::Path::new(&workspace.folder_path), Agent::Summary);
         // The whole run (summary → names check → cover note) stays on the Summary agent's model.
         let model = agents::model_for(&pool, Agent::Summary).await;
@@ -1285,7 +1289,7 @@ async fn run(
             &session,
             &guide,
             &structure,
-            meeting.language,
+            SUMMARY_LANGUAGE,
             owner.as_ref(),
             segments.iter().any(|s| s.speaker.is_some()),
             &transcript_text(&segments, owner_name),
@@ -1305,7 +1309,7 @@ async fn run(
                 doc.attendees.insert(0, Attendee { name: presenter.to_owned(), attendance: "Present".to_owned(), ..Attendee::default() });
             }
         }
-        apply_people(&mut doc, &people, meeting.language);
+        apply_people(&mut doc, &people, SUMMARY_LANGUAGE);
         settle_attendees(&mut doc, settings.everyone_attends, meeting.presenter.as_deref(), owner.as_ref());
         if let Some(previous) = &previous {
             if keep_edits {
@@ -1325,7 +1329,7 @@ async fn run(
             workspace: &workspace.name,
             title: &meeting.title,
             held_on: &meeting.held_on,
-            language: meeting.language,
+            language: SUMMARY_LANGUAGE,
             owner: owner.as_ref(),
         };
         let (subject, body) = email::render(&doc, &ctx);
@@ -1937,7 +1941,7 @@ pub async fn rewrite_email(app: &AppHandle, slug: &str, meeting_id: &str) -> Res
         workspace: &workspace.name,
         title: &meeting.title,
         held_on: &meeting.held_on,
-        language: meeting.language,
+        language: SUMMARY_LANGUAGE,
         owner: owner.as_ref(),
     };
     let cancel = AtomicBool::new(false);
@@ -2079,8 +2083,8 @@ mod eval_tests {
                     let result = summarise_text(
                         &session,
                         &guide,
-                        &default_structure(meeting.language),
-                        meeting.language,
+                        &default_structure(SUMMARY_LANGUAGE),
+                        SUMMARY_LANGUAGE,
                         Some(&owner),
                         segments.iter().any(|s| s.speaker.is_some()),
                         &transcript_text(segments, Some(&owner.name)),
@@ -2095,7 +2099,7 @@ mod eval_tests {
                         Ok(mut doc) => {
                             let corpus = mention_corpus(segments, None);
                             keep_mentioned(&mut doc, &people, &corpus, None, Some(&owner.name));
-                            apply_people(&mut doc, &people, meeting.language);
+                            apply_people(&mut doc, &people, SUMMARY_LANGUAGE);
                             // "Everyone involved attends" was off in the user's settings.
                             settle_attendees(&mut doc, false, None, Some(&owner));
                             doc
@@ -2111,7 +2115,7 @@ mod eval_tests {
                 workspace: &workspace.name,
                 title: &meeting.title,
                 held_on: &meeting.held_on,
-                language: meeting.language,
+                language: SUMMARY_LANGUAGE,
                 owner: Some(&owner),
             };
             let (subject, body) = email::render(&doc, &ctx);

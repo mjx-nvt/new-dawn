@@ -1017,6 +1017,7 @@ mod live_tests {
                 start_ms: n * 20_000,
                 end_ms: n * 20_000 + 15_000,
                 text: (*t).into(),
+                lang: None,
             })
             .collect();
         let mut doc = SummaryDoc {

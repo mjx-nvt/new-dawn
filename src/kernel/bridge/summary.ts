@@ -6,14 +6,16 @@ import {
   type AppError,
   type NameDecision,
   type SummaryProgress as SummaryProgressEvent,
+  type SummaryLang,
   type SummaryStage,
+  type SummaryTranslation,
   type SummaryView_Serialize,
 } from "../../bindings";
 import { invalidateTasks } from "./tasks";
 import { unwrap } from "./unwrap";
 
 export type SummaryView = SummaryView_Serialize;
-export type { SummaryStage };
+export type { SummaryLang, SummaryStage, SummaryTranslation };
 
 export type SummaryProgress = Omit<SummaryProgressEvent, "meeting_id" | "workspace_slug"> & {
   /** When this stage (or part) began, and when its first token arrived (ms since epoch). */
@@ -157,6 +159,24 @@ export function useRewriteEmail(slug: string, meetingId: string) {
   return useMutation({
     mutationFn: () => unwrap(commands.rewriteEmail(slug, meetingId)),
     onSuccess: (view) => queryClient.setQueryData(keys.summary(slug, meetingId), view),
+  });
+}
+
+/** The summary in `lang`, if translated (D-046). `version` (when the summary was written or
+ *  edited) is in the key, so a changed summary refetches and reads "out of date". */
+export function useSummaryTranslation(slug: string, meetingId: string, lang: SummaryLang | undefined, version: string) {
+  return useQuery({
+    queryKey: ["summary-translation", slug, meetingId, lang, version],
+    queryFn: () => unwrap(commands.getSummaryTranslation(slug, meetingId, lang ?? "vi")),
+    enabled: !!lang,
+  });
+}
+
+export function useTranslateSummary(slug: string, meetingId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lang: SummaryLang) => unwrap(commands.translateSummary(slug, meetingId, lang)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["summary-translation", slug, meetingId] }),
   });
 }
 

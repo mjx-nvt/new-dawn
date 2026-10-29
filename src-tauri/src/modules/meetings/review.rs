@@ -1032,6 +1032,7 @@ mod tests {
                 start_ms: 0,
                 end_ms: 1000,
                 text: "helo".into(),
+                lang: None,
             };
             super::super::save_transcript(&pool, "m1", &[seg], &[], 1000)
                 .await

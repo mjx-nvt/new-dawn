@@ -39,9 +39,9 @@ export default function TranscriptView({ slug, meeting, startMs, textSize = "md"
   // Said | translation: during a live session and after it, the way its language says.
   const english = !!live || segments.some((s) => s.translation);
   const direction = directionOf(meeting.language);
-  // A presenter's paragraphs are a live session's (its lines say their language, translated or
-  // not): batch lines stay one row each, as before.
-  const fromLive = english || segments.some((s) => s.lang);
+  // A presenter's paragraphs are a live session's (translated, or saying who spoke and how
+  // clearly): batch lines stay one row each, as before — they say their language too (D-046).
+  const fromLive = english || segments.some((s) => s.speaker || s.clarity);
   const layout = layoutLines(segments, fromLive ? meeting.format : "discussion");
   const unclear = `${UNCLEAR} Transcribe again${live ? " after Stop" : ""} for a careful pass.`;
   const translatedUpTo = lastTranslated(segments);

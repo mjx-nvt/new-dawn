@@ -20,6 +20,7 @@ mod kernel {
         pub mod models;
         pub mod ollama;
         pub mod queue;
+        pub mod translate;
         pub mod whisper;
     }
     pub mod export {
@@ -111,6 +112,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::summary::cancel_summary,
             commands::summary::confirm_names,
             commands::summary::rewrite_email,
+            commands::summary::get_summary_translation,
+            commands::summary::translate_summary,
             commands::summary::apply_corrections,
             commands::summary::dismiss_names,
             commands::summary::update_summary_section,

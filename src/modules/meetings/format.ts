@@ -1,4 +1,5 @@
 import type { Language, MeetingStatus, Stage } from "../../kernel/bridge/meetings";
+import type { SummaryLang } from "../../kernel/bridge/summary";
 import type { LiveStatus } from "../../kernel/bridge/recorder";
 
 /** 754_000 → "12:34"; 3_723_000 → "1:02:03". */
@@ -22,6 +23,21 @@ export function foldName(name: string): string {
 }
 
 export const LANGUAGE_LABEL: Record<Language, string> = { en: "English", vi: "Tiếng Việt", auto: "Auto-detect" };
+
+/** The languages a summary can be read in besides English (D-046), in menu order. */
+export const SUMMARY_LANGS: { id: SummaryLang; label: string }[] = [
+  { id: "vi", label: "Vietnamese" },
+  { id: "fr", label: "French" },
+  { id: "de", label: "German" },
+  { id: "ja", label: "Japanese" },
+  { id: "ko", label: "Korean" },
+  { id: "zh", label: "Chinese" },
+  { id: "es", label: "Spanish" },
+];
+
+export function summaryLangLabel(lang: SummaryLang): string {
+  return SUMMARY_LANGS.find((l) => l.id === lang)?.label ?? lang;
+}
 
 export const STATUS_LABEL: Record<MeetingStatus, string> = {
   recording: "Recording",

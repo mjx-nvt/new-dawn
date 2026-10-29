@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 
 allowed='https?://(localhost|127\.0\.0\.1)([:/]|$)|https?://(ipc|asset)\.localhost|https?://schema\.tauri\.app|xmlns(:[a-z0-9]+)?="http://(www\.w3\.org|schemas\.openxmlformats\.org)/'
 
-violations=$(grep -rnE 'https?://' --include='*.rs' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' --include='*.html' --include='*.css' src-tauri/src src 2>/dev/null \
+violations=$(grep -rnE 'https?://' --include='*.rs' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.json' --include='*.html' --include='*.css' --include='*.swift' src-tauri/src src-tauri/helpers src 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|#|\*|/\*|<!--)' \
   | grep -vE "$allowed" \
   | grep -vE '^src-tauri/src/kernel/ai/models\.rs:[0-9]+:.*https://huggingface\.co/' \

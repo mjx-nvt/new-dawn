@@ -1,10 +1,12 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect } from "@tanstack/react-router";
 import { getOnboardingDone } from "./kernel/bridge/onboarding";
 import type { SettingsTab } from "./kernel/bridge/settings";
+import type { SummaryLang } from "./kernel/bridge/summary";
 import AppLayout from "./kernel/shell/AppLayout";
 import LivePage from "./modules/live/LivePage";
 import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/MeetingPage";
 import MeetingsPage, { type MeetingsSearch } from "./modules/meetings/MeetingsPage";
+import { SUMMARY_LANGS } from "./modules/meetings/format";
 import { SORTS, STATUS_FILTERS, WHEN_FILTERS } from "./modules/meetings/listing";
 import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboarding/WelcomePage";
 import TasksPage from "./modules/tasks/TasksPage";
@@ -47,10 +49,15 @@ const meetingsRoute = createRoute({
 const meetingRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/meetings/$meetingId",
-  validateSearch: (search: Record<string, unknown>): { tab: MeetingTab; t?: number } => ({
-    tab: MEETING_TABS.find((t) => t.id === search.tab)?.id ?? "transcript",
-    ...(typeof search.t === "number" && search.t >= 0 ? { t: search.t } : {}),
-  }),
+  // ?lang= shows the summary in that language instead of English (D-046).
+  validateSearch: (search: Record<string, unknown>): { tab: MeetingTab; t?: number; lang?: SummaryLang } => {
+    const lang = SUMMARY_LANGS.find((l) => l.id === search.lang)?.id;
+    return {
+      tab: MEETING_TABS.find((t) => t.id === search.tab)?.id ?? "transcript",
+      ...(typeof search.t === "number" && search.t >= 0 ? { t: search.t } : {}),
+      ...(lang ? { lang } : {}),
+    };
+  },
   component: MeetingPage,
   staticData: { title: "Meeting", breadcrumb: "Meetings" },
 });

@@ -15,7 +15,10 @@ import {
   useSummary,
   useSummaryError,
   useSummaryProgress,
+  useSummaryTranslation,
+  useTranslateSummary,
   useUpdateSection,
+  type SummaryLang,
   type SummaryProgress,
   type SummaryView,
 } from "../../kernel/bridge/summary";
@@ -27,15 +30,16 @@ import { useAgents } from "../../kernel/bridge/agents";
 import { useProfile } from "../../kernel/bridge/profile";
 import AttendeesBlock from "./AttendeesBlock";
 import NamesSheet from "./NamesSheet";
-import { foldName, formatWhen } from "./format";
+import { foldName, formatWhen, SUMMARY_LANGS, summaryLangLabel } from "./format";
 import styles from "./SummaryTab.module.css";
 
 // Until meeting types drive the structure (P1.4), the same sections the backend uses by default.
 const SKELETON = ["Overview", "Key points", "Decisions", "Action items", "Open questions"];
 
 /** Executive summary: your notes on top (pinned while you scroll), then the summary with its
- *  highlights and sections; the email and attendees on the right, which stay in view too. */
-export default function SummaryTab({ slug, meeting }: { slug: string; meeting: Meeting }) {
+ *  highlights and sections — in English, or translated into `lang` (D-046); the email and
+ *  attendees on the right, which stay in view too. */
+export default function SummaryTab({ slug, meeting, lang, onLang }: { slug: string; meeting: Meeting; lang?: SummaryLang; onLang: (lang?: SummaryLang) => void }) {
   const summary = useSummary(slug, meeting.id);
   const progress = useSummaryProgress(meeting.id);
   const lastError = useSummaryError(meeting.id);
@@ -68,7 +72,17 @@ export default function SummaryTab({ slug, meeting }: { slug: string; meeting: M
           <NotesCard key={meeting.id} slug={slug} meeting={meeting} canRun={!!view && ollamaReady && !busy} onRerun={() => run(false, true)} />
         </div>
         {view ? (
-          <Sections slug={slug} meeting={meeting} view={view} busy={busy} canRun={ollamaReady} onRun={run} />
+          <Sections
+            slug={slug}
+            meeting={meeting}
+            view={view}
+            busy={busy}
+            canRun={ollamaReady}
+            onRun={run}
+            lang={lang}
+            otherLang={profile.data?.summary_language ?? "vi"}
+            onLang={onLang}
+          />
         ) : (
           <>
             {!writing && !summary.isPending && !summary.error && (
@@ -158,10 +172,14 @@ interface BodyProps {
   busy: boolean;
   canRun: boolean;
   onRun: (deep: boolean, keepEdits: boolean) => void;
+  /** Shown in this language instead of English; `otherLang` is offered when none is. */
+  lang?: SummaryLang;
+  otherLang: SummaryLang;
+  onLang: (lang?: SummaryLang) => void;
 }
 
 /** The sections, each editable, with the re-run choice when something was edited. */
-function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
+function Sections({ slug, meeting, view, busy, canRun, onRun, lang, otherLang, onLang }: BodyProps) {
   const [pendingRun, setPendingRun] = useState<null | boolean>(null); // deep? while choosing keep/discard
   const edited = !!view.edited_at;
   const editedCount = view.doc.sections.filter((s) => s.edited).length;
@@ -226,6 +244,147 @@ function Sections({ slug, meeting, view, busy, canRun, onRun }: BodyProps) {
       )}
       {view.transcript_changed && !busy && <p className={`fieldHint ${styles.stale}`}>The transcript changed since — re-run to use it; your edits are kept.</p>}
 
+      <LanguageBar lang={lang} other={lang ?? otherLang} onLang={onLang} />
+      {lang ? <TranslatedSummary slug={slug} meetingId={meeting.id} view={view} lang={lang} /> : <EnglishSummary slug={slug} meeting={meeting} view={view} busy={busy} />}
+    </>
+  );
+}
+
+/** English | the second language (D-046): the summary as written, or its translation; the menu
+ *  picks the language while it is shown. */
+function LanguageBar({ lang, other, onLang }: { lang?: SummaryLang; other: SummaryLang; onLang: (lang?: SummaryLang) => void }) {
+  return (
+    <div className={styles.languageBar}>
+      <div className="segmented" role="group" aria-label="Summary language">
+        <button type="button" aria-pressed={!lang} onClick={() => onLang(undefined)}>
+          English
+        </button>
+        <button type="button" aria-pressed={!!lang} onClick={() => onLang(other)}>
+          {summaryLangLabel(other)}
+        </button>
+      </div>
+      {lang && (
+        <select className="input" aria-label="Summary language" value={lang} onChange={(e) => onLang(SUMMARY_LANGS.find((l) => l.id === e.target.value)?.id)}>
+          {SUMMARY_LANGS.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+/** The summary translated into `lang` on this Mac — only when asked (Translate), kept per meeting,
+ *  marked out of date when the summary changes. Read-only: edits happen in English. */
+function TranslatedSummary({ slug, meetingId, view, lang }: { slug: string; meetingId: string; view: SummaryView; lang: SummaryLang }) {
+  const version = `${view.doc.generated_at}|${view.edited_at ?? ""}`;
+  const translation = useSummaryTranslation(slug, meetingId, lang, version);
+  const translate = useTranslateSummary(slug, meetingId);
+  const [startedAt, setStartedAt] = useState(0);
+  const label = summaryLangLabel(lang);
+  // One translation at a time; its progress and any error belong to the language it was for.
+  const running = translate.isPending && translate.variables === lang;
+  const busy = translate.isPending;
+  const failed = translate.variables === lang ? translate.error : null;
+  const t = translation.data;
+  const run = () => {
+    setStartedAt(Date.now());
+    translate.mutate(lang);
+  };
+  const htmlLang = lang === "zh" ? "zh-Hans" : lang;
+  return (
+    <>
+      {running && (
+        <div className={`card ${styles.notice}`}>
+          <AiProgress name={`Translation into ${label}`} label={`Translating into ${label} on this Mac`} fraction={null} startedAt={startedAt} etaMs={null} />
+        </div>
+      )}
+      {(failed ?? translation.error) && !running && (
+        <p className={styles.error} role="alert">
+          {(failed ?? translation.error)?.message}
+        </p>
+      )}
+      {!running && t && (
+        <div className={styles.sectionsHead}>
+          <p className="fieldHint aiMark">
+            <SparkleIcon />
+            Translated on this Mac by Apple · {formatWhen(t.translated_at)}
+          </p>
+          {!t.stale && (
+            <button type="button" className="btn btnCompact btnAi" disabled={busy} onClick={run}>
+              <SparkleIcon />
+              Translate again
+            </button>
+          )}
+        </div>
+      )}
+      {!running && t?.stale && (
+        <div className={`card ${styles.notice}`}>
+          <div>
+            <p className={styles.noticeTitle}>The summary changed since</p>
+            <p className="fieldHint">This {label} version is from before. Translate again to bring it up to date.</p>
+          </div>
+          <button type="button" className="btn btnPrimary btnCompact btnAi" disabled={busy} onClick={run}>
+            <SparkleIcon />
+            Translate again
+          </button>
+        </div>
+      )}
+      {!running && !t && !translation.isPending && (
+        <div className={`card ${styles.empty}`}>
+          <div>
+            <p className={styles.emptyTitle}>Read this summary in {label}</p>
+            <p className="fieldHint">Translated on this Mac by Apple — nothing leaves it. Usually under a minute; the email and minutes stay in English.</p>
+          </div>
+          <button type="button" className="btn btnPrimary btnAi" disabled={busy} onClick={run}>
+            <SparkleIcon />
+            Translate
+          </button>
+        </div>
+      )}
+      {t ? (
+        <div lang={htmlLang}>
+          {t.highlights.length > 0 && (
+            <div className={`${styles.section} ${styles.highlights}`}>
+              <p className="eyebrow">From your notes</p>
+              <h3 className="sectionTitle">Highlights</h3>
+              <ul className={styles.highlightList}>
+                {t.highlights.map((h, i) => (
+                  <li key={i}>{h}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {t.sections.map((section, i) => (
+            <div key={i} className={styles.section}>
+              <h3 className="sectionTitle">{section.title}</h3>
+              {t.sections_html[i]?.trim() ? (
+                // Rendered in Rust like the English sections (email::to_html: raw HTML escaped, links reduced to text).
+                <div className={styles.prose} dangerouslySetInnerHTML={{ __html: t.sections_html[i] ?? "" }} />
+              ) : (
+                <p className="ghostText">Not yet captured</p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        view.doc.sections.map((section) => (
+          <div key={section.title} className={styles.section}>
+            <h3 className="sectionTitle">{section.title}</h3>
+            <div className={`${styles.slot} ghostCard`} />
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
+/** The summary as written (English): names to confirm, highlights, the editable sections. */
+function EnglishSummary({ slug, meeting, view, busy }: { slug: string; meeting: Meeting; view: SummaryView; busy: boolean }) {
+  return (
+    <>
       {view.naming && !busy && <NamesCard slug={slug} meetingId={meeting.id} suspects={view.naming.suspects} aiChecked={view.naming.ai_checked} />}
 
       {(view.doc.highlights.length > 0 || meeting.notes_md?.trim()) && (

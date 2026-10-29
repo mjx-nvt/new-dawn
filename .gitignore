@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Built by build.rs from helpers/translate.swift (D-046)
+/src-tauri/binaries/

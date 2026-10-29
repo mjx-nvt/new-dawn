@@ -2,6 +2,48 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-046 — Transcripts keep each voice's language; summaries are written in English; Apple translates on this Mac
+_2026-10-29_
+
+**Context** (the user, after a mixed English/Vietnamese meeting): "I don't need the translation in the transcript… keep the transcript original to the voice"; "all the transcript should be translated to English first to have the same language for the summary"; a summary tab for one more language (VI, FR, DE, JA, KO, ZH, ES), translated only on a click, with a default; "is there any good and free API / tool… instead of using AI model".
+
+**Decision — the transcript** (`whisper::transcribe`):
+- In an "auto" meeting each stretch of speech is Vietnamese or English, chosen from Whisper's own odds for the two (`vi_en_odds`). Before, whisper.cpp chose among 99 languages. large-v3 (the installed app's model) then wrote English it took for Vietnamese as a Vietnamese *translation*, and one line as Malay.
+- A close call (neither language at 85 % of the two) is written both ways. The other language wins only when Whisper is clearly surer of it (mean log-probability +0.03), because a translation can score within a hair of the real words.
+- Each line keeps its language (`transcript_segment.lang`), shown as the VI/EN tag the both-ways Live view already uses. Meetings set to one language are unchanged.
+- **Measured** on the user's 61-min meeting with large-v3, every stretch written both ways:
+  - 126 of 146 stretches are decided by the odds alone, and 20 are written both ways.
+  - The margin matters both ways. At 16:40 a translation scored a hair surer than the English; at 20:13 and 43:39 the odds leaned Vietnamese for English speech, and the English version was clearly surer.
+  - The original transcript had more than ten translated stretches and a Malay line.
+  - Left: about 3 stretches where a speaker starts in Vietnamese and goes on in English. Whisper picks the language from the start of a stretch (up to 25 s), so the English part is translated. Shorter stretches would catch them at about twice the transcription time — the user's call.
+
+**Decision — the summary** (`summarise::run`): written in English (`SUMMARY_LANGUAGE`), with its email and the minutes, from the lines **as spoken**.
+- The user asked for the transcript to be translated into English first. That was built and measured with Qwen 9B, judged blind, and dropped:
+  - The mostly-English meeting: 6 against 5 for translating first.
+  - The 88-min Vietnamese meeting: 3 against 6, and 25 min against 18.
+- Apple translating misheard Vietnamese line by line loses what Qwen recovers from context: "chùa Tứ Cụ" became "Tu Cu Pagoda", "bảo hành 60 tháng" became "a 60-month curing period", and the attendee list filled with noise ("iPhone", "Nuc").
+- Revisit only with a better transcript, or as an opt-in for English-heavy meetings.
+
+**Decision — one more language** (`translations::translate`, Summary tab):
+- The tab reads English | the second language. On Translate, the summary (titles, highlights, every line; markdown, checkboxes and action-item owners kept, so "June" stays a name) is translated, kept per meeting (`summary_translation`), and marked out of date when the summary is written again or edited.
+- Read-only: edits happen in English. The default language is in Settings → General → Summaries (Vietnamese until set). The language shown is in the URL (`?lang=`).
+
+**Decision — the engine: Apple's Translation framework, a third AI capability** (`kernel/ai/translate.rs`):
+- It is reached through a small bundled Swift helper (`helpers/translate.swift` → `newdawn-translate`, built by `build.rs`, Tauri `externalBin`).
+- It runs on-device and is free. The app makes no network call; macOS keeps the models. It uses Apple Intelligence's model where there is one (macOS 26.4+); Apple documents that every `TranslationSession` translation is processed on the device. It holds no AI-queue turn.
+- Apple's model can be unavailable for a while (once, about 15 minutes, during testing; offline models not downloaded); Translate then says so. A helper run gets 90 s plus 4 s a line, then it is stopped.
+- `ai_log` rows use kind `complete`, model `apple-translation`; the table's CHECK allows only two kinds, and rebuilding it wasn't worth it.
+- Measured on 20 real Vietnamese lines, judged blind against Qwen 9B: a tie (6 wins each, 8 ties; 3 serious errors for Apple, 4 for Qwen). About 1.2 s a line against about 2 s plus model loading, without occupying Ollama.
+- Not chosen:
+  - Google Cloud Translation: 500k characters a month free, then $20 per million; it needs an account and an API key and sends meeting text to Google, breaking rule 3.
+  - Siri: no API, only a Shortcuts action.
+
+**Means for future work**:
+- The GitHub release workflow's `macos-15` runner has no macOS 26 SDK. The helper then builds, but answers "unavailable" (`#if compiler(>=6.2)`); build releases on a Mac with Xcode 26, or move the runner.
+- Exporting the minutes or the email in the second language is the natural next step.
+
+---
+
 ## D-045 — qwen3.5:9b stays the text model; the app guards corrections and mends JSON
 _2026-10-29_
 

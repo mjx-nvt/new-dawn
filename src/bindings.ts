@@ -34,6 +34,10 @@ export const commands = {
 	confirmNames: (slug: string, meetingId: string, decisions: NameDecision[]) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("confirm_names", { slug, meetingId, decisions })),
 	/**  Writes the cover note again with the email agent. */
 	rewriteEmail: (slug: string, meetingId: string) => typedError<SummaryView_Serialize, AppError>(__TAURI_INVOKE("rewrite_email", { slug, meetingId })),
+	/**  The summary in `lang`, if it was translated (D-046). */
+	getSummaryTranslation: (slug: string, meetingId: string, lang: SummaryLang) => typedError<SummaryTranslation | null, AppError>(__TAURI_INVOKE("get_summary_translation", { slug, meetingId, lang })),
+	/**  Translates the summary into `lang` on this Mac and keeps it. */
+	translateSummary: (slug: string, meetingId: string, lang: SummaryLang) => typedError<SummaryTranslation, AppError>(__TAURI_INVOKE("translate_summary", { slug, meetingId, lang })),
 	/**
 	 *  Applies the owner's corrections (names, titles, terms, facts) to the summary, email and
 	 *  transcript with the corrections agent, and remembers the people and terms (D-037).
@@ -1033,6 +1037,8 @@ export type Profile = {
 	 *  only the owner and the presenter are, and the owner ticks the rest.
 	 */
 	everyone_attends: boolean,
+	/**  The summary's second language, chosen once for every meeting. */
+	summary_language: SummaryLang,
 };
 
 export type ProfilePatch = ProfilePatch_Serialize | ProfilePatch_Deserialize;
@@ -1040,11 +1046,13 @@ export type ProfilePatch = ProfilePatch_Serialize | ProfilePatch_Deserialize;
 export type ProfilePatch_Deserialize = {
 	name?: string | null,
 	everyone_attends?: boolean | null,
+	summary_language?: SummaryLang | null,
 };
 
 export type ProfilePatch_Serialize = {
 	name: string | null,
 	everyone_attends: boolean | null,
+	summary_language: SummaryLang | null,
 };
 
 /**
@@ -1268,6 +1276,9 @@ export type SummaryFinished_Serialize = {
 	error: AppError | null,
 };
 
+/**  The languages a summary can be read in besides English (0.7.7). */
+export type SummaryLang = "vi" | "fr" | "de" | "ja" | "ko" | "zh" | "es";
+
 /**  A summary job moved forward (`tokens` generated so far in the current call). */
 export type SummaryProgress = {
 	workspace_slug: string,
@@ -1293,6 +1304,18 @@ export type SummaryStage = "queued" | "writing" | "merging" |
 "email" | 
 /**  The tasks agent is finding the owner's action items (0.7.3). */
 "tasks";
+
+/**  The summary in one more language, as the Summary tab shows it. */
+export type SummaryTranslation = {
+	lang: SummaryLang,
+	highlights: string[],
+	sections: TranslatedSection[],
+	/**  Each section's markdown as HTML (the summary's own renderer). */
+	sections_html: string[],
+	/**  The summary changed since this was made: translate again. */
+	stale: boolean,
+	translated_at: string,
+};
 
 /**  What the Summary tab shows: the document, each section as safe HTML, and the email. */
 export type SummaryView = SummaryView_Serialize | SummaryView_Deserialize;
@@ -1608,6 +1631,12 @@ export type TranscriptionProgress = {
 	meeting_id: string,
 	stage: Stage,
 	percent: number,
+};
+
+/**  One section of a translated summary. */
+export type TranslatedSection = {
+	title: string,
+	markdown: string,
 };
 
 export type Waveform = {

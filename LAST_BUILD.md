@@ -1,3 +1,48 @@
+# Last Build — Transcripts in each speaker's own language, English summaries, summaries in one more language · release 0.7.7
+_2026-10-29_
+
+## What changed
+- **The transcript keeps each voice's language** (D-046). In an "Auto" meeting, Whisper now chooses only between Vietnamese and English, separately for each stretch of speech.
+  - Before, it chose among 99 languages. Your installed model (large-v3), when it guessed wrong, *translated*: English came out as stiff Vietnamese, and once as Malay.
+  - When the choice is close, it writes the stretch both ways and keeps the real words.
+  - Each line shows a small VI / EN tag. There is no translation column in the transcript.
+  - Measured on this morning's meeting with your large-v3, every stretch written both ways: the right language almost everywhere, where the original transcript had more than ten translated stretches and a Malay line.
+- **Summaries are always written in English** (with the email and the minutes), from the transcript as spoken.
+  - **Translating the transcript into English first, as you suggested, was built and tested, and isn't in this release.** On this morning's mostly-English meeting it scored 6 against 5, but on the 88-minute Vietnamese meeting it lost badly, 3 against 6. Apple translating misheard Vietnamese line by line produced nonsense that the summary then repeated: "chùa Tứ Cụ" became "Tu Cu Pagoda", and the attendee list filled with words like "iPhone". It was also slower: 25 minutes against 18. Qwen reading the Vietnamese directly recovers more from context.
+- **The summary in one more language.** The Summary tab now reads English | Vietnamese (or another language).
+  - Pick the language: Vietnamese, French, German, Japanese, Korean, Chinese or Spanish. Nothing is translated until you press Translate.
+  - The translation is kept with the meeting, and marked "The summary changed since" when the summary is re-run or edited (Translate again).
+  - It's read-only: edit in English.
+  - The default language is in Settings → General → Summaries → Second language (Vietnamese to start).
+- **Translation uses Apple's translator, built into macOS.** It's on-device and free, and nothing leaves the Mac. It uses Apple Intelligence's model on your Mac.
+  - Judged blind on your Vietnamese lines, it tied with Qwen 9B and was faster.
+  - Google's API was ruled out: it costs past the free tier, needs a key and sends meeting text out.
+  - Siri has no translation API.
+
+- **Checks**:
+  - 127 Rust tests pass. New ones cover the language choice, the translation gateway and summary translation end to end with Apple's translator on this Mac (French, names kept, checkboxes kept, out of date after a rename but not after a tick), and markdown handling.
+  - Clippy, tsc and the localhost check (now covering the Swift helper) are clean. Migration 0011 was reviewed SAFE.
+  - The architecture review found no rule violations. Its fixes were taken:
+    - batch transcripts keep one row per line;
+    - "out of date" follows the summary's words;
+    - a hung translator is stopped;
+    - an empty stretch can't win the language choice;
+    - the helper's errors carry no meeting text.
+  - The new Summary tab was seen in the running dev app with this morning's meeting.
+
+## Release
+- **v0.7.7** is published on GitHub. **Your installed New Dawn wasn't touched**: update it from Settings → About → Check for updates when you're ready.
+- After updating, open this morning's meeting and choose **Transcribe again…**, then **Re-run** the summary.
+
+## To think about (your call)
+1. **A speaker who starts in Vietnamese and goes on in English within one stretch** (about 3 of 146 stretches in this morning's meeting): the English part still comes out translated, because Whisper picks the language from the start of the stretch (up to 25 s). Shorter stretches would fix it at about twice the transcription time.
+2. **Exporting the minutes or the email in the second language**: the natural next step.
+
+## Manual steps
+1. Update the installed app (Settings → About → Check for updates).
+2. **Recommended:** in System Settings → General → Language & Region → Translation Languages, download English and Vietnamese, plus any of French, German, Japanese, Korean, Chinese and Spanish you'll use. macOS then has offline models to fall back on when its Apple Intelligence model is unavailable.
+3. On another Mac: translation needs macOS 26 with Apple Intelligence on, or the languages downloaded in System Settings → General → Language & Region → Translation Languages. Without them, Translate explains what's missing. Apple's model was unavailable once during testing, for about 15 minutes.
+
 # Last Build — Safer corrections, summaries that survive slipped brackets, 4B vs 9B compared · release 0.7.6
 _2026-10-29_
 
