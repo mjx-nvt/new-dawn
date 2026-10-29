@@ -47,6 +47,11 @@ pub struct Setup {
 /// The workspace, its people and terms, and a meeting ("m1", language auto, a discussion)
 /// holding the transcript at `segments` (none: an empty meeting).
 pub async fn setup(segments: Option<&str>) -> Setup {
+    // The app's warnings (a summary that didn't parse, a retry) go to the test's output.
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .with_test_writer()
+        .try_init();
     let root = std::env::temp_dir().join(format!("newdawn-eval-{}", uuid::Uuid::now_v7()));
     let hub = WorkspaceHub::open(root.clone()).await.unwrap();
     hub.create_workspace("VIFC", "vifc").await.unwrap();
