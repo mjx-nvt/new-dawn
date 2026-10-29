@@ -2,6 +2,40 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-045 — qwen3.5:9b stays the text model; the app guards corrections and mends JSON
+_2026-10-29_
+
+**Context**: a blind comparison of qwen3.5:4b against 9b, run on the app's own agent code with two real meetings (an English call of 30 min, a Vietnamese one of 88 min). Every later agent got the same inputs on both models. The report holds meeting content, so it lives outside the repo, in the dev data folder `eval/`. The ignored `eval_*` tests reproduce it.
+- **9b won all 9 blind comparisons**: summary, email, corrections, live translation both ways, slogans.
+- **4b's failures are the kind that matter**: invented facts and deadlines, sections marked "Not discussed" that were discussed, and reversed meaning in Vietnamese → English live lines. It is about 2× faster.
+- **Decision**: 9b stays the default for every agent. Live keeps 4b as its fast default (it's close on English → Vietnamese), but Vietnamese meetings are better on 9b. The Live agent's model setting is the switch (7.7 GB against 4.1 GB beside Whisper).
+
+**Decision — corrections guardrails** (`corrections::changes`). Both models turned corrections into changes nobody asked for:
+- "Giang is the structural consultant" renamed five other people to Giang.
+- Whole sentences were replaced with the correction's text.
+- Some rules were written backwards.
+
+A wrong → right change from the agent (a replacement or a person's other spelling) is now kept only when:
+1. its wrong text is in this meeting. An other spelling must be in the transcript, since that is where names are misheard;
+2. it has at most six words, unless the correction quotes it. Bigger changes come as rewritten sections;
+3. it doesn't turn someone known into someone else unless the correction names them. Known means an attendee, the people memory, or the owner. Naming by given name counts ("Phong"); a family name alone doesn't;
+4. a change of accents or case goes to the spelling the correction wrote;
+5. a spelling has one right form, and a replacement wins over a person's other spelling.
+
+People the correction doesn't name are no longer saved to the people memory. 4b had added five, with their titles and organisations rewritten.
+
+On the comparison's stored answers this blocks every damaging change and keeps the intended ones. A backwards rule where the correction names both spellings ("Soviko is Sovico") can still pass. Only the meaning tells which spelling is right.
+
+**Decision — JSON**:
+- `summarise::mend_brackets` repairs the bracket slips seen before the summary asks the model again: a list left open before a key or the object's end, `}]` for `]}`, `]` for `}]`, a trailing comma, closing brackets left off at the end.
+  - It reads from the first `{` to the end of the answer and stops where that object closes, so a missing final `}` no longer loses what came after the last `}`.
+  - An answer that stops inside a string isn't guessed at. One cut by the length limit already fails (`output_truncated`).
+- It reads all three of 9b's failed parts of the 88-min meeting. That saves a retry each, about 2 min apiece. It also reads 4b's open-list answers.
+- 4b's other failure (`{"title": "next_focus": …`, a confused shape) is not mended.
+- The names check reads its suspects with or without the `{"suspects": …}` wrapper. 4b answers the bare list, so its checks were all thrown away.
+
+---
+
 ## D-044 — Debug builds keep their own data, so developing never touches the installed app
 _2026-10-29_
 

@@ -200,11 +200,6 @@ pub fn candidates(
 }
 
 #[derive(Deserialize)]
-struct AiAnswer {
-    #[serde(default)]
-    suspects: Vec<AiSuspect>,
-}
-#[derive(Deserialize)]
 struct AiSuspect {
     #[serde(default)]
     name: String,
@@ -368,18 +363,20 @@ async fn ask(
             |_| {},
         )
         .await?;
-    let start = answer
-        .content
-        .find('{')
-        .context("no JSON in the naming answer")?;
-    let end = answer
-        .content
-        .rfind('}')
-        .context("no JSON in the naming answer")?;
-    let parsed: AiAnswer =
-        serde_json::from_str(answer.content.get(start..=end).unwrap_or_default())
-            .context("the naming answer was not the expected JSON")?;
-    Ok(parsed.suspects)
+    read_suspects(&answer.content)
+}
+
+/// The suspects list, with or without its `{"suspects": …}` wrapper (qwen3.5:4b answers the
+/// bare list, D-045): the first `[` to the last `]`.
+fn read_suspects(content: &str) -> Result<Vec<AiSuspect>> {
+    let start = content.find('[').context("no JSON in the naming answer")?;
+    let end = content.rfind(']').context("no JSON in the naming answer")?;
+    serde_json::from_str(content.get(start..=end).unwrap_or_default()).map_err(|e| {
+        anyhow::anyhow!(
+            "the naming answer was not the expected JSON ({:?})",
+            e.classify()
+        )
+    }) // never quote the text (D-026)
 }
 
 /// Applies the owner's decisions: renames across the summary (email and minutes follow),
@@ -457,6 +454,23 @@ mod tests {
             aliases: aliases.iter().map(|a| a.to_string()).collect(),
             updated_at: String::new(),
         }
+    }
+
+    #[test]
+    fn reads_the_suspects_with_or_without_their_wrapper() {
+        let one = r#"{"name": "Tein", "suggestion": "Tien", "reason": "close"}"#;
+        for answer in [
+            format!("{{\"suspects\": [{one}]}}"),
+            format!("```json\n[{one}]\n```"),
+        ] {
+            let read = read_suspects(&answer).unwrap();
+            assert_eq!(
+                (read[0].name.as_str(), read[0].suggestion.as_str()),
+                ("Tein", "Tien")
+            );
+        }
+        assert!(read_suspects(r#"{"suspects": []}"#).unwrap().is_empty());
+        assert!(read_suspects("No names to check.").is_err());
     }
 
     #[test]

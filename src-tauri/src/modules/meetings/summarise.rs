@@ -293,14 +293,117 @@ fn system_prompt(
     )
 }
 
-/// The model's answer → JSON: tolerate a code fence or text around the outermost `{…}`.
-/// (Ollama's structured output isn't available for qwen3.5 on the MLX runner, D-021.)
+/// The bracket slips models make in long JSON (D-045), mended so the answer reads without asking
+/// again: a list left open before the next key (`…}, "highlights": [`) or the object's end
+/// (`"…"}` for `"…"]}`), `}]` for `]}`, `]` for `}]`, a trailing comma, and closing brackets
+/// left off at the end. `answer` runs from the first `{`; reading stops where that object
+/// closes. Text inside strings is left alone; an answer that ends inside a string is returned as
+/// it was (a cut answer fails earlier, `output_truncated`). Best effort: the caller parses the
+/// result and keeps its first error.
+fn mend_brackets(answer: &str) -> String {
+    // Closes with `closer`, dropping a trailing comma before it.
+    fn close(out: &mut String, closer: char) {
+        let end = out.trim_end().len();
+        if out[..end].ends_with(',') {
+            out.truncate(end - 1);
+        }
+        out.push(closer);
+    }
+    let mut out = String::with_capacity(answer.len() + 8);
+    let mut open = Vec::new();
+    let (mut in_string, mut escaped, mut last_string) = (false, false, 0);
+    // The last brace closed a list too, so a `]` right after it is the rest of a `}]`.
+    let mut swapped = false;
+    for c in answer.chars() {
+        if in_string {
+            out.push(c);
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        if c.is_whitespace() {
+            out.push(c);
+            continue;
+        }
+        let after_swap = std::mem::take(&mut swapped);
+        match c {
+            '"' => {
+                in_string = true;
+                last_string = out.len();
+                out.push(c);
+            }
+            '{' | '[' => {
+                open.push(c);
+                out.push(c);
+            }
+            '}' => {
+                while open.last() == Some(&'[') {
+                    open.pop();
+                    close(&mut out, ']');
+                    swapped = true;
+                }
+                if open.pop().is_some() {
+                    close(&mut out, '}');
+                }
+            }
+            ']' if open.last() == Some(&'[') => {
+                open.pop();
+                close(&mut out, ']');
+            }
+            ']' if after_swap => {}
+            ']' if open.contains(&'[') => {
+                // An object left open inside a list: it closes first.
+                while open.pop() == Some('{') {
+                    close(&mut out, '}');
+                }
+                close(&mut out, ']');
+            }
+            ']' => {} // nothing to close
+            ':' if open.last() == Some(&'[') => {
+                // A key inside a list: the lists end before the key's comma.
+                let mut at = out[..last_string].trim_end().len();
+                if out[..at].ends_with(',') {
+                    at -= 1;
+                }
+                while open.last() == Some(&'[') {
+                    open.pop();
+                    out.insert(at, ']');
+                }
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+        if open.is_empty() && !out.is_empty() {
+            return out;
+        }
+    }
+    if in_string {
+        return answer.to_owned();
+    }
+    while let Some(c) = open.pop() {
+        close(&mut out, if c == '[' { ']' } else { '}' });
+    }
+    out
+}
+
+/// The model's answer → JSON: tolerate a code fence or text around the outermost `{…}`, and
+/// mend slipped brackets. (Ollama's structured output isn't available for qwen3.5 on the MLX
+/// runner, D-021.)
 fn parse_doc(answer: &str) -> Result<RawDoc> {
     let start = answer.find('{').context("no JSON object in the answer")?;
     let end = answer.rfind('}').context("no JSON object in the answer")?;
+    let json = answer.get(start..=end).unwrap_or_default();
     // The serde message can quote the meeting text; logs (D-026) must not, so keep only where.
-    let mut value: serde_json::Value =
-        serde_json::from_str(answer.get(start..=end).unwrap_or_default()).map_err(|e| {
+    let mut value: serde_json::Value = serde_json::from_str(json)
+        .or_else(|first| {
+            let rest = answer[start..].trim_end().trim_end_matches('`');
+            serde_json::from_str(&mend_brackets(rest)).map_err(|_| first)
+        })
+        .map_err(|e| {
             anyhow::anyhow!(
                 "the model's answer was not valid JSON ({:?} at line {}, column {})",
                 e.classify(),
@@ -542,7 +645,7 @@ fn word_set(folded: &str) -> std::collections::HashSet<&str> {
 
 /// The words a name is known by (folded): those of three letters or more that aren't a title;
 /// a name with no such word ("Hà", "Chi") keeps the words it has.
-fn name_words(name: &str) -> Vec<String> {
+pub(super) fn name_words(name: &str) -> Vec<String> {
     let folded = people::fold(name);
     let all: Vec<&str> = folded
         .split(|c: char| !c.is_alphanumeric())
@@ -1626,6 +1729,47 @@ mod tests {
                 .unwrap();
         assert_eq!(doc.decisions[0].text, "x"); // pre-P3.2 shape still reads
         assert!(parse_doc("Sorry, I can't.").is_err());
+    }
+
+    #[test]
+    fn mends_the_bracket_slips_models_make() {
+        let reads = |answer: &str| {
+            let v: serde_json::Value = serde_json::from_str(&mend_brackets(answer)).unwrap();
+            v
+        };
+        // A list left open before the next key (qwen3.5:4b, every failed summary).
+        let v = reads(r#"{"sections": [{"title": "A", "markdown": "x"}, "highlights": ["h",] }"#);
+        assert_eq!(v["sections"][0]["title"], "A");
+        assert_eq!(v["highlights"][0], "h");
+        // `}]` for `]}`, and a list closed by the object's brace (qwen3.5:9b).
+        let v = reads(r#"{"a": [{"b": ["c", "d"}], "e": ["f"}"#);
+        assert_eq!(v["a"][0]["b"][1], "d");
+        assert_eq!(v["e"][0], "f");
+        assert_eq!(reads(r#"{"x": [1, 2}] and some words"#)["x"][1], 2);
+        // `]` for `}]`: the object closes first, and what follows stays outside it.
+        let v = reads(r#"{"s": [{"t": "A", "m": "x"], "n": 1}"#);
+        assert_eq!(
+            (v["s"][0]["m"].as_str(), v["n"].as_i64()),
+            (Some("x"), Some(1))
+        );
+        // The closing brackets left off at the end (qwen3.5:9b); a stray `]` is dropped.
+        assert_eq!(reads(r#"{"a": ["b", "c"]"#)["a"][1], "c");
+        assert_eq!(reads(r#"{"a": {"b": 1]}"#)["a"]["b"], 1);
+        // An answer that stops inside a string isn't guessed at.
+        assert!(
+            serde_json::from_str::<serde_json::Value>(&mend_brackets(r#"{"a": ["b", "c"#)).is_err()
+        );
+        // Brackets inside strings are text; valid JSON stays as it was.
+        let fine = r#"{"a": "x]}{[", "b": [1, {"c": "\"]"}]}"#;
+        assert_eq!(mend_brackets(fine), fine);
+        // The summary parser uses it, past the last `}` and a code fence, and still fails on
+        // what can't be mended.
+        let doc = parse_doc(
+            "```json\n{\"sections\": [{\"title\": \"Overview\", \"markdown\": \"x\"}, \"highlights\": [\"h\"]\n```",
+        )
+        .unwrap();
+        assert_eq!((doc.sections.len(), doc.highlights.len()), (1, 1));
+        assert!(parse_doc(r#"{"sections": [{"title": "Overview" "markdown": "x"}]}"#).is_err());
     }
 
     #[test]

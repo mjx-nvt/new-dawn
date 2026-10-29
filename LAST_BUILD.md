@@ -1,3 +1,37 @@
+# Last Build — Safer corrections, summaries that survive slipped brackets, 4B vs 9B compared · release 0.7.6
+_2026-10-29_
+
+## What changed
+- **The 4B-vs-9B comparison** (D-045). It ran the app's own agents on your two test recordings, and judges scored them without knowing which model wrote which.
+  - 9B won all 9 comparisons. 4B is about twice as fast, but it invents facts and deadlines, marks discussed points "Not discussed", and reverses meaning when translating Vietnamese live.
+  - **9B stays the model for everything.**
+  - Live keeps 4B as its fast default, which is fine for English meetings. For Vietnamese meetings, set the Live agent to 9B in workspace Settings → Agents.
+  - The full report is private, in the dev data folder: `~/Library/Application Support/co.majorisdigital.newdawn.dev/eval/report.md`.
+- **Corrections only change what you asked for.** Both models sometimes turned one correction into changes nobody wanted. "Giang is the structural consultant" renamed five other people to Giang; a sentence was replaced with your correction's text. A change the AI proposes now stays only if:
+  1. its wrong text is really in this meeting; a misheard spelling must be in the transcript;
+  2. it is a spelling or a short fact, up to six words, unless you quoted it. Bigger changes come through the rewritten sections;
+  3. it doesn't turn someone the meeting or your people list knows into someone else, unless you named them;
+  4. an accents-only change goes to the spelling you wrote ("Hưng", never back to "Hung");
+  5. each spelling has one right form.
+
+  People your correction doesn't name are no longer saved to your people list. 4B had added five unasked, with changed titles and organisations.
+
+  On the comparison's answers this removed every damaging change and kept the intended ones. A backwards fix where you write both spellings ("Soviko is Sovico") can still slip through; another correction ("Sovico, not Soviko") puts it right.
+- **Summaries survive slipped brackets.** On long meetings the model sometimes breaks the JSON's brackets: a list left open, `}]` for `]}`, a cut-off ending. The app now mends that before asking the model again.
+  - All three parts of the 88-min meeting that failed now read first time, saving about 2 minutes each.
+  - An earlier run of that meeting had failed outright.
+- **The names check accepts the plain list 4B answers**, so a 4B names check is no longer thrown away.
+- **Developing never touches your installed app** (D-044). Debug builds and tests use their own folders (`….newdawn.dev`), and publishing no longer installs anything on this Mac.
+- Tests: units for the guards (built from the comparison's real cases), the bracket repair and the names list; 123 Rust tests pass. Clippy, tsc and the checks are clean. The comparison tests (`eval_*`, ignored) are kept for the next model.
+- Review: the architecture review found no rule violations and one must-fix. The repair could close an answer whose structure went wrong mid-way and save a partial summary. It now closes a missed `}` where it belongs and leaves an answer that ends inside a string alone. The review's smaller points were taken too: no meeting text in the names-check log, given names count, people your correction doesn't name stay out of memory, and the whole summary counts as "in the meeting".
+
+## Release
+- **v0.7.6** is published on GitHub (the .dmg, the signed update bundle and latest.json). **Your installed New Dawn wasn't touched.** Update it when you're ready: Settings → About → Check for updates.
+
+## Manual steps
+1. Optional: for Vietnamese live sessions, set Settings → Agents → Live to `qwen3.5:9b` and try one meeting. It needs about 7.7 GB beside Whisper, against 4.1 GB for 4B, and translates each line in about 6.5 s against 3 s.
+2. Still pending: create the VIFC workspace, set your name, quit the app and say so. Your people and vocabulary will then be restored.
+
 # Last Build — Live: you and the call apart, how clearly each line was heard, both ways, quick translation · task priority · release 0.7.5
 _2026-10-26_
 
