@@ -3,6 +3,8 @@
 pub mod audio;
 pub mod corrections;
 pub mod email;
+#[cfg(test)]
+pub(crate) mod eval;
 pub mod mail;
 pub mod minutes;
 pub mod naming;

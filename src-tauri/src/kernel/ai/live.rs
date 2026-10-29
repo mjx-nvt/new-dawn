@@ -2122,6 +2122,93 @@ mod tests {
         );
     }
 
+    /// Model comparison (see `modules::meetings::eval`): live translation of real lines on
+    /// `NEWDAWN_EVAL_MODEL` — the first `NEWDAWN_EVAL_LINES` (default 40) lines of
+    /// `NEWDAWN_EVAL_SEGMENTS`, each translated as a discussion translating both ways does it
+    /// (its language from its letters, the last pairs of that language as history, the session's
+    /// context window and temperature, the cleanup and the weekday fix). Whisper isn't loaded
+    /// here: the times are the text model's alone. `cargo test eval_live_lines -- --ignored`.
+    #[test]
+    #[ignore]
+    fn eval_live_lines() {
+        use crate::modules::meetings::eval;
+        let model = eval::use_model();
+        let segments = eval::var("NEWDAWN_EVAL_SEGMENTS").expect("set NEWDAWN_EVAL_SEGMENTS");
+        let count: usize = eval::var("NEWDAWN_EVAL_LINES").map_or(40, |n| n.parse().unwrap());
+        tauri::async_runtime::block_on(async {
+            let setup = eval::setup(Some(&segments)).await;
+            let owner = eval::owner();
+            let people = people::list(&setup.pool).await.unwrap();
+            let terms = vocabulary::list(&setup.pool).await.unwrap();
+            let meeting = LiveMeeting {
+                slug: "vifc".into(),
+                id: Some("m1".into()),
+                title: setup.meeting.title.clone(),
+                format: MeetingFormat::Discussion,
+                presenter: None,
+                direction: LiveDirection::Both,
+            };
+            let prompts = Prompts::new(
+                &meeting,
+                Some(&owner.name),
+                &people,
+                &terms,
+                Agent::Live.default_guide(),
+            );
+            let queue = crate::kernel::ai::queue::AiQueue::default();
+            let mut text = TextSession::for_test(queue.acquire().await, setup.pool.clone());
+            text.for_agent(Agent::Live.id())
+                .set_temperature(0.2)
+                .set_num_ctx(LIVE_CTX);
+            let mut done: Vec<(String, Lang, String)> = Vec::new();
+            let mut runs = Vec::new();
+            for segment in setup.segments.iter().take(count) {
+                let lang = if looks_like(&segment.text, Lang::En) {
+                    Lang::En
+                } else {
+                    Lang::Vi
+                };
+                let history: Vec<(String, &str)> = done
+                    .iter()
+                    .rev()
+                    .filter(|(_, l, _)| *l == lang)
+                    .take(3)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .map(|(said, l, translation)| (tag(said, *l, None), translation.as_str()))
+                    .collect();
+                let request = Request {
+                    messages: messages(
+                        prompts.for_line(lang, None),
+                        &history,
+                        tag(&segment.text, lang, None),
+                    ),
+                    think: false,
+                    max_tokens: 256,
+                };
+                let started = Instant::now();
+                let answer = text
+                    .complete(request, &AtomicBool::new(false), |_| {})
+                    .await;
+                let seconds = started.elapsed().as_secs_f64();
+                match answer.ok().and_then(|a| clean_translation(&a.content)) {
+                    Some(translation) => {
+                        let translation = days::fix(&segment.text, lang, &translation);
+                        runs.push(serde_json::json!({ "seq": segment.seq, "lang": format!("{lang:?}"), "said": segment.text, "translation": translation, "seconds": seconds }));
+                        done.push((segment.text.clone(), lang, translation));
+                    }
+                    None => runs.push(serde_json::json!({ "seq": segment.seq, "lang": format!("{lang:?}"), "said": segment.text, "error": "no translation", "seconds": seconds })),
+                }
+            }
+            drop(text);
+            eval::write(
+                &serde_json::json!({ "model": model, "runs": runs, "calls": eval::usage(&setup.pool).await }),
+            );
+            setup.finish().await;
+        });
+    }
+
     fn setup(format: MeetingFormat) -> LiveMeeting {
         LiveMeeting {
             slug: "test".into(),

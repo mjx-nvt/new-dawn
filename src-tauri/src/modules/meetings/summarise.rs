@@ -1875,6 +1875,163 @@ mod mailto_tests {
 }
 
 #[cfg(test)]
+mod eval_tests {
+    use std::time::Instant;
+
+    use serde_json::json;
+
+    use super::*;
+    use crate::kernel::ai::queue::AiQueue;
+    use crate::modules::meetings::eval;
+
+    /// Model comparison, step 2 (see `modules::meetings::eval`): a meeting's automatic run on
+    /// `NEWDAWN_EVAL_MODEL` exactly as `run` does it — summary, names check, cover note, tasks —
+    /// over the transcript in `NEWDAWN_EVAL_SEGMENTS`. With `NEWDAWN_EVAL_DOC` (the summary a run
+    /// wrote) the summary step is skipped and the three agents work from that one, so each agent
+    /// can be compared on the same input. `cargo test eval_meeting_agents -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn eval_meeting_agents() {
+        let model = eval::use_model();
+        let segments_path = eval::var("NEWDAWN_EVAL_SEGMENTS").expect("set NEWDAWN_EVAL_SEGMENTS");
+        let fixed = eval::var("NEWDAWN_EVAL_DOC");
+        tauri::async_runtime::block_on(async {
+            let setup = eval::setup(Some(&segments_path)).await;
+            let (pool, meeting, segments) = (&setup.pool, &setup.meeting, &setup.segments);
+            let owner = eval::owner();
+            let workspace = setup.hub.workspace("vifc").await.unwrap();
+            let folder = std::path::Path::new(&workspace.folder_path);
+            let people = people::list(pool).await.unwrap();
+            let queue = AiQueue::default();
+            let mut session = ollama::TextSession::for_test(queue.acquire().await, pool.clone());
+            let cancel = AtomicBool::new(false);
+            let mut seconds = serde_json::Map::new();
+
+            // The summary, with what `run` puts around it.
+            let mut summary_error = None;
+            let mut doc = match &fixed {
+                Some(path) => {
+                    let saved: serde_json::Value =
+                        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+                    serde_json::from_value(saved["summary"].clone()).unwrap()
+                }
+                None => {
+                    let mut notes = String::new();
+                    if !people.is_empty() {
+                        notes.push_str(&format!(
+                            "\n\nKnown people — reference only: they may not be in this meeting. Never name \
+                             them, or their organisations, anywhere in the summary unless the transcript or the \
+                             notes do. List someone as an attendee only if the transcript mentions them; when you \
+                             do, use this spelling, title and organisation:\n{}",
+                            people::prompt_block(&people)
+                        ));
+                    }
+                    if let Some(note) = super::super::format_note(meeting) {
+                        notes.push_str(&format!("\n\n{note}"));
+                    }
+                    let guide = agents::guide(folder, Agent::Summary);
+                    session.for_agent("summary");
+                    let started = Instant::now();
+                    let result = summarise_text(
+                        &session,
+                        &guide,
+                        &default_structure(meeting.language),
+                        meeting.language,
+                        Some(&owner),
+                        segments.iter().any(|s| s.speaker.is_some()),
+                        &transcript_text(segments, Some(&owner.name)),
+                        notes.trim(),
+                        false,
+                        &cancel,
+                        &|_, _, _, _| {},
+                    )
+                    .await;
+                    seconds.insert("summary".into(), json!(started.elapsed().as_secs_f64()));
+                    match result {
+                        Ok(mut doc) => {
+                            let corpus = mention_corpus(segments, None);
+                            keep_mentioned(&mut doc, &people, &corpus, None, Some(&owner.name));
+                            apply_people(&mut doc, &people, meeting.language);
+                            // "Everyone involved attends" was off in the user's settings.
+                            settle_attendees(&mut doc, false, None, Some(&owner));
+                            doc
+                        }
+                        Err(err) => {
+                            summary_error = Some(format!("{err:#}"));
+                            SummaryDoc::default()
+                        }
+                    }
+                }
+            };
+            let ctx = EmailContext {
+                workspace: &workspace.name,
+                title: &meeting.title,
+                held_on: &meeting.held_on,
+                language: meeting.language,
+                owner: Some(&owner),
+            };
+            let (subject, body) = email::render(&doc, &ctx);
+            let json_doc = serde_json::to_string(&doc).unwrap();
+            super::super::save_summary(pool, "m1", &json_doc, &subject, &body, Some(&model), false)
+                .await
+                .unwrap();
+
+            // The names check, the cover note and the tasks, on the same session.
+            let known = people::with_owner(people.clone(), Some(&owner));
+            session.for_agent("naming");
+            let started = Instant::now();
+            let naming = super::super::naming::review(
+                &session, folder, meeting, &doc, &known, segments, &cancel,
+            )
+            .await;
+            seconds.insert("naming".into(), json!(started.elapsed().as_secs_f64()));
+            session.for_agent("email");
+            let started = Instant::now();
+            let email = email::compose(&session, folder, &doc, &ctx, &cancel).await;
+            seconds.insert("email".into(), json!(started.elapsed().as_secs_f64()));
+            session.for_agent("tasks");
+            let started = Instant::now();
+            let tasks_result = super::super::tasks::find(
+                &session,
+                folder,
+                pool,
+                meeting,
+                &mut doc,
+                Some(&owner),
+                &known,
+                segments,
+                &cancel,
+            )
+            .await;
+            seconds.insert("tasks".into(), json!(started.elapsed().as_secs_f64()));
+            drop(session);
+            let tasks: Vec<(String, String, String, String)> = sqlx::query_as(
+                "SELECT title, owner, due_text, reason FROM task WHERE deleted_at IS NULL ORDER BY created_at",
+            )
+            .fetch_all(pool)
+            .await
+            .unwrap();
+            eval::write(&json!({
+                "model": model,
+                "fixed_summary": fixed,
+                "seconds": seconds,
+                "summary_error": summary_error,
+                "summary": doc,
+                "naming": naming,
+                "email": match &email {
+                    Ok((subject, body)) => json!({ "subject": subject, "body": body }),
+                    Err(err) => json!({ "error": format!("{err:#}"), "rendered": body }),
+                },
+                "tasks": tasks.iter().map(|(title, owner, due, reason)| json!({ "title": title, "owner": owner, "due": due, "reason": reason })).collect::<Vec<_>>(),
+                "tasks_error": tasks_result.err().map(|e| format!("{e:#}")),
+                "calls": eval::usage(pool).await,
+            }));
+            setup.finish().await;
+        });
+    }
+}
+
+#[cfg(test)]
 mod live_tests {
     use super::*;
     use crate::kernel::ai::queue::AiQueue;

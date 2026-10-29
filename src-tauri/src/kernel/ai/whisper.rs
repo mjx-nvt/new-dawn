@@ -755,6 +755,71 @@ mod tests {
         );
     }
 
+    /// Model comparison, step 1 (see `modules::meetings::eval`): a recording transcribed the way
+    /// a meeting is — language auto, the workspace's people and terms as Whisper's prompt, echoes
+    /// of the prompt dropped, the vocabulary's corrections — with the debug build's preferred
+    /// Whisper model. `NEWDAWN_EVAL_AUDIO=<file> NEWDAWN_EVAL_SEGMENTS=<out .json>
+    /// [NEWDAWN_EVAL_PEOPLE_SQL=<.sql>] cargo test eval_transcribe -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn eval_transcribe() {
+        use crate::modules::meetings::eval;
+        use crate::modules::{people, vocabulary};
+        let audio_path = eval::var("NEWDAWN_EVAL_AUDIO").expect("set NEWDAWN_EVAL_AUDIO");
+        let out = eval::var("NEWDAWN_EVAL_SEGMENTS").expect("set NEWDAWN_EVAL_SEGMENTS");
+        let app_data = PathBuf::from(std::env::var("HOME").unwrap())
+            .join("Library/Application Support/co.majorisdigital.newdawn.dev"); // the debug build's own (D-044)
+        let models = ModelStore::new(app_data.join("models")).unwrap();
+        let (spec, model_path) = models
+            .preferred_speech_model()
+            .expect("download a Whisper model first");
+        let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources")
+            .join(BUNDLED_VAD);
+        tauri::async_runtime::block_on(async {
+            let setup = eval::setup(None).await;
+            let owner = eval::owner();
+            let people = people::with_owner(people::list(&setup.pool).await.unwrap(), Some(&owner));
+            let terms = vocabulary::list(&setup.pool).await.unwrap();
+            let prompt = vocabulary::whisper_prompt(&setup.meeting.title, None, &people, &terms);
+            let samples = audio::load_16k_mono(std::path::Path::new(&audio_path)).unwrap();
+            let engine = WhisperEngine::new(super::DEFAULT_IDLE_UNLOAD_SECS);
+            let cancel = Arc::new(AtomicBool::new(false));
+            let started = std::time::Instant::now();
+            let mut segments = engine
+                .transcribe(
+                    SpeechModel {
+                        id: spec.id,
+                        path: &model_path,
+                    },
+                    &vad,
+                    &samples,
+                    Language::Auto,
+                    Some(&prompt),
+                    &cancel,
+                    |_| {},
+                )
+                .unwrap();
+            segments.retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));
+            let mut lines: Vec<String> = segments.iter().map(|s| s.text.clone()).collect();
+            let fixed =
+                vocabulary::correct_lines(&mut lines, &vocabulary::replacements(&people, &terms));
+            for (segment, line) in segments.iter_mut().zip(lines) {
+                segment.text = line;
+            }
+            std::fs::write(&out, serde_json::to_string_pretty(&segments).unwrap()).unwrap();
+            eprintln!(
+                "EVAL transcribe: {} s of audio, {} lines ({} corrected by the vocabulary) in {:.1?} with {}",
+                samples.len() / super::SAMPLE_RATE,
+                segments.len(),
+                fixed.iter().filter(|f| f.is_some()).count(),
+                started.elapsed(),
+                spec.id
+            );
+            setup.finish().await;
+        });
+    }
+
     /// End to end on real speech, minus the queue/event glue: `say` → m4a → decode → VAD →
     /// Whisper → mid-job cancel → save → FTS. Needs a downloaded model: `cargo test -- --ignored`.
     #[test]
