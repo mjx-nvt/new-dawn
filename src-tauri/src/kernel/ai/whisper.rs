@@ -765,7 +765,7 @@ mod tests {
             .with_test_writer()
             .try_init();
         let app_data = PathBuf::from(std::env::var("HOME").unwrap())
-            .join("Library/Application Support/co.majorisdigital.newdawn");
+            .join("Library/Application Support/co.majorisdigital.newdawn.dev"); // the debug build's own (D-044)
         let models = ModelStore::new(app_data.join("models")).unwrap();
         let (spec, model_path) = models
             .preferred_speech_model()

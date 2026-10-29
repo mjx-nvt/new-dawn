@@ -1,5 +1,4 @@
 use tauri::Manager;
-use tauri_plugin_window_state::StateFlags;
 use tauri_specta::{Builder, collect_commands, collect_events};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -235,7 +234,7 @@ fn export_bindings(builder: &Builder<tauri::Wry>) {
         .expect("failed to export src/bindings.ts");
 }
 
-/// Logs to the terminal and to daily files in `~/Library/Logs/co.majorisdigital.newdawn/`
+/// Logs to the terminal and to daily files in `~/Library/Logs/co.majorisdigital.newdawn/` (`.dev` in a debug build)
 /// (7 kept) — a released app has no terminal, so the file is how problems get diagnosed.
 /// The guard flushes the file writer; keep it alive for the whole run.
 fn init_logging() -> Option<WorkerGuard> {
@@ -246,7 +245,7 @@ fn init_logging() -> Option<WorkerGuard> {
             .filename_prefix("new-dawn")
             .filename_suffix("log")
             .max_log_files(7)
-            .build(std::path::Path::new(&home).join("Library/Logs/co.majorisdigital.newdawn"))
+            .build(kernel::storage::log_dir(std::path::Path::new(&home)))
             .ok()
     });
     let Some(file) = file else {
@@ -274,7 +273,7 @@ pub fn run() {
     #[cfg(debug_assertions)]
     export_bindings(&builder);
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // macOS kills a WKWebView content process under memory pressure (Whisper, Qwen and the
         // webview share the RAM); WebKit respawns an empty one and the window stays grey (D-034).
         .on_web_content_process_terminate(|webview| {
@@ -293,14 +292,19 @@ pub fn run() {
         // OTA updates (D-031): the only non-localhost traffic besides model downloads, and only
         // when the user (or the daily check they can switch off) asks for it.
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
-        // Position and size only: restoring VISIBLE would reopen the app with a hidden main window.
-        .plugin(
-            tauri_plugin_window_state::Builder::new()
-                .with_state_flags(StateFlags::POSITION | StateFlags::SIZE)
-                .build(),
-        )
-        .menu(kernel::menu::build)
+        .plugin(tauri_plugin_process::init());
+    // Position and size only: restoring VISIBLE would reopen the app with a hidden main window.
+    // Not in a debug build: the plugin's file sits in the installed app's data folder (D-044).
+    #[cfg(not(debug_assertions))]
+    let app = app.plugin(
+        tauri_plugin_window_state::Builder::new()
+            .with_state_flags(
+                tauri_plugin_window_state::StateFlags::POSITION
+                    | tauri_plugin_window_state::StateFlags::SIZE,
+            )
+            .build(),
+    );
+    app.menu(kernel::menu::build)
         .on_menu_event(kernel::menu::on_event)
         .invoke_handler(builder.invoke_handler())
         .on_window_event(|window, event| {
@@ -323,7 +327,7 @@ pub fn run() {
                 window.run_on_main_thread(move || kernel::glass::apply_shell_glass(&target))?;
             }
 
-            let root = app.path().app_data_dir()?;
+            let root = kernel::storage::data_dir(app.handle())?;
             // ponytail: opens + migrates every active workspace before the window paints; fine for a
             // handful of tenants, move to a background task with a "hub ready" state if startup slows.
             let hub = tauri::async_runtime::block_on(async {
@@ -355,7 +359,7 @@ pub fn run() {
             let (hub, idle_unload_secs) = hub;
             app.manage(hub);
             app.manage(kernel::ai::models::ModelStore::new(
-                app.path().app_data_dir()?.join("models"),
+                kernel::storage::data_dir(app.handle())?.join("models"),
             )?);
             app.manage(kernel::ai::queue::AiQueue::default());
             app.manage(kernel::ai::whisper::WhisperEngine::new(

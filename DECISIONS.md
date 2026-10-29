@@ -2,6 +2,16 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-044 — Debug builds keep their own data, so developing never touches the installed app
+_2026-10-29_
+
+**Decision** (user: "separate the coding testing app with the installed I have in my laptop… I need it to work during the coding, without interrupt"):
+- A debug build (`pnpm tauri dev`, `cargo test`, the ignored real-model tests) reads and writes `~/Library/Application Support/co.majorisdigital.newdawn.dev` and logs to `~/Library/Logs/co.majorisdigital.newdawn.dev` (`kernel::storage::{data_dir, log_dir, LOG_FOLDER}`); a release build is unchanged. The bundle id stays `co.majorisdigital.newdawn`. WebKit storage and caches were already separate (the dev binary is `new-dawn`). A debug build doesn't save the window position (the plugin's file lives in the release app's folder).
+- Why: the dev app shared the installed app's folder, so an in-app check ran an unreleased migration on the user's workspace and the installed 0.7.3 refused to open it (0.7.5). The two can now run side by side (no single-instance lock, no global shortcuts); only Ollama is shared.
+- Publishing no longer installs anything on the Mac; the user updates the installed app themselves.
+
+---
+
 ## D-043 — Live 0.7.5: you and the call apart, how clearly each line was heard, both ways, a quick translation that keeps nothing; task priority
 _2026-10-26 · release 0.7.5_
 

@@ -1,5 +1,5 @@
 use tauri::menu::{Menu, MenuEvent, MenuItem, MenuItemBuilder, SubmenuBuilder};
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Wry};
 use tauri_specta::Event;
 
 use crate::events::MenuAction;
@@ -181,7 +181,7 @@ fn forward(app: &AppHandle, action: MenuAction) -> anyhow::Result<()> {
 }
 
 fn reveal_data_folder(app: &AppHandle) -> anyhow::Result<()> {
-    let dir = app.path().app_data_dir()?;
+    let dir = crate::kernel::storage::data_dir(app)?;
     tauri_plugin_opener::reveal_item_in_dir(dir)?;
     Ok(())
 }

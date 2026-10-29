@@ -23,6 +23,30 @@ const AI_LOG_DAYS: i64 = 90;
 const COMPRESSED: &str = "recording.m4a";
 const BITRATE: &str = "48000";
 
+/// The log folder's name in `~/Library/Logs`; a debug build keeps its own (see `data_dir`).
+pub const LOG_FOLDER: &str = if cfg!(debug_assertions) {
+    "co.majorisdigital.newdawn.dev"
+} else {
+    "co.majorisdigital.newdawn"
+};
+
+/// The app's data folder. A debug build (`pnpm tauri dev`, the tests) keeps its own
+/// `co.majorisdigital.newdawn.dev`, so developing never touches the installed app's data (D-044).
+pub fn data_dir(app: &AppHandle) -> tauri::Result<PathBuf> {
+    let dir = app.path().app_data_dir()?;
+    if !cfg!(debug_assertions) {
+        return Ok(dir);
+    }
+    let mut name = dir.file_name().unwrap_or_default().to_owned();
+    name.push(".dev");
+    Ok(dir.with_file_name(name))
+}
+
+/// The log folder: `~/Library/Logs/co.majorisdigital.newdawn` (`….dev` in a debug build).
+pub fn log_dir(home: &Path) -> PathBuf {
+    home.join("Library/Logs").join(LOG_FOLDER)
+}
+
 /// `path` is an original (not yet compressed) recording.
 pub fn is_original(path: &Path) -> bool {
     path.file_stem().and_then(|s| s.to_str()) == Some("audio")
@@ -276,11 +300,11 @@ pub async fn report(app: &AppHandle) -> Result<StorageReport> {
         });
     }
     let logs = std::env::var_os("HOME")
-        .map(|h| dir_size(&Path::new(&h).join("Library/Logs/co.majorisdigital.newdawn")))
+        .map(|h| dir_size(&log_dir(Path::new(&h))))
         .unwrap_or(0);
     Ok(StorageReport {
         workspaces,
-        models_bytes: dir_size(&app.path().app_data_dir()?.join("models")) as f64,
+        models_bytes: dir_size(&data_dir(app)?.join("models")) as f64,
         logs_bytes: logs as f64,
         retention_days: retention_days(&hub).await?,
     })

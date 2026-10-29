@@ -108,7 +108,8 @@ impl WorkspaceHub {
             .cloned()
             .ok_or_else(|| {
                 AppError::not_found(format!(
-                    "Workspace '{slug}' is not open (if it failed to open at launch, the log in ~/Library/Logs/co.majorisdigital.newdawn says why)"
+                    "Workspace '{slug}' is not open (if it failed to open at launch, the log in ~/Library/Logs/{} says why)",
+                    crate::kernel::storage::LOG_FOLDER
                 ))
             })?)
     }

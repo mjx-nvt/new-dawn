@@ -2230,7 +2230,7 @@ mod tests {
 
     fn app_data() -> PathBuf {
         PathBuf::from(std::env::var("HOME").unwrap())
-            .join("Library/Application Support/co.majorisdigital.newdawn")
+            .join("Library/Application Support/co.majorisdigital.newdawn.dev") // the debug build's own (D-044)
     }
 
     /// Real models, real time: runs `windows` (one every 600 ms, as the recorder delivers them)
