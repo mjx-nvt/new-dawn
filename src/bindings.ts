@@ -206,6 +206,8 @@ export const commands = {
 	addEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("add_email_task", { slug, id })),
 	/**  Dismisses an email's proposed task. */
 	dismissEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("dismiss_email_task", { slug, id })),
+	/**  What needs the owner today, across every open workspace (D-057). */
+	cockpitToday: () => typedError<Today_Serialize, AppError>(__TAURI_INVOKE("cockpit_today")),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -776,6 +778,45 @@ export type CorrectionsOutcome_Serialize = {
 	sections_rewritten: number,
 	people_remembered: number,
 	terms_learned: number,
+};
+
+/**  One workspace's part of the day. */
+export type Day = Day_Serialize | Day_Deserialize;
+
+/**  One workspace's part of the day. */
+export type Day_Deserialize = {
+	slug: string,
+	name: string,
+	/**  Open tasks due today or earlier, as Tasks lists them under Today. */
+	tasks: TaskView_Deserialize[],
+	/**  Active projects whose next milestone is due within a week or overdue, soonest first. */
+	projects: Project_Deserialize[],
+	/**  Commitments the owner confirmed and follows up, newest first (the first 8). */
+	commitments: Commitment_Deserialize[],
+	/**  How many there are in all. */
+	open_commitments: number,
+	/**  This week's meetings, Monday to Sunday, in order. */
+	meetings: WeekMeeting[],
+	/**  Proposals waiting for the owner. */
+	waiting: Waiting,
+};
+
+/**  One workspace's part of the day. */
+export type Day_Serialize = {
+	slug: string,
+	name: string,
+	/**  Open tasks due today or earlier, as Tasks lists them under Today. */
+	tasks: TaskView_Serialize[],
+	/**  Active projects whose next milestone is due within a week or overdue, soonest first. */
+	projects: Project_Serialize[],
+	/**  Commitments the owner confirmed and follows up, newest first (the first 8). */
+	commitments: Commitment_Serialize[],
+	/**  How many there are in all. */
+	open_commitments: number,
+	/**  This week's meetings, Monday to Sunday, in order. */
+	meetings: WeekMeeting[],
+	/**  Proposals waiting for the owner. */
+	waiting: Waiting,
 };
 
 export type Decision = {
@@ -2227,6 +2268,26 @@ export type TermInput_Serialize = {
 	heard_as: string[],
 };
 
+export type Today = Today_Serialize | Today_Deserialize;
+
+export type Today_Deserialize = {
+	/**  The day on this Mac, YYYY-MM-DD. */
+	day: string,
+	/**  The current workspace first, then the others. */
+	workspaces: Day_Deserialize[],
+	/**  Workspaces that couldn't be read (not open, or an error), by name. */
+	unread: string[],
+};
+
+export type Today_Serialize = {
+	/**  The day on this Mac, YYYY-MM-DD. */
+	day: string,
+	/**  The current workspace first, then the others. */
+	workspaces: Day_Serialize[],
+	/**  Workspaces that couldn't be read (not open, or an error), by name. */
+	unread: string[],
+};
+
 /**  One agenda item / topic and what was said about it. */
 export type Topic = Topic_Serialize | Topic_Deserialize;
 
@@ -2322,10 +2383,25 @@ export type UpdateField =
 
 export type UpdateStatus = "proposed" | "applied" | "dismissed";
 
+export type Waiting = {
+	/**  Project updates. */
+	updates: number,
+	commitments: number,
+	/**  Tasks proposed from emails. */
+	email_tasks: number,
+};
+
 export type Waveform = {
 	/**  One peak (max |sample|, 0–255) per equal slice of the recording. */
 	peaks: number[],
 	duration_ms: number,
+};
+
+export type WeekMeeting = {
+	id: string,
+	title: string,
+	held_on: string,
+	status: MeetingStatus,
 };
 
 export type Workspace = Workspace_Serialize | Workspace_Deserialize;

@@ -39,6 +39,14 @@ const REPLAY = "M12 5V2.21c0-.45-.54-.67-.85-.35l-3.8 3.79c-.2.2-.2.51 0 .71l3.7
 export const SkipBackIcon = () => <Material d={REPLAY} size={16} />;
 export const SkipForwardIcon = () => <Material d={REPLAY} size={16} flip />;
 
+/** A sun: today, across every workspace (D-057). */
+export const TodayIcon = () => (
+  <Icon>
+    <circle cx="8" cy="8" r="2.8" />
+    <path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M3.4 12.6l1-1M11.6 4.4l1-1" />
+  </Icon>
+);
+
 export const MeetingsIcon = () => (
   <Icon>
     <rect x="2" y="3" width="12" height="11" rx="2" />

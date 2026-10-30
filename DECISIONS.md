@@ -2,6 +2,28 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-057 — Today: what needs the owner, across every workspace, on one page
+_2026-10-31_
+
+**Context** (plan v3 §5, Cockpit): the owner works for several companies, one workspace each. Tasks, projects, commitments and meetings each had a page per workspace, so answering "what needs me today" meant opening every page of every workspace.
+
+**Decision — one read-only page fed through the hub**: **Today** (first in the sidebar) shows, for every open workspace:
+- open tasks due today or earlier (Tasks' own Today list, overdue in red);
+- active projects whose next milestone is due within 7 days or is overdue, soonest first;
+- the proposals waiting for a decision (project updates, commitments, tasks from emails), with links;
+- the commitments the owner confirmed (the newest 8, the rest counted);
+- this week's meetings, Monday to Sunday on this Mac.
+
+One command reads each active workspace from its own pool in the hub (rule 1). Nothing is stored, no model is asked, and there is no migration. A workspace that can't be read (it failed to open at launch, or a query failed) is named at the top of the page; the others still show. The current workspace comes first, and the page follows a workspace switch or rename at once.
+
+**Decision — a row opens its page in its own workspace**: a row from another workspace switches to that workspace first, then opens the page, so the page shows that workspace's data. When there are several workspaces, each row names its workspace.
+
+**Where**: Today at the top of the sidebar. Meetings is still the first screen when New Dawn opens.
+
+**Means for future work**: ticking a task or applying a proposal from Today itself; a menu-bar summary. Commitments still have only the date as said (D-055), so they're listed newest first, not by due day.
+
+---
+
 ## D-056 — Email: the owner gives New Dawn one email; the Email reading agent proposes, quoting it
 _2026-10-30_
 

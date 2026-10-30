@@ -1,0 +1,31 @@
+/* Today (D-057): each section's rows in one card, hairlines between rows, at a reading measure. */
+.lead { margin-top: var(--space-3); max-width: 76ch; }
+
+.list {
+  display: flex;
+  flex-direction: column;
+  max-width: 96ch;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  overflow: hidden; /* a row's hover stays inside the rounded corners */
+}
+
+.row { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); color: inherit; }
+.row + .row, .list > * + .more, .waiting + .waiting { border-top: 0.5px solid var(--hair); }
+.row:hover { background: var(--surface-2); }
+/* The list clips an outer ring: the keyboard focus is drawn inside the row. */
+.row:focus-visible { outline: none; background: var(--surface-2); box-shadow: inset 0 0 0 2px var(--focus); }
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.title { font-size: var(--t-md); font-weight: 500; color: var(--ink); }
+.metaLine { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--t-sm); color: var(--ink-2); }
+.side { flex: none; font-size: var(--t-sm); font-weight: 500; color: var(--ink-2); }
+.late { color: var(--status-negative); }
+
+.waiting { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+.link { font-weight: 500; }
+.more { padding: var(--space-3) var(--space-4); }
+
+.empty { display: flex; flex-direction: column; gap: var(--space-2); max-width: 96ch; }
+.slot { height: 52px; border-radius: var(--radius-card); }

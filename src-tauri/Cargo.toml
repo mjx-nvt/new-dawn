@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.9.2"
+version = "0.9.3"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"

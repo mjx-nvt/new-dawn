@@ -144,6 +144,9 @@ Numbered in build order (the release that records each in brackets).
 | D-052 | "What I learned" proposes guide lines from the ledger, the owner approves; a number per agent and model (0.8.4) |
 | D-053 | Memory search: `bge-m3` per workspace, computed in the background lane (0.8.5) |
 | D-054 | Experts propose, the owner applies; one shape (guide · view · proposals · ledger · check); Apple Mail via Apple Events, no IMAP (0.9.x) |
+| D-055 | People as dossiers: commitments from others' action items, last contact, notes (0.9.1) |
+| D-056 | Email: one email at a time from Apple Mail or an .eml; its tasks, updates and commitments proposed, each quoting it (0.9.2) |
+| D-057 | Today: what needs the owner across every workspace, read through the hub (0.9.3) |
 
 ## 9. Deliberately not in this plan
 

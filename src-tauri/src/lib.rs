@@ -50,6 +50,7 @@ mod kernel {
 mod modules {
     pub mod agents;
     pub mod brand;
+    pub mod cockpit;
     pub mod crm;
     pub mod eml;
     pub mod feedback;
@@ -76,6 +77,7 @@ mod commands {
     pub mod agents;
     pub mod backup;
     pub mod brand;
+    pub mod cockpit;
     pub mod crm;
     pub mod glass;
     pub mod inbox;
@@ -209,6 +211,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::inbox::forget_email,
             commands::inbox::add_email_task,
             commands::inbox::dismiss_email_task,
+            commands::cockpit::cockpit_today,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

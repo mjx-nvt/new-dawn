@@ -15,6 +15,7 @@ import ProjectPage from "./modules/projects/ProjectPage";
 import PeoplePage from "./modules/people/PeoplePage";
 import PersonPage from "./modules/people/PersonPage";
 import EmailPage from "./modules/email/EmailPage";
+import TodayPage from "./modules/today/TodayPage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupSearch } from "./modules/tenant-setup/TenantSetupPage";
@@ -34,6 +35,14 @@ const indexRoute = createRoute({
     const done = await getOnboardingDone().catch(() => true);
     throw done ? redirect({ to: "/meetings" }) : redirect({ to: "/welcome", search: { step: "welcome" } });
   },
+});
+
+// What needs you today, across every open workspace (D-057).
+const todayRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/today",
+  component: TodayPage,
+  staticData: { title: "Today" },
 });
 
 const meetingsRoute = createRoute({
@@ -174,7 +183,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

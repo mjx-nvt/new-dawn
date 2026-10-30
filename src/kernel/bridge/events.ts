@@ -14,6 +14,7 @@ export function useWorkspacesSync() {
       void queryClient.invalidateQueries({ queryKey: ["profile"] });
       void queryClient.invalidateQueries({ queryKey: ["template-preview"] });
       void queryClient.invalidateQueries({ queryKey: ["whisper-prompt"] });
+      void queryClient.invalidateQueries({ queryKey: ["today"] });
     });
     return () => void unlisten.then((stop) => stop());
   }, [queryClient]);

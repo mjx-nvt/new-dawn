@@ -390,6 +390,16 @@ pub async fn waiting(pool: &SqlitePool) -> Result<Vec<Commitment>> {
     .await?)
 }
 
+/// Commitments the owner confirmed and follows up, across everyone, newest first (the Cockpit).
+pub async fn open(pool: &SqlitePool) -> Result<Vec<Commitment>> {
+    Ok(sqlx::query_as(concat!(
+        commitment_select!(),
+        " WHERE c.status = 'open' ORDER BY c.created_at DESC"
+    ))
+    .fetch_all(pool)
+    .await?)
+}
+
 /// Confirmed commitments of someone the people memory doesn't know (an organisation, a name not
 /// remembered, a person since deleted): open first, then the newest decided.
 pub async fn unlinked(pool: &SqlitePool) -> Result<Vec<Commitment>> {

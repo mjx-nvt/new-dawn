@@ -1,3 +1,38 @@
+# Last Build — Today: what needs you, across your workspaces · release 0.9.3
+_2026-10-31_
+
+## What changed
+- **Today** (sidebar, first item, D-057). One page shows what needs you in every workspace:
+  - **Due today**: your open tasks due today or earlier. Overdue ones are in red.
+  - **Waiting for you**: the project updates, commitments and email tasks waiting for your decision, with links.
+  - **Projects to watch**: active projects whose next milestone is due within a week, or is overdue.
+  - **Commitments to follow up**: what others promised you and you confirmed.
+  - **This week's meetings**: Monday to Sunday.
+- With more than one workspace, each row names its workspace. Clicking a row from another workspace switches to that workspace, then opens the page.
+- Today only reads; nothing new is stored. Meetings is still the screen New Dawn opens on.
+- If a workspace can't be read, Today names it at the top instead of leaving it out silently.
+- Checks: 160 Rust tests pass. The new one covers what Today lists and leaves out: tasks due today or earlier, projects due within a week (soonest first), this week's meetings (Monday counts, next Monday doesn't) and the current workspace first.
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app, with a second workspace (Majoris Digital):
+  - Today listed a task from each workspace, the overdue one in red, a project due on Tuesday, the waiting proposals, a confirmed commitment and this week's two meetings.
+  - Clicking the Majoris Digital task switched to that workspace and opened its Tasks.
+  - Light and dark both look right.
+- Review: the architecture review found no rule violations and no must-fix. Its other points were all taken:
+  - a workspace that can't be read is named;
+  - sections no longer say "Nothing…" when the page couldn't be read;
+  - a failed switch shows why;
+  - Today refreshes as soon as you switch or rename a workspace;
+  - rows show a keyboard focus ring.
+
+## Release
+- **v0.9.3** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready.
+
+## Manual steps
+None.
+
+---
+
 # Last Build — Give New Dawn an email to read · release 0.9.2
 _2026-10-31_
 
