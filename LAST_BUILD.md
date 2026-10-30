@@ -1,3 +1,50 @@
+# Last Build — Give New Dawn an email to read · release 0.9.2
+_2026-10-31_
+
+## What changed
+- **Email** (sidebar, D-056). Give New Dawn one email and it proposes what the email means for you:
+  - **your tasks**: they wait under the email. **Add to Tasks** puts one in Tasks, with the email as its reason and the date read as a day when it is one; **Dismiss** sets it aside;
+  - **project updates**: they wait on the project's page, with the same checks as a meeting's;
+  - **others' commitments**: they wait in People to be confirmed.
+
+  Every proposal quotes a sentence the email really contains.
+- Two ways in:
+  - **Read the email selected in Mail**. The first time, macOS asks you to allow New Dawn to control Mail.
+  - **Open an .eml file…**
+
+  Nothing is fetched and nothing is sent: New Dawn reads only the email you give it, on this Mac.
+- **Emails read** lists each email with what came of it: its tasks, and links to its updates and commitments. **Forget** removes an email together with the proposals still waiting; what you already decided stays. The same email isn't read twice.
+- On People and on a project's page, what came from an email says "from the email “…”". In Tasks, a task you added from an email names the email.
+- A new **Email reading** agent in Workspace → Agents, with its guide and model.
+- Checks: 159 Rust tests pass. New ones cover:
+  - the .eml reader: a plain mail, the plain part preferred over HTML, and hostile mail (deep nesting, huge headers) read safely;
+  - only entries that quote the email are kept, and an answer that can't be read is an error, not "nothing to do";
+  - a proposed task is added once, and forgetting the email keeps it in Tasks.
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app, with a test email about "Block B defects repair":
+  - Reading it proposed 1 task, 2 project updates and 2 commitments, each quoting the email. It took about 20 seconds.
+  - Reading it a second time was refused: "This email was read already".
+  - Add to Tasks put the task in Tasks, due Friday 7 November, with the email as its reason.
+  - People and the project's page showed "from the email “Block B – final defect list”".
+  - Forget took the email's waiting proposals with it.
+- Reviews:
+  - The migration review found 0018 safe. It asked for the email's text to be stored last in the row and for one commitment per email and item; both were done before 0018 ran. It found 0019 safe as written.
+  - The architecture review found three must-fixes, all fixed:
+    - a crafted .eml could crash the app;
+    - an answer the app couldn't read marked the email as read with nothing in it;
+    - commitments and project updates from an email said they came from a meeting.
+  - Its other points were taken too (see D-056). The main one: your tasks from an email now wait for you to add them, like every other proposal, because someone else wrote the email.
+  - A second architecture review of that change found one must-fix, now fixed: a mail program's wrong weekday ("Thu, 30 Oct 2026") made the email's day today. Its other points were taken too: a proposal whose task you deleted no longer shows "In Tasks", and the buttons stay busy until the list is fresh.
+
+## Release
+- **v0.9.2** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the two new tables.
+
+## Manual steps
+1. The first time you use Read the email selected in Mail, allow New Dawn to control Mail when macOS asks. You can change this later in System Settings → Privacy & Security → Automation.
+
+---
+
 # Last Build — People, and what they promised you · release 0.9.1
 _2026-10-30_
 

@@ -163,6 +163,7 @@ function Row({ slug, task }: { slug: string; task: TaskView }) {
   const name = task.owner ? `${task.owner}: ${task.title}` : task.title; // names the row's controls
   const said = !task.due_on && !!task.due_text; // a due phrase that names no day
   const why = task.reason || "Found in the meeting's action items";
+  const fromEmail = task.origin === "button" && !task.meeting && !!task.reason; // added from an email (D-056)
   const error = update.error ?? remove.error;
 
   return (
@@ -183,11 +184,16 @@ function Row({ slug, task }: { slug: string; task: TaskView }) {
           {task.owner && <span className={styles.owner}>{task.owner}:</span>}
           <TitleField title={task.title} onSave={(title) => set({ title })} />
         </div>
-        {(task.meeting || said || task.origin === "auto") && (
+        {(task.meeting || fromEmail || said || task.origin === "auto") && (
           <p className={styles.meta}>
             {task.meeting && (
               <Link to="/meetings/$meetingId" params={{ meetingId: task.meeting.id }} search={{ tab: "summary" }} className={styles.meeting}>
                 {task.meeting.title} · {shortDate(new Date(task.meeting.held_on))}
+              </Link>
+            )}
+            {fromEmail && (
+              <Link to="/email" className={styles.meeting}>
+                {task.reason}
               </Link>
             )}
             {said && <span>said “{task.due_text}”</span>}

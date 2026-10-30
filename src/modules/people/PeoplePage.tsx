@@ -32,7 +32,7 @@ export default function PeoplePage() {
 
       <section className="section">
         <h2 className="sectionTitle">Commitments waiting for you</h2>
-        <p className="sectionSubtitle">What someone said they would do in your meetings — confirm the ones you'll follow up</p>
+        <p className="sectionSubtitle">What someone said they would do, in your meetings and the emails you read — confirm the ones you'll follow up</p>
         <p className={`fieldHint ${styles.collect}`}>
           <button type="button" className="btn btnGhost btnCompact" disabled={collect.isPending} onClick={() => collect.mutate()}>
             {collect.isPending ? "Looking…" : "Look through earlier meetings"}

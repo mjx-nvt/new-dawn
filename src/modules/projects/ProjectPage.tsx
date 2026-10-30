@@ -89,7 +89,7 @@ export default function ProjectPage() {
 
       <section className="section">
         <h2 className="sectionTitle">Updates waiting for you</h2>
-        <p className="sectionSubtitle">Proposed from its meetings by the Projects agent — nothing changes until you apply one</p>
+        <p className="sectionSubtitle">Proposed from its meetings and the emails you read — nothing changes until you apply one</p>
         <Waiting slug={slug} updates={d?.waiting} />
       </section>
 
@@ -141,7 +141,7 @@ export default function ProjectPage() {
                   {u.due ? ` · by ${formatDay(u.due)}` : ""}
                 </span>
                 <span className="fieldHint">
-                  {u.meeting_title ? `${u.meeting_title} · ` : ""}applied {formatWhen(u.updated_at)}
+                  {u.email_item_id ? `Email “${u.email_subject || "No subject"}” · ` : u.meeting_title ? `${u.meeting_title} · ` : ""}applied {formatWhen(u.updated_at)}
                 </span>
               </li>
             ))}
@@ -205,7 +205,14 @@ function Waiting({ slug, updates }: { slug?: string; updates?: ProjectUpdate[] }
             {u.evidence && <p className={styles.evidence}>“{u.evidence}”</p>}
             <p className="fieldHint aiMark">
               <SparkleIcon /> Proposed from{" "}
-              {u.meeting_id ? (
+              {u.email_item_id ? (
+                <>
+                  the email{" "}
+                  <Link to="/email" className={styles.link}>
+                    “{u.email_subject || "No subject"}”
+                  </Link>
+                </>
+              ) : u.meeting_id ? (
                 <Link to="/meetings/$meetingId" params={{ meetingId: u.meeting_id }} search={{ tab: "summary" }} className={styles.link}>
                   {u.meeting_title ?? "a meeting"}
                 </Link>

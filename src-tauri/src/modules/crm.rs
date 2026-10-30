@@ -43,6 +43,9 @@ pub struct Commitment {
     pub meeting_id: Option<String>,
     pub meeting_title: Option<String>,
     pub held_on: Option<String>,
+    /// The email it came from instead (D-056), while that email is kept.
+    pub email_item_id: Option<String>,
+    pub email_subject: Option<String>,
     pub status: CommitmentStatus,
     pub created_at: String,
     pub updated_at: String,
@@ -80,8 +83,10 @@ pub struct PersonDossier {
 macro_rules! commitment_select {
     () => {
         "SELECT c.id, c.person_id, c.person_name, c.what, c.due_text, c.meeting_id, \
-         m.title AS meeting_title, m.held_on, c.status, c.created_at, c.updated_at \
-         FROM commitment c LEFT JOIN meeting m ON m.id = c.meeting_id"
+         m.title AS meeting_title, m.held_on, c.email_item_id, e.subject AS email_subject, \
+         c.status, c.created_at, c.updated_at \
+         FROM commitment c LEFT JOIN meeting m ON m.id = c.meeting_id \
+         LEFT JOIN email_item e ON e.id = c.email_item_id"
     };
 }
 
@@ -176,6 +181,44 @@ pub async fn follow_doc(
     .await?;
     tx.commit().await?;
     Ok(added)
+}
+
+/// A commitment the Email reading agent found (D-056): proposed, linked to the email instead of a
+/// meeting, once per email and item. Returns whether it was added.
+pub async fn add_from_email(
+    pool: &SqlitePool,
+    email_item_id: &str,
+    who: &str,
+    what: &str,
+    due: &str,
+    known: &[Person],
+    owner: Option<&Owner>,
+) -> Result<bool> {
+    let name = who.split_whitespace().collect::<Vec<_>>().join(" ");
+    let what = what.split_whitespace().collect::<Vec<_>>().join(" ");
+    // The owner's own promise (an email they wrote) is theirs, not a commitment to them.
+    let owners = owner.is_some_and(|o| summarise::same_person(&name, &o.name));
+    if name.is_empty()
+        || what.is_empty()
+        || owners
+        || NOBODY.contains(&people::fold(&name).as_str())
+    {
+        return Ok(false);
+    }
+    let done = sqlx::query(
+        "INSERT OR IGNORE INTO commitment (id, person_id, person_name, what, due_text, email_item_id, source_key) \
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(match_person(known, &name).map(|p| p.id.clone()))
+    .bind(&name)
+    .bind(&what)
+    .bind(due.trim())
+    .bind(email_item_id)
+    .bind(format!("email|{}", source_key(&name, &what)))
+    .execute(pool)
+    .await?;
+    Ok(done.rows_affected() == 1)
 }
 
 /// One meeting's commitments from its stored summary (after a summary or an edit of it).

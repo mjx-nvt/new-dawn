@@ -117,10 +117,13 @@ pub struct ProjectUpdate {
     pub project_id: String,
     pub meeting_id: Option<String>,
     pub meeting_title: Option<String>,
+    /// The email it came from instead (D-056), while that email is kept.
+    pub email_item_id: Option<String>,
+    pub email_subject: Option<String>,
     pub field: UpdateField,
     pub value: String,
     pub due: Option<String>,
-    /// The sentence of the meeting's summary it rests on.
+    /// The sentence of the meeting's summary (or the email) it rests on.
     pub evidence: String,
     pub status: UpdateStatus,
     pub created_at: String,
@@ -176,9 +179,10 @@ macro_rules! project_select {
 
 macro_rules! update_select {
     () => {
-        "SELECT u.id, u.project_id, u.meeting_id, m.title AS meeting_title, u.field, u.value, u.due, \
-         u.evidence, u.status, u.created_at, u.updated_at FROM project_update u \
-         LEFT JOIN meeting m ON m.id = u.meeting_id"
+        "SELECT u.id, u.project_id, u.meeting_id, m.title AS meeting_title, u.email_item_id, \
+         e.subject AS email_subject, u.field, u.value, u.due, u.evidence, u.status, u.created_at, \
+         u.updated_at FROM project_update u LEFT JOIN meeting m ON m.id = u.meeting_id \
+         LEFT JOIN email_item e ON e.id = u.email_item_id"
     };
 }
 
@@ -358,6 +362,7 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
 struct Applied {
     project_id: String,
     meeting_id: Option<String>,
+    email_item_id: Option<String>,
     field: UpdateField,
     value: String,
     due: Option<String>,
@@ -369,7 +374,7 @@ pub async fn apply(pool: &SqlitePool, update_id: &str) -> Result<Project> {
     let mut tx = pool.begin().await?;
     let row: Option<Applied> = sqlx::query_as(
         "UPDATE project_update SET status = 'applied', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
-         WHERE id = ? AND status = 'proposed' RETURNING project_id, meeting_id, field, value, due",
+         WHERE id = ? AND status = 'proposed' RETURNING project_id, meeting_id, email_item_id, field, value, due",
     )
     .bind(update_id)
     .fetch_optional(&mut *tx)
@@ -377,6 +382,7 @@ pub async fn apply(pool: &SqlitePool, update_id: &str) -> Result<Project> {
     let Applied {
         project_id,
         meeting_id,
+        email_item_id,
         field,
         value,
         due,
@@ -427,7 +433,7 @@ pub async fn apply(pool: &SqlitePool, update_id: &str) -> Result<Project> {
         pool,
         Feedback {
             meeting_id: meeting_id.as_deref(),
-            source: Source::Projects,
+            source: proposer(&email_item_id),
             kind: Kind::UpdateApplied,
             before: "",
             after: &value,
@@ -440,20 +446,26 @@ pub async fn apply(pool: &SqlitePool, update_id: &str) -> Result<Project> {
 
 /// Dismiss: the proposal is set aside (and not proposed again).
 pub async fn dismiss(pool: &SqlitePool, update_id: &str) -> Result<Project> {
-    let row: Option<(String, Option<String>, UpdateField, String)> = sqlx::query_as(
+    let row: Option<Applied> = sqlx::query_as(
         "UPDATE project_update SET status = 'dismissed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
-         WHERE id = ? AND status = 'proposed' RETURNING project_id, meeting_id, field, value",
+         WHERE id = ? AND status = 'proposed' RETURNING project_id, meeting_id, email_item_id, field, value, due",
     )
     .bind(update_id)
     .fetch_optional(pool)
     .await?;
-    let (project_id, meeting_id, field, value) =
-        row.ok_or_else(|| AppError::not_found("That update is gone"))?;
+    let Applied {
+        project_id,
+        meeting_id,
+        email_item_id,
+        field,
+        value,
+        ..
+    } = row.ok_or_else(|| AppError::not_found("That update is gone"))?;
     feedback::record(
         pool,
         Feedback {
             meeting_id: meeting_id.as_deref(),
-            source: Source::Projects,
+            source: proposer(&email_item_id),
             kind: Kind::UpdateDismissed,
             before: &value,
             after: "",
@@ -462,6 +474,15 @@ pub async fn dismiss(pool: &SqlitePool, update_id: &str) -> Result<Project> {
     )
     .await;
     get(pool, &project_id).await
+}
+
+/// Whose proposal the owner decided: the Projects agent's (a meeting) or the Email reading agent's.
+fn proposer(email_item_id: &Option<String>) -> Source {
+    if email_item_id.is_some() {
+        Source::Inbox
+    } else {
+        Source::Projects
+    }
 }
 
 fn parse_status(value: &str) -> Option<ProjectStatus> {
@@ -474,7 +495,7 @@ fn parse_status(value: &str) -> Option<ProjectStatus> {
 }
 
 /// Lowercase letters and digits only: how two texts are compared.
-fn fold(text: &str) -> String {
+pub(crate) fn fold(text: &str) -> String {
     text.chars()
         .filter(|c| c.is_alphanumeric())
         .flat_map(char::to_lowercase)
@@ -605,24 +626,9 @@ pub async fn propose(app: &AppHandle, slug: &str, meeting_id: &str, now: bool) -
             .execute(&pool)
             .await?;
         let Some(u) = update else { continue };
-        if already_known(&pool, &project_id, meeting_id, &u).await? {
-            continue;
+        if store(&pool, &project_id, Some(meeting_id), None, &u, &model).await? {
+            stored += 1;
         }
-        sqlx::query(
-            "INSERT INTO project_update (id, project_id, meeting_id, field, value, due, evidence, model) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind(uuid::Uuid::now_v7().to_string())
-        .bind(&project_id)
-        .bind(meeting_id)
-        .bind(u.field)
-        .bind(&u.value)
-        .bind(&u.due)
-        .bind(&u.evidence)
-        .bind(&model)
-        .execute(&pool)
-        .await?;
-        stored += 1;
     }
     Ok(stored)
 }
@@ -773,7 +779,7 @@ fn request(
 }
 
 #[derive(Debug, PartialEq)]
-struct Proposed {
+pub(crate) struct Proposed {
     field: UpdateField,
     value: String,
     due: Option<String>,
@@ -809,6 +815,95 @@ struct RawUpdate {
 /// The touched projects (by id) with the updates that hold up: a project that is listed, a field
 /// New Dawn knows, a value, a real date, and evidence found in the summary. A touched project
 /// with no update that holds up is still linked (`None`).
+/// One proposed change, if it holds up: a field New Dawn knows, a value, a status it knows, a real
+/// date (milestones), and evidence found in `said` (the source's text, folded).
+pub(crate) fn check(
+    field: &str,
+    value: &str,
+    due: Option<&str>,
+    evidence: &str,
+    said: &str,
+) -> Option<Proposed> {
+    let field = match fold(field).as_str() {
+        "milestone" | "nextmilestone" => UpdateField::Milestone,
+        "phase" => UpdateField::Phase,
+        "status" => UpdateField::Status,
+        "risk" => UpdateField::Risk,
+        "decision" => UpdateField::Decision,
+        "note" => UpdateField::Note,
+        _ => return None,
+    };
+    let value = one_line(value);
+    let evidence = one_line(evidence);
+    let quoted = fold(&evidence);
+    if value.is_empty()
+        || value.chars().count() > 300
+        || quoted.len() < 12
+        || !said.contains(&quoted)
+        || (field == UpdateField::Status && parse_status(&value).is_none())
+    {
+        return None;
+    }
+    let due = if field == UpdateField::Milestone {
+        due.and_then(|d| clean_due(Some(d)).ok().flatten())
+    } else {
+        None
+    };
+    Some(Proposed {
+        field,
+        value,
+        due,
+        evidence,
+    })
+}
+
+/// The open project `name` means (letters and digits compared).
+pub(crate) fn named<'a>(projects: &'a [Project], name: &str) -> Option<&'a Project> {
+    projects
+        .iter()
+        .find(|p| p.status != ProjectStatus::Done && fold(&p.name) == fold(name))
+}
+
+/// Stores a checked proposal unless it repeats what the project shows or the owner decided; from a
+/// meeting or from an email (D-056). Returns whether it was stored.
+pub(crate) async fn store(
+    pool: &SqlitePool,
+    project_id: &str,
+    meeting_id: Option<&str>,
+    email_item_id: Option<&str>,
+    u: &Proposed,
+    model: &str,
+) -> Result<bool> {
+    if already_known(pool, project_id, meeting_id.unwrap_or(""), u).await? {
+        return Ok(false);
+    }
+    sqlx::query(
+        "INSERT INTO project_update (id, project_id, meeting_id, email_item_id, field, value, due, evidence, model) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(project_id)
+    .bind(meeting_id)
+    .bind(email_item_id)
+    .bind(u.field)
+    .bind(&u.value)
+    .bind(&u.due)
+    .bind(&u.evidence)
+    .bind(model)
+    .execute(pool)
+    .await?;
+    Ok(true)
+}
+
+/// The open projects (for a reading).
+pub(crate) async fn open(pool: &SqlitePool) -> Result<Vec<Project>> {
+    Ok(list(pool)
+        .await?
+        .into_iter()
+        .filter(|p| p.status != ProjectStatus::Done)
+        .collect())
+}
+
 fn parse(content: &str, projects: &[Project], summary: &str) -> Vec<(String, Option<Proposed>)> {
     let json = match (content.find('{'), content.rfind('}')) {
         (Some(start), Some(end)) if start < end => &content[start..=end],
@@ -826,42 +921,9 @@ fn parse(content: &str, projects: &[Project], summary: &str) -> Vec<(String, Opt
         };
         out.push((project.id.clone(), None));
         for u in t.updates {
-            let field = match fold(&u.field).as_str() {
-                "milestone" | "nextmilestone" => UpdateField::Milestone,
-                "phase" => UpdateField::Phase,
-                "status" => UpdateField::Status,
-                "risk" => UpdateField::Risk,
-                "decision" => UpdateField::Decision,
-                "note" => UpdateField::Note,
-                _ => continue,
-            };
-            let value = one_line(&u.value);
-            let evidence = one_line(&u.evidence);
-            let quoted = fold(&evidence);
-            if value.is_empty()
-                || value.chars().count() > 300
-                || quoted.len() < 12
-                || !said.contains(&quoted)
-                || (field == UpdateField::Status && parse_status(&value).is_none())
-            {
-                continue;
+            if let Some(p) = check(&u.field, &u.value, u.due.as_deref(), &u.evidence, &said) {
+                out.push((project.id.clone(), Some(p)));
             }
-            let due = if field == UpdateField::Milestone {
-                u.due
-                    .as_deref()
-                    .and_then(|d| clean_due(Some(d)).ok().flatten())
-            } else {
-                None
-            };
-            out.push((
-                project.id.clone(),
-                Some(Proposed {
-                    field,
-                    value,
-                    due,
-                    evidence,
-                }),
-            ));
         }
     }
     out

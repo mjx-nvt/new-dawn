@@ -194,6 +194,18 @@ export const commands = {
 	listUnlinkedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_unlinked_commitments", { slug })),
 	/**  The newest dismissed, for Undo. */
 	listDismissedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_dismissed_commitments", { slug })),
+	/**  The emails read, newest first, with what came of each. */
+	listEmails: (slug: string) => typedError<EmailItem_Serialize[], AppError>(__TAURI_INVOKE("list_emails", { slug })),
+	/**  Reads an .eml file the owner chose (D-056). */
+	readEmailFile: (slug: string, path: string) => typedError<EmailItem_Serialize, AppError>(__TAURI_INVOKE("read_email_file", { slug, path })),
+	/**  Reads the email selected in Apple Mail. */
+	readMailSelection: (slug: string) => typedError<EmailItem_Serialize, AppError>(__TAURI_INVOKE("read_mail_selection", { slug })),
+	/**  Forgets an email: its text and the proposals still waiting. */
+	forgetEmail: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("forget_email", { slug, id })),
+	/**  Add to Tasks: an email's proposed task becomes the owner's. */
+	addEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("add_email_task", { slug, id })),
+	/**  Dismisses an email's proposed task. */
+	dismissEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("dismiss_email_task", { slug, id })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -353,7 +365,7 @@ export type Activity_Serialize = {
 	waiting_for: string | null,
 };
 
-export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live" | "projects";
+export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live" | "projects" | "inbox";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -700,6 +712,9 @@ export type Commitment_Deserialize = {
 	meeting_id?: string | null,
 	meeting_title?: string | null,
 	held_on?: string | null,
+	/**  The email it came from instead (D-056), while that email is kept. */
+	email_item_id?: string | null,
+	email_subject?: string | null,
 	status: CommitmentStatus,
 	created_at: string,
 	updated_at: string,
@@ -715,6 +730,9 @@ export type Commitment_Serialize = {
 	meeting_id: string | null,
 	meeting_title: string | null,
 	held_on: string | null,
+	/**  The email it came from instead (D-056), while that email is kept. */
+	email_item_id: string | null,
+	email_subject: string | null,
 	status: CommitmentStatus,
 	created_at: string,
 	updated_at: string,
@@ -764,6 +782,74 @@ export type Decision = {
 	text: string,
 	decided_by: string,
 	condition: string,
+};
+
+/**  An email read, and what came of it. */
+export type EmailItem = EmailItem_Serialize | EmailItem_Deserialize;
+
+/**  An email read, and what came of it. */
+export type EmailItem_Deserialize = {
+	id: string,
+	subject: string,
+	sender: string,
+	received_text: string,
+	source: EmailSource,
+	tasks: number,
+	updates: number,
+	commitments: number,
+	created_at: string,
+	/**
+	 *  The owner's tasks it proposed, still waiting or added (dismissed ones, and added ones
+	 *  deleted since, aren't shown).
+	 */
+	proposed: EmailTask_Deserialize[],
+};
+
+/**  An email read, and what came of it. */
+export type EmailItem_Serialize = {
+	id: string,
+	subject: string,
+	sender: string,
+	received_text: string,
+	source: EmailSource,
+	tasks: number,
+	updates: number,
+	commitments: number,
+	created_at: string,
+	/**
+	 *  The owner's tasks it proposed, still waiting or added (dismissed ones, and added ones
+	 *  deleted since, aren't shown).
+	 */
+	proposed: EmailTask_Serialize[],
+};
+
+export type EmailSource = "mail" | "eml";
+
+/**  A task the agent proposed from an email: the owner adds it to Tasks or dismisses it (D-054). */
+export type EmailTask = EmailTask_Serialize | EmailTask_Deserialize;
+
+/**  A task the agent proposed from an email: the owner adds it to Tasks or dismisses it (D-054). */
+export type EmailTask_Deserialize = {
+	id: string,
+	email_item_id: string,
+	item: string,
+	/**  The date as the email says it ("" = none). */
+	due_text: string,
+	evidence: string,
+	status: ProposalStatus,
+	task_id?: string | null,
+};
+
+/**  A task the agent proposed from an email: the owner adds it to Tasks or dismisses it (D-054). */
+export type EmailTask_Serialize = {
+	id: string,
+	email_item_id: string,
+	item: string,
+	/**  The date as the email says it ("" = none). */
+	due_text: string,
+	evidence: string,
+	status: ProposalStatus,
+	task_id: string | null,
 };
 
 export type ExportOptions = ExportOptions_Serialize | ExportOptions_Deserialize;
@@ -1505,10 +1591,13 @@ export type ProjectUpdate_Deserialize = {
 	project_id: string,
 	meeting_id?: string | null,
 	meeting_title?: string | null,
+	/**  The email it came from instead (D-056), while that email is kept. */
+	email_item_id?: string | null,
+	email_subject?: string | null,
 	field: UpdateField,
 	value: string,
 	due?: string | null,
-	/**  The sentence of the meeting's summary it rests on. */
+	/**  The sentence of the meeting's summary (or the email) it rests on. */
 	evidence: string,
 	status: UpdateStatus,
 	created_at: string,
@@ -1521,10 +1610,13 @@ export type ProjectUpdate_Serialize = {
 	project_id: string,
 	meeting_id: string | null,
 	meeting_title: string | null,
+	/**  The email it came from instead (D-056), while that email is kept. */
+	email_item_id: string | null,
+	email_subject: string | null,
 	field: UpdateField,
 	value: string,
 	due: string | null,
-	/**  The sentence of the meeting's summary it rests on. */
+	/**  The sentence of the meeting's summary (or the email) it rests on. */
 	evidence: string,
 	status: UpdateStatus,
 	created_at: string,
@@ -1568,6 +1660,8 @@ export type Project_Serialize = {
 	created_at: string,
 	updated_at: string,
 };
+
+export type ProposalStatus = "proposed" | "added" | "dismissed";
 
 /**
  *  The current or last quick translation, kept with its lines so the Live page can show it once

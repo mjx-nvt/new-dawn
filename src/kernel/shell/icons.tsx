@@ -68,6 +68,13 @@ export const CheckIcon = () => (
   </Icon>
 );
 
+export const MailIcon = () => (
+  <Icon>
+    <rect x="1.5" y="3" width="13" height="10" rx="1.5" />
+    <path d="M2 4l6 4.5L14 4" />
+  </Icon>
+);
+
 export const PeopleIcon = () => (
   <Icon>
     <circle cx="6" cy="5.5" r="2.5" />

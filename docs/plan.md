@@ -93,14 +93,15 @@ Models on disk today: 10.7 GB (large-v3 3.1 GB, Qwen 9B 7.6 GB). The app itself 
 
 | Migration | Tables / columns |
 |---|---|
-| 0012 | `job` (§3.3) |
-| 0013 | `feedback` (§3.2); `summary.ai_sections_json` (the AI's text kept beside your edits) |
-| 0014 | `meeting.reference`; `model_check` (candidate, metrics JSON, blind picks) |
-| 0015 | `speaker_turn`; `transcript_segment.speaker_label`; `person.voice_print_json`, `person.voice_model`; `voice_clip` |
-| 0016 | `embedding` (`sqlite-vec` virtual table) |
-| 0017 | `project`, `project_meeting`, `project_update` |
-| 0018 | `organisation`, `person.organisation_id`, `interaction`, `commitment` |
-| 0019 | `email_item` |
+| 0012 | `feedback`; `summary.ai_sections_json` (the AI's text kept beside your edits) — 0.8.1 |
+| 0013 | `meeting.reference`; `model_check` — 0.8.2 |
+| 0014 | `lesson` — 0.8.4 |
+| 0015 | `embedding`, `embedding_check` (vectors as BLOBs, no `sqlite-vec`) — 0.8.5 |
+| 0016 | `project`, `project_meeting`, `project_update` — 0.9.0 |
+| 0017 | `commitment`; `person.notes` — 0.9.1 |
+| 0018 | `email_item`; `project_update.email_item_id`, `commitment.email_item_id` — 0.9.2 |
+| 0019 | `email_task` (the owner's tasks an email proposes, until added or dismissed) — 0.9.2 |
+| later | speakers: `speaker_turn`; `transcript_segment.speaker_label`; `person.voice_print_json`; `voice_clip` (when the runtime can be built, D-051) |
 | registry | settings for the resource policy and the speech model per job |
 
 Folder additions: `models/speakers/` (the diarization and embedding models), `workspaces/<slug>/voices/<person-id>/*.wav` (clips), a second WAV per discussion recording until compression.

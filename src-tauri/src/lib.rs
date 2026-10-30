@@ -51,7 +51,9 @@ mod modules {
     pub mod agents;
     pub mod brand;
     pub mod crm;
+    pub mod eml;
     pub mod feedback;
+    pub mod inbox;
     pub mod lessons;
     pub mod meetings;
     pub mod memory;
@@ -76,6 +78,7 @@ mod commands {
     pub mod brand;
     pub mod crm;
     pub mod glass;
+    pub mod inbox;
     pub mod meetings;
     pub mod minutes;
     pub mod models;
@@ -200,6 +203,12 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::crm::collect_commitments,
             commands::crm::list_unlinked_commitments,
             commands::crm::list_dismissed_commitments,
+            commands::inbox::list_emails,
+            commands::inbox::read_email_file,
+            commands::inbox::read_mail_selection,
+            commands::inbox::forget_email,
+            commands::inbox::add_email_task,
+            commands::inbox::dismiss_email_task,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

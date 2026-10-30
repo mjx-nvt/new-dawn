@@ -2,6 +2,23 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-056 — Email: the owner gives New Dawn one email; the Email reading agent proposes, quoting it
+_2026-10-30_
+
+**Context** (plan v3 §5, Email): much of what moves a project or binds someone arrives by email, not in meetings. The plan ruled out an inbox (IMAP, network, credentials): the owner picks what New Dawn reads.
+
+**Decision — two ways in, nothing fetched**: **Read the email selected in Mail** asks Apple Mail through Apple Events (`osascript`, like the minutes' email; the first time, macOS asks to allow New Dawn to control Mail) for the selected message's subject, sender, date, Message-ID and text; **Open an .eml file…** reads a saved email. The .eml reader is New Dawn's own (`modules/eml.rs`: headers with encoded words, multipart with the plain part first, base64 and quoted-printable, HTML turned into lines) — no new dependency. An email is stored in the workspace (`email_item`, migration 0018: its text up to 20,000 characters) so it's read once (same Message-ID) and its proposals can quote it; **Forget** deletes it with its waiting proposals (decided ones stay, unlinked, and project updates lose the quote).
+
+**Decision — the Email reading agent** (Workspace → Agents, its own guide and model): one call, in the owner's own lane (they are waiting), with a note first instead of long thinking. It returns the owner's **tasks** (proposals under the email — migration 0019 `email_task` — until the owner presses **Add to Tasks**, which makes the task theirs with the email as its reason and the date said read as a day when it is one, or **Dismiss**), **project updates** for open projects (proposals on the project's page, through the same checks and duplicate rules as a meeting's, D-054) and others' **commitments** (proposed in People, D-055). Every entry must quote one sentence the email really contains; the email is fenced as data, never instructions (an email can try to instruct a model).
+
+**Where**: **Email** in the sidebar: the two buttons, what came of the last reading, and the emails read with their proposed tasks and links to their updates and commitments; People and a project's page say "from the email “…”" on what came from one.
+
+**Review fixes taken** (migration and architecture reviews): the email's tasks are proposals like every expert's (D-054), not tasks written straight into Tasks — an email is written by someone else; an added one is the owner's (`origin` button, as Add to Tasks on an action item), so the Tasks agent's numbers and lessons never count the Email reading agent's work, and decisions on an email's project updates and tasks go to the ledger under the Email reading agent (`inbox`, no lessons yet); the model's answer is read before anything is kept — an answer that can't be read is an error, so the email can be read again (nulls in the answer read as empty); the email is kept once, by its Message-ID or, without one, a hash of sender, date, subject and text, and a second reading is refused; one entry that can't be written is logged and the rest still land; the owner's own promises aren't commitments; Mail is asked only when it's running, with a time limit, each property in its own `try` and the separator taken out of each value (a missing Automation permission is named, other failures shown); an .eml must be a regular file of at most 25 MB, parsed off the async workers, with nesting, boundaries and header lengths bounded, Windows-1252 read and HTML comments, scripts and styles skipped; the commitments and project updates that came from an email say so, with its subject. A second review of the proposals change: the email's date is read without its weekday (a wrong one made the day today); an added proposal whose task was deleted in Tasks no longer shows "In Tasks"; a task added from an email names it in Tasks.
+
+**Means for future work**: "Watch this mailbox" (opt-in, in the background lane) can come once reading one email has proven itself; replies stay the owner's to write.
+
+---
+
 ## D-055 — People become dossiers: commitments from others' action items, last contact from attendance
 _2026-10-30_
 

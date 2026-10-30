@@ -23,6 +23,8 @@ pub enum Source {
     Tasks,
     /// The Projects expert (D-054).
     Projects,
+    /// The Email reading agent (D-056).
+    Inbox,
 }
 
 /// The owner's decision.
@@ -42,8 +44,10 @@ pub enum Kind {
     NameKept,
     /// Who attended, renamed or moved in or out of the minutes.
     AttendeesChanged,
-    /// An action item the owner sent to Tasks themselves.
+    /// An action item the owner sent to Tasks themselves (or an email's proposed task, added).
     TaskAdded,
+    /// A task an email's reading proposed, set aside.
+    TaskDismissed,
     /// A task the AI added: reworded, or deleted.
     TaskReworded,
     TaskDeleted,
@@ -144,11 +148,13 @@ pub async fn numbers(pool: &SqlitePool, agent: Agent) -> Result<Vec<Judged>> {
              WHERE t.origin = 'auto' AND t.created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-3 days') \
              GROUP BY 1 ORDER BY judged DESC"
         }
-        // Its proposals the owner decided: applied stood, dismissed dropped.
+        // Its proposals the owner decided: applied stood, dismissed dropped. Only the meetings'
+        // (the Email reading agent's come from emails, D-056).
         Agent::Projects => {
             "SELECT coalesce(model, '') AS model, count(*) AS judged, 0 AS changed, \
              coalesce(sum(status = 'dismissed'), 0) AS dropped FROM project_update \
-             WHERE status IN ('applied', 'dismissed') GROUP BY 1 ORDER BY judged DESC"
+             WHERE status IN ('applied', 'dismissed') AND meeting_id IS NOT NULL \
+             GROUP BY 1 ORDER BY judged DESC"
         }
         _ => return Ok(Vec::new()),
     };
@@ -167,14 +173,23 @@ mod tests {
             let hub = WorkspaceHub::open(root.clone()).await.unwrap();
             hub.create_workspace("VIFC", "test").await.unwrap();
             let pool = hub.pool("test").unwrap();
-            for (id, deleted) in [("t1", false), ("t2", true), ("t3", false)] {
+            sqlx::query(
+                "INSERT INTO meeting (id, title, held_on) VALUES ('m1', 'm', '2026-10-01')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            // A task added from an email's proposals is the owner's ('button'), not the Tasks agent's.
+            for (id, deleted) in [("t1", false), ("t2", true), ("t3", false), ("e1", true)] {
                 sqlx::query(
-                    "INSERT INTO task (id, title, origin, deleted_at, created_at) VALUES (?, ?, 'auto', \
+                    "INSERT INTO task (id, title, origin, meeting_id, deleted_at, created_at) VALUES (?, ?, \
+                     CASE WHEN ? = 'e1' THEN 'button' ELSE 'auto' END, 'm1', \
                      CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END, \
                      strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-5 days'))",
                 )
                 .bind(id)
                 .bind(format!("Task {id}"))
+                .bind(id)
                 .bind(deleted)
                 .execute(&pool)
                 .await

@@ -145,7 +145,7 @@ fn today() -> String {
 
 /// A task's text (its title, the due phrase): one line, single spaces, at most `max` characters.
 /// Unlike a name it keeps "<" and ">" ("revenue > 5bn"): it is only shown as text, never prompted.
-fn one_line(text: &str, max: usize) -> String {
+pub(crate) fn one_line(text: &str, max: usize) -> String {
     text.split(|c: char| c.is_whitespace() || c.is_control())
         .filter(|w| !w.is_empty())
         .collect::<Vec<_>>()
@@ -203,6 +203,40 @@ async fn get(pool: &SqlitePool, id: &str) -> Result<TaskView> {
     Ok(row
         .map(TaskView::from)
         .ok_or_else(|| AppError::not_found("No such task"))?)
+}
+
+/// A task the owner added from an email's proposals (D-056): theirs ("button", like Add to Tasks on
+/// an action item), with the email named as its reason; the date said becomes a day when it is one
+/// near the email's day. Returns the task's id.
+pub async fn add_from_email<'e>(
+    db: impl sqlx::SqliteExecutor<'e>,
+    title: &str,
+    due_said: &str,
+    reason: &str,
+    day: NaiveDate,
+) -> Result<String> {
+    let title = one_line(title, 500);
+    if title.is_empty() {
+        bail!(AppError::invalid("This task has no text"));
+    }
+    let said = one_line(due_said, 200);
+    let (due_text, due_on) = match due::parse_due(&said, day) {
+        Due::None => (String::new(), None),
+        Due::On(on) => (said, Some(on)),
+        Due::Text => (said, None),
+    };
+    let id = meetings::new_id();
+    sqlx::query(
+        "INSERT INTO task (id, title, due_text, due_on, origin, reason) VALUES (?, ?, ?, ?, 'button', ?)",
+    )
+    .bind(&id)
+    .bind(&title)
+    .bind(due_text)
+    .bind(due_on.map(|d| d.to_string()))
+    .bind(one_line(reason, 300))
+    .execute(db)
+    .await?;
+    Ok(id)
 }
 
 /// A task typed in Tasks: no date, no meeting.

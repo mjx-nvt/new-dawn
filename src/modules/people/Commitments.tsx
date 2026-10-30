@@ -39,13 +39,23 @@ export default function Commitments({ slug, items, showWho, empty }: { slug?: st
               {c.what}
             </p>
             <p className="fieldHint aiMark">
-              <SparkleIcon /> {c.due_text ? `By ${c.due_text} · ` : ""}from the action items of{" "}
-              {c.meeting_id ? (
-                <Link to="/meetings/$meetingId" params={{ meetingId: c.meeting_id }} search={{ tab: "summary" }} className={styles.link}>
-                  {c.meeting_title ?? "a meeting"}
-                </Link>
+              <SparkleIcon /> {c.due_text ? `By ${c.due_text} · ` : ""}
+              {c.email_item_id ? (
+                <>
+                  from the email{" "}
+                  <Link to="/email" className={styles.link}>
+                    “{c.email_subject || "No subject"}”
+                  </Link>
+                </>
+              ) : c.meeting_id ? (
+                <>
+                  from the action items of{" "}
+                  <Link to="/meetings/$meetingId" params={{ meetingId: c.meeting_id }} search={{ tab: "summary" }} className={styles.link}>
+                    {c.meeting_title ?? "a meeting"}
+                  </Link>
+                </>
               ) : (
-                "a meeting since deleted"
+                "from a meeting or an email since deleted"
               )}
               {c.held_on ? ` · ${formatWhen(c.held_on)}` : ""}
             </p>

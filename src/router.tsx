@@ -14,6 +14,7 @@ import ProjectsPage from "./modules/projects/ProjectsPage";
 import ProjectPage from "./modules/projects/ProjectPage";
 import PeoplePage from "./modules/people/PeoplePage";
 import PersonPage from "./modules/people/PersonPage";
+import EmailPage from "./modules/email/EmailPage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupSearch } from "./modules/tenant-setup/TenantSetupPage";
@@ -114,6 +115,14 @@ const personRoute = createRoute({
   staticData: { title: "Person", breadcrumb: "People" },
 });
 
+// Emails you give New Dawn to read: tasks, project updates, commitments (D-056).
+const emailRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/email",
+  component: EmailPage,
+  staticData: { title: "Email" },
+});
+
 const workspaceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/workspace",
@@ -165,7 +174,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

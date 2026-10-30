@@ -5,7 +5,7 @@ import { useOpenTaskCount } from "../bridge/tasks";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import { useWaitingCommitments } from "../bridge/crm";
 import { useProjects } from "../bridge/projects";
-import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, PeopleIcon, ProjectsIcon, SettingsIcon, TasksIcon, WorkspaceIcon } from "./icons";
+import { CodeIcon, CollapseIcon, LiveIcon, MailIcon, MeetingsIcon, PeopleIcon, ProjectsIcon, SettingsIcon, TasksIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -76,6 +76,9 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
         >
           {label("People", <PeopleIcon />)}
           {owed > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{owed}</span>)}
+        </Link>
+        <Link to="/email" className={styles.item} activeProps={{ className: styles.active }} title={tip("Email")}>
+          {label("Email", <MailIcon />)}
         </Link>
         <Link
           to="/workspace"

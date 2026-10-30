@@ -23,12 +23,13 @@ pub enum Agent {
     Translate,
     Live,
     Projects,
+    Inbox,
 }
 
 impl Agent {
     /// The agents that talk to the model. The minutes are filled from the summary by rules
     /// and the Word template (D-024), so `Minutes` has no guide to edit.
-    pub const ALL: [Agent; 8] = [
+    pub const ALL: [Agent; 9] = [
         Agent::Summary,
         Agent::Naming,
         Agent::Email,
@@ -37,6 +38,7 @@ impl Agent {
         Agent::Translate,
         Agent::Live,
         Agent::Projects,
+        Agent::Inbox,
     ];
 
     pub fn id(self) -> &'static str {
@@ -50,6 +52,7 @@ impl Agent {
             Agent::Translate => "translate",
             Agent::Live => "live",
             Agent::Projects => "projects",
+            Agent::Inbox => "inbox",
         }
     }
 
@@ -64,6 +67,7 @@ impl Agent {
             Agent::Translate => "Translation",
             Agent::Live => "Live translation",
             Agent::Projects => "Projects",
+            Agent::Inbox => "Email reading",
         }
     }
 
@@ -92,6 +96,9 @@ impl Agent {
             Agent::Projects => {
                 "After each summary, finds the projects the meeting touched and proposes their updates for you to apply."
             }
+            Agent::Inbox => {
+                "Reads an email you pick and proposes your tasks, project updates and others' commitments, each quoting the email."
+            }
         }
     }
 
@@ -107,6 +114,7 @@ impl Agent {
             Agent::Translate => include_str!("../../agents/translate.md"),
             Agent::Live => include_str!("../../agents/live.md"),
             Agent::Projects => include_str!("../../agents/projects.md"),
+            Agent::Inbox => include_str!("../../agents/inbox.md"),
         }
     }
 }
