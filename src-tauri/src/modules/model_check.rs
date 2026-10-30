@@ -449,8 +449,10 @@ async fn speech(
     let terms = vocabulary::list(pool).await?;
     let mut stored = Stored::default();
     let mut made_by = Vec::new();
+    let mut apart = false;
     for (i, m) in rows.iter().enumerate() {
         let segments = meetings::transcript(pool, &m.id).await?;
+        apart |= segments.iter().any(|s| s.speaker.is_some());
         let duration = m
             .duration_ms
             .map(|d| d as u32)
@@ -574,6 +576,13 @@ async fn speech(
         ),
         _ => "Your transcripts were written by several models and then corrected.".into(),
     };
+    if apart {
+        // The meeting heard each voice on its own (D-051); a trial hears the mix.
+        stored
+            .note
+            .push_str(if stored.note.is_empty() { "" } else { " " });
+        stored.note.push_str("Some of these meetings were transcribed as your microphone and the call apart; here both models hear them mixed, so both score a little lower on overlapping speech.");
+    }
     Ok(stored)
 }
 
@@ -950,7 +959,11 @@ mod tests {
     fn short_meetings_are_heard_whole_long_ones_twice() {
         use super::{WINDOW_MS, windows};
         assert_eq!(windows(0), [(0, 0)]);
-        assert_eq!(windows(3 * WINDOW_MS), [(0, 3 * WINDOW_MS)], "no overlapping windows");
+        assert_eq!(
+            windows(3 * WINDOW_MS),
+            [(0, 3 * WINDOW_MS)],
+            "no overlapping windows"
+        );
         let long = windows(60 * 60_000);
         assert_eq!(long, [(1_155_000, 1_245_000), (2_355_000, 2_445_000)]);
     }
@@ -959,10 +972,15 @@ mod tests {
     fn only_a_bad_answer_counts_against_the_candidate() {
         use crate::error::AppError;
         let stops = |e: AppError| super::stops(&anyhow::Error::from(e));
-        assert!(stops(AppError::new("ollama_unavailable", "Ollama isn't running")));
+        assert!(stops(AppError::new(
+            "ollama_unavailable",
+            "Ollama isn't running"
+        )));
         assert!(stops(AppError::new("cancelled", "Model check cancelled")));
         assert!(stops(AppError::invalid("The transcript is empty")));
-        assert!(!super::stops(&anyhow::anyhow!("the model's answer was not valid JSON")));
+        assert!(!super::stops(&anyhow::anyhow!(
+            "the model's answer was not valid JSON"
+        )));
     }
 
     #[test]

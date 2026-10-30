@@ -62,17 +62,53 @@ pub async fn compress(original: &Path) -> Result<PathBuf> {
     if !is_original(original) {
         return Ok(original.to_owned());
     }
-    let _one_at_a_time = COMPRESSING.lock().await;
     let folder = original.parent().context("recording folder")?;
-    let target = folder.join(COMPRESSED);
+    encode(original, &folder.join(COMPRESSED)).await
+}
+
+/// The microphone's and the call's own recordings beside it (D-051), compressed the same way to
+/// `mic.m4a` and `call.m4a` in the background (they never hold up a transcript or a summary).
+/// Best effort: each is still usable as a WAV. Returns how many it started on.
+fn compress_channels(folder: &Path) -> u32 {
+    let wavs: Vec<(PathBuf, PathBuf)> = crate::modules::meetings::CHANNELS
+        .iter()
+        .map(|(name, _)| {
+            let wav = folder.join(format!("{name}.wav"));
+            (wav, folder.join(format!("{name}.m4a")))
+        })
+        .filter(|(wav, _)| wav.is_file())
+        .collect();
+    let count = wavs.len() as u32;
+    if count > 0 {
+        tauri::async_runtime::spawn(async move {
+            for (wav, m4a) in wavs {
+                if let Err(err) = encode(&wav, &m4a).await {
+                    tracing::warn!("could not compress {}: {err:#}", wav.display());
+                }
+            }
+        });
+    }
+    count
+}
+
+/// A channel's recording not yet compressed (`mic.wav`, `call.wav`).
+fn is_channel_original(path: &Path) -> bool {
+    crate::modules::meetings::CHANNELS
+        .iter()
+        .any(|(name, _)| path.file_name().and_then(|n| n.to_str()) == Some(&format!("{name}.wav")))
+}
+
+/// `original` → `target` (mono AAC, 48 kbps), then the original goes. One encode at a time.
+async fn encode(original: &Path, target: &Path) -> Result<PathBuf> {
+    let _one_at_a_time = COMPRESSING.lock().await;
     if !original.is_file() {
         // Compressed meanwhile by whoever held the lock before us.
         if target.is_file() {
-            return Ok(target);
+            return Ok(target.to_owned());
         }
         bail!("{} is gone", original.display());
     }
-    let tmp = folder.join("recording.tmp.m4a");
+    let tmp = target.with_extension("tmp.m4a");
     let output = tokio::process::Command::new("/usr/bin/afconvert")
         .args([
             "-f", "m4af", "-d", "aac", "-b", BITRATE, "-q", "127", "--mix",
@@ -96,11 +132,11 @@ pub async fn compress(original: &Path) -> Result<PathBuf> {
     }
     // Durable before the original goes: a power cut can't leave a half-written replacement.
     std::fs::File::open(&tmp)?.sync_all()?;
-    std::fs::rename(&tmp, &target).with_context(|| format!("saving {}", target.display()))?;
+    std::fs::rename(&tmp, target).with_context(|| format!("saving {}", target.display()))?;
     if let Err(err) = std::fs::remove_file(original) {
         tracing::warn!("compressed, but the original stayed: {err}");
     }
-    Ok(target)
+    Ok(target.to_owned())
 }
 
 /// Compresses a meeting's recording after its transcript is saved and points the meeting at
@@ -113,6 +149,9 @@ pub async fn compress_meeting(
     let new_path = compress(audio_path).await?;
     if new_path != audio_path {
         set_audio_path(pool, meeting_id, Some(&new_path.display().to_string())).await?;
+    }
+    if let Some(folder) = audio_path.parent() {
+        compress_channels(folder);
     }
     Ok(())
 }
@@ -175,6 +214,17 @@ pub async fn trash_old_recordings(hub: &WorkspaceHub, slug: &str, days: u32) -> 
     let mut count = 0;
     for row in rows {
         let path = PathBuf::from(&row.audio_path);
+        // The microphone's and the call's own recordings go too (D-051), whatever state the mix
+        // is in — from the meeting's own folder in this workspace's recordings only.
+        let own = path
+            .parent()
+            .and_then(|f| f.canonicalize().ok())
+            .filter(|f| f.starts_with(&folder) && *f != folder);
+        if let Some(own) = own {
+            for channel in crate::modules::meetings::channel_paths(&own) {
+                crate::modules::meetings::review::to_trash(channel).await?;
+            }
+        }
         match path.canonicalize() {
             // Only files that really live in this workspace's recordings folder.
             Ok(real) if real.starts_with(&folder) && real.is_file() => {
@@ -214,6 +264,9 @@ pub async fn compress_all(hub: &WorkspaceHub, slug: &str) -> Result<u32> {
                 Ok(()) => count += 1,
                 Err(err) => tracing::warn!("could not compress {}: {err:#}", path.display()),
             }
+        } else if let Some(folder) = path.parent() {
+            // The mix is compressed; its channels may not be (a quit during their encode).
+            count += compress_channels(folder).min(1);
         }
     }
     Ok(count)
@@ -272,7 +325,10 @@ fn count_originals(recordings: &Path) -> u32 {
         .filter(|e| e.path().is_dir())
         .filter(|e| {
             std::fs::read_dir(e.path())
-                .map(|d| d.flatten().any(|f| is_original(&f.path())))
+                .map(|d| {
+                    d.flatten()
+                        .any(|f| is_original(&f.path()) || is_channel_original(&f.path()))
+                })
                 .unwrap_or(false)
         })
         .count() as u32

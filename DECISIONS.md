@@ -2,6 +2,23 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-051 — Who spoke: sherpa-onnx for speakers; a discussion keeps the microphone and the call apart
+_2026-10-30_
+
+**Context** (plan v3 §4): the summary should know who said what. Today a recording is one mix; Live already splits You / Them (D-043), batch transcription didn't, and two people talking at once lost one of them.
+
+**Decision — the runtime, from the spike** (dev only, three meetings): **sherpa-onnx** (its C++ core, CPU) with **pyannote segmentation 3.0** (6 MB) and **NeMo TitaNet-large** prints (101 MB), clustered at threshold **0.8**, then every cluster with less than ~20 s of speech merged into the nearest large one by cosine. On m1 (30 min) it ran at 6.5× real time on 4 threads (≈ 9 min for an hour, a Background-lane job); thresholds 0.5 / 0.7 / 0.8 / 0.9 gave 159 / 111 / 88 / 65 clusters, and at 0.7–0.8 the six largest held nearly all the talk (≈ 400 / 290 / 240 / 230 / 100 / 95 s) — the rest are seconds-long fragments, hence the merge; 0.9 starts joining two real voices. WeSpeaker ResNet34 gave 13 clusters but put several people in each (657 s and 572 s for the two largest): not used. **FluidAudio** (CoreML) was not measured: building it from its source was blocked by this unattended run's permissions. It stays the candidate to beat; the model check (D-050) gets a speakers kind so it can be compared on the owner's meetings once it can be built.
+
+**Decision — two channels kept** (0.8.3): whenever the call is tapped, the recorder writes `mic.wav` and `call.wav` (16 kHz mono, sample for sample on the mix's clock) beside `audio.wav`; repaired with it after a crash, compressed with it to `mic.m4a` / `call.m4a` after the transcript is saved, trashed with it by the retention setting and with the meeting's folder on delete. Recordings grow from ≈ 22 MB to ≈ 65 MB an hour (three AAC files at 48 kbps). Quick translations save nothing, as before.
+
+**Decision — a discussion is transcribed per channel**: when a discussion has both files, each goes through the gateway on its own (its own checkpoint, `transcribing-mic.json` / `transcribing-call.json`, resumed at launch like the mix's; progress in halves), is cleaned like any transcript (vocabulary prompt echoes, spellings), then microphone lines that are the call heard through the speakers are dropped with Live's test (`live::overheard`: the same word pairs on the call within 900 ms), and the two are merged by time with You / Them on every line. The summary already names the owner's lines (D-043's `speaker_label`). Presentations, imports and meetings recorded before 0.8.3 use the mix as before.
+
+**Review fixes taken** (architecture review): the Mac's sound is tapped whether or not a call runs, so a discussion whose call side carried under 20 s of speech is a meeting in a room — no line gets a speaker (else everyone's "I'll send it" would become the owner's action item); the channel files are best effort in the recorder (a write or finish error drops and deletes both, the mix records on, and the transcript uses the mix); a channel's file is looked up when its turn comes (a compression may have replaced the WAV); channel files are compressed in the background, so they never delay the transcript or the summary; retention trashes every channel file in the meeting's folder whatever state the mix is in; Compress now and the count of originals include them; a model check says when its references were transcribed apart (a trial hears the mix, so both models score a little lower on overlapping speech).
+
+**Means for future work**: building sherpa-onnx into the app (the `sherpa-rs` crate, which links sherpa-onnx's prebuilt libraries) was blocked by the same unattended-run permissions, so who spoke when (diarize the call channel only, the mix for imports and old meetings; Them lines S1, S2…) and who it is (TitaNet prints matched to people) wait for the owner to allow it; the plan's next releases move up meanwhile. Echo removal is word-based: without headphones a quiet echo Whisper hears differently can survive as a You line (Live warns about headphones; batch doesn't yet).
+
+---
+
 ## D-050 — Try a model on your own meetings before switching; catch-up work waits for a free Mac
 _2026-10-30_
 

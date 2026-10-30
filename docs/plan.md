@@ -116,14 +116,16 @@ Numbering: this phase starts at **0.8.0** (a new phase), then patch bumps as usu
 | **0.8.1** The ledger | `feedback` written by every existing path; the AI's section text kept beside yours; examples in the Summary and Email prompts; "What the agent is told" per agent | Every edit, decision and tick appears in the ledger; a second meeting of the same type shows your previous Decisions wording in the prompt view | 2 |
 | **0.8.2** Model check | Reference meetings; *Try on my meetings* for a speech or text model in the background lane; numbers + blind side-by-side; model adapters table | Turbo vs large-v3 reproduced inside the app in one click, without scripts | 2 |
 | **0.8.3** Speakers spike + channels | FluidAudio vs sherpa on the three meetings (dev-only; D-051); the recorder keeps microphone and call apart; batch transcribes a discussion per channel | Two WAVs per discussion; overlapping speech no longer lost; the runtime chosen with numbers | 1–2 |
-| **0.8.4** Who spoke when | `newdawn-speakers` helper; diarization job; S1/S2 labels on transcript lines; backfill for old meetings in the background lane; the summary hears speaker labels | A 60-minute meeting diarized in about a minute; the transcript reads with speakers; old meetings fill in overnight | 2 |
-| **0.8.5** Who it is | Voice prints, enrolment from the Speakers card, proposals with confidence, re-enrolment when the model changes, delete-with-person | The second meeting with Ryan proposes "Ryan" by itself; deleting a person removes prints and clips | 2 |
-| **0.8.6** "What I learned" + agent numbers | Proposed guide lines from the ledger with evidence; hit rates per agent and model; calibrated thresholds shown with their counts | A proposed rule appears after five edits; Approve changes the guide; Agents shows accept/reject per agent | 1–2 |
-| **0.8.7** Memory search | `bge-m3` + `sqlite-vec`; embeddings in the background lane; search across meetings by meaning; examples retrieved by similarity | "partner onboarding" finds the meeting that never used those words | 1–2 |
+| **(waits)** Who spoke when | `newdawn-speakers` helper; diarization job; S1/S2 labels on transcript lines; backfill for old meetings in the background lane; the summary hears speaker labels | A 60-minute meeting diarized in about a minute; the transcript reads with speakers; old meetings fill in overnight | 2 |
+| **(waits)** Who it is | Voice prints, enrolment from the Speakers card, proposals with confidence, re-enrolment when the model changes, delete-with-person | The second meeting with Ryan proposes "Ryan" by itself; deleting a person removes prints and clips | 2 |
+| **0.8.4** "What I learned" + agent numbers | Proposed guide lines from the ledger with evidence; hit rates per agent and model; calibrated thresholds shown with their counts | A proposed rule appears after five edits; Approve changes the guide; Agents shows accept/reject per agent | 1–2 |
+| **0.8.5** Memory search | `bge-m3` + `sqlite-vec`; embeddings in the background lane; search across meetings by meaning; examples retrieved by similarity | "partner onboarding" finds the meeting that never used those words | 1–2 |
 | **0.9.0** Projects | Project table and dossier; the Project expert proposes updates after each summary | A meeting's summary proposes a milestone change; Apply updates the dossier with its evidence | 3 |
 | **0.9.1** CRM | Organisations, interactions, commitments; the CRM expert; People → dossiers | A commitment made in a meeting shows on the person with its due date | 2–3 |
 | **0.9.2** Email | Pick a thread in Apple Mail or drop an .eml; the Email expert proposes tasks / project / CRM changes | A thread yields a task and a project update after review | 2–3 |
 | **0.9.3** Cockpit | Across workspaces: due tasks, projects at risk, commitments, this week's meetings | One page answers "what needs me today" across companies | 1–2 |
+
+**Order changed 2026-10-30 (D-051):** building the speakers runtime (sherpa-onnx, or FluidAudio) needs code fetched from outside, which the unattended build may not do; the two speaker releases wait for the owner to allow it and take the next free numbers then. "What I learned" and memory search moved up to 0.8.4 and 0.8.5.
 
 Roughly **twenty-five to thirty sittings** — two to three months of evenings and weekends, at the 0.7.x pace.
 
@@ -135,11 +137,12 @@ Numbered in build order (the release that records each in brackets).
 |---|---|
 | D-047 | A speech model per job; looped lines and channel sign-offs cleaned (0.7.8) |
 | D-048 | Jobs as rows: three lanes, checkpoints, the resource policy (power, heat, memory, idle, QoS), the AI activity popover (0.8.0) |
-| D-049 | The feedback ledger; the AI's text kept beside the owner's edits; examples in prompts (0.8.1); "What I learned" proposes, the owner approves (0.8.6) |
+| D-049 | The feedback ledger; the AI's text kept beside the owner's edits; examples in prompts (0.8.1) |
 | D-050 | Learning lives in data, never in weights: no fine-tuning; reference meetings + the in-app model check; model adapters as a table (0.8.2) |
-| D-051 | The speakers runtime (after the spike); two channels kept; S-labels; prints and clips per person, deleted with the person (0.8.3–0.8.5) |
-| D-052 | Memory search: `bge-m3` + `sqlite-vec` per workspace, computed in the background lane (0.8.7) |
-| D-053 | Experts propose, the owner applies; one shape (guide · view · proposals · ledger · check); Apple Mail via Apple Events, no IMAP (0.9.x) |
+| D-051 | The speakers runtime (after the spike: sherpa-onnx); two channels kept (0.8.3); S-labels; prints and clips per person, deleted with the person (when the runtime can be built) |
+| D-052 | "What I learned" proposes guide lines from the ledger, the owner approves; a number per agent and model (0.8.4) |
+| D-053 | Memory search: `bge-m3` per workspace, computed in the background lane (0.8.5) |
+| D-054 | Experts propose, the owner applies; one shape (guide · view · proposals · ledger · check); Apple Mail via Apple Events, no IMAP (0.9.x) |
 
 ## 9. Deliberately not in this plan
 

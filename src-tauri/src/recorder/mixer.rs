@@ -57,13 +57,15 @@ pub struct Source {
 }
 
 /// Runs until the mic channel closes (the session dropped the streams). Returns the samples
-/// recorded. `wav`: None for a quick translation (nothing on disk). `live`: a live session's
-/// worker, handed every window recorded.
+/// recorded. `wav`: None for a quick translation (nothing on disk). `channels`: the microphone's and
+/// the call's own files, kept with the call's audio (D-051). `live`: a live session's worker,
+/// handed every window recorded.
 pub fn run(
     mic: Source,
     system: Option<Source>,
     shared: Arc<Shared>,
     mut wav: Option<WavWriter>,
+    mut channels: Option<(WavWriter, WavWriter)>,
     mut live: Option<SyncSender<Window>>,
 ) -> Result<u64> {
     let mut mic_chain = MicChain::new(mic.rate)?;
@@ -112,7 +114,15 @@ pub fn run(
         while mic_q.len() >= WINDOW {
             let parts = mix_window(&mut mic_q, &mut sys_q, WINDOW);
             if !shared.paused.load(Ordering::Relaxed) {
-                written += record(&mut wav, &mut live, &shared, written, parts, tap)?;
+                written += record(
+                    &mut wav,
+                    &mut channels,
+                    &mut live,
+                    &shared,
+                    written,
+                    parts,
+                    tap,
+                )?;
             }
         }
     }
@@ -121,18 +131,38 @@ pub fn run(
     if !mic_q.is_empty() && !shared.paused.load(Ordering::Relaxed) {
         let len = mic_q.len();
         let parts = mix_window(&mut mic_q, &mut sys_q, len);
-        written += record(&mut wav, &mut live, &shared, written, parts, tap)?;
+        written += record(
+            &mut wav,
+            &mut channels,
+            &mut live,
+            &shared,
+            written,
+            parts,
+            tap,
+        )?;
     }
-    match wav {
-        Some(wav) => wav.finish(),
-        None => Ok(written),
+    // The mix first: it is the recording.
+    let total = match wav {
+        Some(wav) => wav.finish()?,
+        None => written,
+    };
+    if let Some((mic, call)) = channels {
+        let paths = [mic.path().to_owned(), call.path().to_owned()];
+        if let Err(err) = mic.finish().and(call.finish()) {
+            tracing::warn!("the microphone and the call weren't kept apart: {err:#}");
+            for path in paths {
+                let _ = std::fs::remove_file(path);
+            }
+        }
     }
+    Ok(total)
 }
 
-/// One window recorded at sample `at`: the mix to the WAV (if any), then the window to the live
-/// worker. Returns its length.
+/// One window recorded at sample `at`: the mix to the WAV (if any), the microphone and the call to
+/// their own files (if kept), then the window to the live worker. Returns its length.
 fn record(
     wav: &mut Option<WavWriter>,
+    channels: &mut Option<(WavWriter, WavWriter)>,
     live: &mut Option<SyncSender<Window>>,
     shared: &Shared,
     at: u64,
@@ -141,6 +171,19 @@ fn record(
 ) -> Result<u64> {
     if let Some(wav) = wav {
         wav.write(&samples)?;
+    }
+    // The microphone's and the call's own files are a bonus (D-051): one that can't be written
+    // goes with its twin, and the recording carries on (its transcript then uses the mix).
+    let failed = match channels {
+        Some((mic, call)) => mic.write(&you).and_then(|()| call.write(&them)).err(),
+        None => None,
+    };
+    if let Some(err) = failed {
+        tracing::warn!("stopped keeping the microphone and the call apart: {err:#}");
+        if let Some((mic, call)) = channels.take() {
+            mic.discard();
+            call.discard();
+        }
     }
     let len = samples.len() as u64;
     let window = Window {
@@ -382,11 +425,11 @@ mod tests {
         // A quick translation: no WAV, the clock still counts.
         let mut wav = None;
         assert_eq!(
-            record(&mut wav, &mut live, &shared, 8, parts(), true).unwrap(),
+            record(&mut wav, &mut None, &mut live, &shared, 8, parts(), true).unwrap(),
             4
         );
         assert_eq!(
-            record(&mut wav, &mut live, &shared, 12, parts(), false).unwrap(),
+            record(&mut wav, &mut None, &mut live, &shared, 12, parts(), false).unwrap(),
             4
         );
         let with_tap = rx.recv().unwrap();

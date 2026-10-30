@@ -3,7 +3,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
@@ -14,6 +14,7 @@ const CHECKPOINT_EVERY: Duration = Duration::from_secs(2);
 
 pub struct WavWriter {
     file: BufWriter<File>,
+    path: PathBuf,
     samples: u64,
     last_checkpoint: Instant,
 }
@@ -26,6 +27,7 @@ impl WavWriter {
         file.write_all(&header(0))?;
         Ok(Self {
             file,
+            path: path.to_owned(),
             samples: 0,
             last_checkpoint: Instant::now(),
         })
@@ -60,6 +62,19 @@ impl WavWriter {
     pub fn finish(mut self) -> Result<u64> {
         self.checkpoint()?;
         Ok(self.samples)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Closes the file and deletes it (a recording that can't be kept whole isn't kept).
+    pub fn discard(self) {
+        let path = self.path.clone();
+        drop(self);
+        if let Err(err) = std::fs::remove_file(&path) {
+            tracing::warn!("could not delete {}: {err}", path.display());
+        }
     }
 }
 

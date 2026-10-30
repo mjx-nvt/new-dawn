@@ -84,6 +84,29 @@ pub enum Speaker {
     Them,
 }
 
+/// The microphone's and the call's own recordings beside a meeting's audio (`<name>.wav`, later
+/// compressed), kept when the call's audio was captured (D-051), and who speaks in each.
+pub const CHANNELS: [(&str, Speaker); 2] = [("mic", Speaker::You), ("call", Speaker::Them)];
+
+/// A channel's recording in a meeting's folder: its WAV while there is one, else the compressed
+/// copy.
+pub fn channel_file(folder: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
+    ["wav", "m4a"]
+        .iter()
+        .map(|ext| folder.join(format!("{name}.{ext}")))
+        .find(|path| path.is_file())
+}
+
+/// Every channel recording in a meeting's folder — a lone one, or a WAV left beside its compressed
+/// copy, too.
+pub fn channel_paths(folder: &std::path::Path) -> Vec<std::path::PathBuf> {
+    CHANNELS
+        .iter()
+        .flat_map(|(name, _)| ["wav", "m4a"].map(|ext| folder.join(format!("{name}.{ext}"))))
+        .filter(|path| path.is_file())
+        .collect()
+}
+
 /// How clearly Whisper heard a live line; none = clear (or not scored: batch lines).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Type, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
@@ -599,8 +622,13 @@ pub async fn resume_interrupted(app: &AppHandle, slug: &str, jobs: Vec<Interrupt
         let result = async {
             match job {
                 Interrupted::Transcription(id) => {
-                    let path = job_file(app, slug, &id, transcribe::CHECKPOINT).await?;
-                    if whisper::Checkpoint::read(&path).is_some_and(|c| c.attempts < TRIES) {
+                    let saved = transcribe::checkpoints(app, slug, &id)
+                        .await?
+                        .iter()
+                        .filter_map(|path| whisper::Checkpoint::read(path))
+                        .map(|c| c.attempts)
+                        .max();
+                    if saved.is_some_and(|attempts| attempts < TRIES) {
                         tracing::info!("resuming the transcription of {id}");
                         transcribe::start(app, slug, &id).await?;
                     }
@@ -655,14 +683,29 @@ pub async fn correct_segment(
     Ok(())
 }
 
-/// Replaces the meeting's transcript and marks it transcribed, in one transaction.
-/// Delete + insert (never REPLACE) so the FTS triggers stay correct (D-012).
-/// `raw` holds, per line, what Whisper wrote when the vocabulary corrected it (may be empty).
+/// `save_lines` without speakers (tests).
+#[cfg(test)]
 pub async fn save_transcript(
     pool: &SqlitePool,
     meeting_id: &str,
     segments: &[Segment],
     raw: &[Option<String>],
+    duration_ms: u32,
+) -> Result<()> {
+    save_lines(pool, meeting_id, segments, raw, &[], duration_ms).await
+}
+
+/// Replaces the meeting's transcript and marks it transcribed, in one transaction.
+/// Delete + insert (never REPLACE) so the FTS triggers stay correct (D-012).
+/// `raw` holds, per line, what Whisper wrote when the vocabulary corrected it (may be empty);
+/// `speakers` who spoke it, when the microphone and the call were transcribed apart (D-051;
+/// empty = not known).
+pub async fn save_lines(
+    pool: &SqlitePool,
+    meeting_id: &str,
+    segments: &[Segment],
+    raw: &[Option<String>],
+    speakers: &[Option<Speaker>],
     duration_ms: u32,
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
@@ -671,7 +714,7 @@ pub async fn save_transcript(
         .execute(&mut *tx)
         .await?;
     for (seq, segment) in segments.iter().enumerate() {
-        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO transcript_segment (id, meeting_id, seq, start_ms, end_ms, text, raw_text, lang, speaker) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(new_id())
             .bind(meeting_id)
             .bind(seq as u32)
@@ -680,6 +723,7 @@ pub async fn save_transcript(
             .bind(&segment.text)
             .bind(raw.get(seq).cloned().flatten())
             .bind(segment.lang)
+            .bind(speakers.get(seq).copied().flatten())
             .execute(&mut *tx)
             .await?;
     }

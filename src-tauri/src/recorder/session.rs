@@ -546,7 +546,21 @@ pub async fn recover(pool: &SqlitePool) -> Result<()> {
 
 async fn repair_file(path: Option<String>) -> Result<u64> {
     let path = path.context("meeting has no audio file")?;
-    tokio::task::spawn_blocking(move || saver::repair(Path::new(&path))).await?
+    tokio::task::spawn_blocking(move || {
+        // The microphone and call files beside it are cut at the same moment (best effort).
+        if let Some(folder) = Path::new(&path).parent() {
+            for (name, _) in meetings::CHANNELS {
+                let channel = folder.join(format!("{name}.wav"));
+                if channel.exists() {
+                    if let Err(err) = saver::repair(&channel) {
+                        tracing::warn!("could not repair {name}.wav: {err:#}");
+                    }
+                }
+            }
+        }
+        saver::repair(Path::new(&path))
+    })
+    .await?
 }
 
 /// Capture thread: owns the mic stream and the tap (neither is Send), runs the mixer, and keeps
@@ -586,6 +600,26 @@ fn spawn_capture(
                     None
                 }
             };
+            // With the call's audio, the microphone and the call are also kept apart (D-051): the
+            // transcript of a discussion says who spoke, and nothing said at once is lost.
+            let channels = match (tap.is_some(), path.as_deref().and_then(Path::parent)) {
+                (true, Some(folder)) => {
+                    match meetings::CHANNELS
+                        .map(|(name, _)| WavWriter::create(&folder.join(format!("{name}.wav"))))
+                    {
+                        [Ok(mic), Ok(call)] => Some((mic, call)),
+                        [mic, call] => {
+                            tracing::warn!(
+                                "could not keep the microphone and the call apart: {:?} {:?}",
+                                mic.err(),
+                                call.err()
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => None,
+            };
             let _ = ready.send(Ok(tap.is_some()));
 
             let mic_source = Source {
@@ -599,7 +633,9 @@ fn spawn_capture(
             let mixer_shared = shared.clone();
             let mixer = std::thread::Builder::new()
                 .name("recorder-mixer".into())
-                .spawn(move || mixer::run(mic_source, sys_source, mixer_shared, wav, live))?;
+                .spawn(move || {
+                    mixer::run(mic_source, sys_source, mixer_shared, wav, channels, live)
+                })?;
 
             let _ = stop.recv(); // stop requested (or the session vanished)
             drop(tap); // closes the system channel

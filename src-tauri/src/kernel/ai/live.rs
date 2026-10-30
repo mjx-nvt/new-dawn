@@ -1181,7 +1181,12 @@ fn clarity(heard: &Heard) -> Option<Clarity> {
 // ponytail: words and timing only — on speakers a 1–3-word piece of a long call line stays as a
 // "you" line, and a longer reply that repeats the call ("Dạ em gửi rồi") can go; correlate the
 // microphone's audio with the call's (an echo is a delayed copy) if either shows.
-fn overheard(start_ms: u32, end_ms: u32, said: &str, calls: &[(u32, u32, &str)]) -> bool {
+pub(crate) fn overheard(
+    start_ms: u32,
+    end_ms: u32,
+    said: &str,
+    calls: &[(u32, u32, &str)],
+) -> bool {
     let (from, to) = (start_ms.saturating_sub(LAG_MS + 300), end_ms + LAG_MS + 300);
     let mine = people::words(said);
     let pairs = mine.len() > 1;

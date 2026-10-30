@@ -1,3 +1,28 @@
+# Last Build — Your voice and theirs, kept apart · release 0.8.3
+_2026-10-30_
+
+## What changed
+- **A discussion keeps your microphone and the call apart** (D-051). When you record with the call's audio, New Dawn now also saves the microphone and the call as two files beside the recording.
+- **Transcripts say who spoke.** A discussion recorded this way is transcribed one side at a time: your lines are marked **You**, the call's **Them**, as Live does. When two people talk at once, both are kept. Summaries already use these labels to tell your lines from the others'.
+- When your microphone picks up the call through the speakers, those copies are dropped (Live's check). Headphones still give the cleanest result.
+- A meeting held in a room (no call) is transcribed as before: when the call side carries under 20 seconds of speech, no line is marked You or Them, so nobody else's words become yours.
+- Imports, presentations and meetings recorded before 0.8.3 are transcribed from the one recording, as before.
+- If one of the two side files can't be written (a full disk), it is dropped and the recording carries on; the transcript then uses the one recording.
+- Recordings take more room: about 65 MB an hour instead of 22 (three compressed files). Deleting a meeting or the retention setting removes all three.
+- **The speakers engine is chosen** for the next two releases (who spoke when, then who it is): sherpa-onnx with pyannote segmentation and TitaNet voice prints. On this week's 30-minute test meeting it ran at 6.5× real time, and the six largest groups it found held nearly all the talk; the many small leftovers will be merged into the nearest large group. FluidAudio, the faster option that runs on the Neural Engine, couldn't be tried, and sherpa-onnx couldn't be built into the app either: this unattended session isn't allowed to build code fetched from outside (see Manual steps). The next releases (What I learned, memory search, projects…) go first meanwhile.
+- Checks: 144 Rust tests pass (new: merging the two sides drops the call your microphone heard and keeps two voices at once; a meeting in a room gets no speakers). Clippy, tsc and the localhost check are clean.
+- Seen in the dev app: a 90-second discussion made from the dev meeting's audio (you, then the call with a quarter-volume copy leaking into your microphone, then you again) came out as You 0:00–0:26, Them 0:30–1:00, You from 1:00, with no copy of the call among your lines. Both side files were compressed, the saved places cleaned up, and the meeting page shows You / Them at each change of speaker. Transcribed again from the compressed side files, the call's lines and your later lines came out right, but your first 26 seconds were missing: with the turbo model (the dev app's setting), that stretch came out as "Chào mừng các bạn đã theo dõi", a sign-off Whisper invents and New Dawn drops (D-047). Large-v3, the default for meetings, wrote the real words from the same file.
+- Review: the architecture review found no rule violations and two must-fixes, both fixed. A meeting in a room would have marked every line as yours (the Mac's sound is recorded even without a call). A side file that couldn't be written would have stopped the whole recording. Its six other points were taken too (see D-051).
+
+## Release
+- **v0.8.3** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready.
+
+## Manual steps
+1. Nothing to set up: your next recorded discussion with call audio is split automatically.
+2. **To get speakers (who spoke when, then who it is)**: allow Claude Code to build sherpa-onnx into the app (the `sherpa-rs` crate downloads sherpa-onnx's prebuilt libraries from GitHub while building) — a permission rule for that build, or approve it in an attended session. Optionally also FluidAudio (cloned to the dev data folder's `eval/fluid`), to compare the two.
+
+---
+
 # Last Build — Try a model on your own meetings before you switch · release 0.8.2
 _2026-10-30_
 
