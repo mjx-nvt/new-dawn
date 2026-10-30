@@ -13,10 +13,11 @@ import {
   type ModelInfo,
   type SpeechJob,
 } from "../../kernel/bridge/models";
-import { useAiPace, useSetAiPace } from "../../kernel/bridge/activity";
+import { useAiPolicy, useSetAiPolicy } from "../../kernel/bridge/activity";
 import type { AppError } from "../../kernel/bridge/unwrap";
 import MenuButton from "../../kernel/shell/MenuButton";
 import styles from "./ModelsPanel.module.css";
+import ModelCheckSection from "./ModelCheck";
 import TextModels from "./TextModels";
 
 const MB = 1024 * 1024;
@@ -69,8 +70,10 @@ export default function ModelsPanel() {
       <section className="section">
         <h2 className="sectionTitle">While you work</h2>
         <p className="sectionSubtitle">How transcriptions and summaries share the Mac with you</p>
-        <PaceChoice />
+        <PolicyChoice />
       </section>
+
+      <ModelCheckSection />
 
       <section className="section">
         <h2 className="sectionTitle">Memory</h2>
@@ -146,20 +149,50 @@ const PACE_HINT = {
   full: "Every core at full priority, whatever else you're doing.",
 } as const;
 
-function PaceChoice() {
-  const { data: pace } = useAiPace();
-  const save = useSetAiPace();
+/** The pace of the work you wait for, and when catch-up work (model checks) may run. */
+function PolicyChoice() {
+  const { data: policy } = useAiPolicy();
+  const save = useSetAiPolicy();
   return (
     <>
       <div className="segmented" role="group" aria-label="While you work">
-        <button type="button" aria-pressed={pace === "gentle"} onClick={() => save.mutate("gentle")}>
+        <button type="button" aria-pressed={policy?.pace === "gentle"} disabled={!policy} onClick={() => policy && save.mutate({ ...policy, pace: "gentle" })}>
           Gentle
         </button>
-        <button type="button" aria-pressed={pace === "full"} onClick={() => save.mutate("full")}>
+        <button type="button" aria-pressed={policy?.pace === "full"} disabled={!policy} onClick={() => policy && save.mutate({ ...policy, pace: "full" })}>
           Full speed
         </button>
       </div>
-      {pace && <p className={`fieldHint ${styles.hint}`}>{PACE_HINT[pace]}</p>}
+      {policy && <p className={`fieldHint ${styles.hint}`}>{PACE_HINT[policy.pace]}</p>}
+      <p className="groupTitle">Catch-up work</p>
+      <div className="group">
+        <div className="groupRow">
+          <div className="rowText">
+            <p className="rowLabel">Model checks and other work nobody waits for</p>
+            <p className="rowHint">Never on battery below 30 %, when the Mac runs hot or is short of memory.</p>
+          </div>
+          <div className="rowControl">
+            <div className="segmented" role="group" aria-label="Catch-up work">
+              <button
+                type="button"
+                aria-pressed={policy?.background_while_working === false}
+                disabled={!policy}
+                onClick={() => policy && save.mutate({ ...policy, background_while_working: false })}
+              >
+                When I'm away
+              </button>
+              <button
+                type="button"
+                aria-pressed={policy?.background_while_working === true}
+                disabled={!policy}
+                onClick={() => policy && save.mutate({ ...policy, background_while_working: true })}
+              >
+                Also while I work
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

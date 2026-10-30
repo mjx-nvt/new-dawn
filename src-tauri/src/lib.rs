@@ -52,6 +52,7 @@ mod modules {
     pub mod brand;
     pub mod feedback;
     pub mod meetings;
+    pub mod model_check;
     pub mod people;
     pub mod tasks;
     pub mod vocabulary;
@@ -110,8 +111,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::models::get_speech_choices,
             commands::models::set_speech_model,
             commands::models::ai_activity,
-            commands::models::get_ai_pace,
-            commands::models::set_ai_pace,
+            commands::models::get_ai_policy,
+            commands::models::set_ai_policy,
+            commands::models::run_ai_job_now,
+            commands::models::list_model_checks,
+            commands::models::start_model_check,
+            commands::models::cancel_model_check,
+            commands::models::pick_model_check,
+            commands::models::list_references,
+            commands::models::set_meeting_reference,
             commands::meetings::list_meeting_types,
             commands::meetings::search_meetings,
             commands::summary::get_summary,
@@ -355,6 +363,7 @@ pub fn run() {
                     let recovered = async {
                         let pool = hub.pool(&workspace.slug)?;
                         recorder::session::recover(&pool).await?;
+                        modules::model_check::recover(&pool).await?;
                         modules::meetings::recover_interrupted(&pool).await
                     }
                     .await;
@@ -387,6 +396,17 @@ pub fn run() {
             app.manage(recorder::session::Recorder::default());
             app.manage(kernel::ai::live::LiveLines::default());
             app.manage(modules::meetings::summarise::SummaryJobs::default());
+            app.manage(modules::model_check::ModelChecks::default());
+            // Catch-up work waits for a recording to end (D-050).
+            let watched = app.handle().clone();
+            app.state::<kernel::ai::queue::AiQueue>()
+                .set_recording_check(move || {
+                    watched
+                        .state::<recorder::session::Recorder>()
+                        .status()
+                        .phase
+                        != recorder::session::RecorderPhase::Idle
+                });
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
             let handle = app.handle().clone();

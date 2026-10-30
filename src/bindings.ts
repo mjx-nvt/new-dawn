@@ -23,9 +23,24 @@ export const commands = {
 	setSpeechModel: (job: SpeechJob, model: string | null) => typedError<null, AppError>(__TAURI_INVOKE("set_speech_model", { job, model })),
 	/**  What the AI is doing and what waits for it, in the order it will run (D-048). */
 	aiActivity: () => typedError<Activity_Serialize[], AppError>(__TAURI_INVOKE("ai_activity")),
-	/**  Gentle (the default) or full speed while you work. */
-	getAiPace: () => typedError<Pace, AppError>(__TAURI_INVOKE("get_ai_pace")),
-	setAiPace: (pace: Pace) => typedError<null, AppError>(__TAURI_INVOKE("set_ai_pace", { pace })),
+	/**
+	 *  How AI work shares the Mac: the pace (gentle by default) and whether catch-up work may run
+	 *  while you work.
+	 */
+	getAiPolicy: () => typedError<AiPolicy, AppError>(__TAURI_INVOKE("get_ai_policy")),
+	setAiPolicy: (policy: AiPolicy) => typedError<null, AppError>(__TAURI_INVOKE("set_ai_policy", { policy })),
+	/**  Run now for a catch-up job held back by the Mac's state (the AI activity list). */
+	runAiJobNow: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("run_ai_job_now", { id })),
+	/**  The model checks of a workspace, newest first (D-050). */
+	listModelChecks: (slug: string) => typedError<ModelCheck_Serialize[], AppError>(__TAURI_INVOKE("list_model_checks", { slug })),
+	/**  Tries `candidate` (a Whisper catalogue id or an Ollama model) on the reference meetings. */
+	startModelCheck: (slug: string, kind: CheckKind, candidate: string) => typedError<ModelCheck_Serialize, AppError>(__TAURI_INVOKE("start_model_check", { slug, kind, candidate })),
+	cancelModelCheck: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_model_check", { slug, id })),
+	/**  The owner's choice on one blind pair. */
+	pickModelCheck: (slug: string, id: string, pairId: string, pick: Pick) => typedError<ModelCheck_Serialize, AppError>(__TAURI_INVOKE("pick_model_check", { slug, id, pairId, pick })),
+	listReferences: (slug: string) => typedError<Reference[], AppError>(__TAURI_INVOKE("list_references", { slug })),
+	/**  Marks a meeting as a reference for the model check, or not. */
+	setMeetingReference: (slug: string, meetingId: string, on: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_meeting_reference", { slug, meetingId, on })),
 	listMeetingTypes: (slug: string) => typedError<MeetingTypeSummary[], AppError>(__TAURI_INVOKE("list_meeting_types", { slug })),
 	/**  Title, transcript and summary search in one workspace (FTS5). */
 	searchMeetings: (slug: string, query: string) => typedError<MeetingHit_Serialize[], AppError>(__TAURI_INVOKE("search_meetings", { slug, query })),
@@ -282,6 +297,8 @@ export type Activity_Deserialize = {
 	lane: Lane,
 	task: Task_Deserialize,
 	running: boolean,
+	/**  Why a catch-up job hasn't queued yet (low battery, the owner at the Mac…). */
+	waiting_for?: string | null,
 };
 
 /**  One entry of the AI activity list. */
@@ -289,6 +306,8 @@ export type Activity_Serialize = {
 	lane: Lane,
 	task: Task_Serialize,
 	running: boolean,
+	/**  Why a catch-up job hasn't queued yet (low battery, the owner at the Mac…). */
+	waiting_for: string | null,
 };
 
 export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live";
@@ -346,6 +365,13 @@ export type AgentRun_Serialize = {
 	prompt_tokens: number | null,
 	output_tokens: number | null,
 	created_at: string,
+};
+
+/**  How AI work shares the Mac (Settings → Models → While you work). */
+export type AiPolicy = {
+	pace: Pace,
+	/**  Catch-up work (model checks…) may run while the owner works; else only when they're away. */
+	background_while_working: boolean,
 };
 
 /**
@@ -580,6 +606,14 @@ export type Button_Serialize = {
 	secondary: string,
 };
 
+export type CheckKind = 
+/**  A Whisper model for meetings. */
+"speech" | 
+/**  A text model for summaries. */
+"text";
+
+export type CheckStatus = "waiting" | "running" | "done" | "failed" | "cancelled";
+
 /**  How clearly Whisper heard a live line; none = clear (or not scored: batch lines). */
 export type Clarity = 
 /**  Translated, with a marker. */
@@ -647,6 +681,13 @@ export type ExportOptions_Serialize = {
 	include_transcript: boolean,
 	/**  Without extension; default "<yyyy-mm-dd> <title>". */
 	file_name: string | null,
+};
+
+/**  One line of figures: what it measures, for the model in use and the candidate. */
+export type Figure = {
+	label: string,
+	baseline: string,
+	candidate: string,
 };
 
 export type Fonts = Fonts_Serialize | Fonts_Deserialize;
@@ -768,6 +809,22 @@ export type LiveStatus_Serialize = {
 
 export type Meeting = Meeting_Serialize | Meeting_Deserialize;
 
+export type MeetingFigures = MeetingFigures_Serialize | MeetingFigures_Deserialize;
+
+export type MeetingFigures_Deserialize = {
+	/**  So deleting the meeting finds the check holding its words (migration 0013). */
+	meeting_id?: string,
+	meeting: string,
+	figures: Figure[],
+};
+
+export type MeetingFigures_Serialize = {
+	/**  So deleting the meeting finds the check holding its words (migration 0013). */
+	meeting_id: string,
+	meeting: string,
+	figures: Figure[],
+};
+
 /**  A discussion among several people, or a presentation by one main presenter (D-038). */
 export type MeetingFormat = "discussion" | "presentation";
 
@@ -841,6 +898,8 @@ export type Meeting_Deserialize = {
 	 *  re-run adds no task by itself (0.7.3).
 	 */
 	tasks_at?: string | null,
+	/**  A reference for the model check (D-050): its transcript and summary are the gold. */
+	reference: boolean,
 };
 
 export type Meeting_Serialize = {
@@ -864,6 +923,8 @@ export type Meeting_Serialize = {
 	 *  re-run adds no task by itself (0.7.3).
 	 */
 	tasks_at: string | null,
+	/**  A reference for the model check (D-050): its transcript and summary are the gold. */
+	reference: boolean,
 };
 
 /**  A native menu item that the UI has to act on. */
@@ -904,6 +965,38 @@ export type MinutesExport_Serialize = {
 };
 
 export type MinutesFile = "docx" | "pdf";
+
+export type ModelCheck = ModelCheck_Serialize | ModelCheck_Deserialize;
+
+export type ModelCheck_Deserialize = {
+	id: string,
+	kind: CheckKind,
+	baseline: string,
+	candidate: string,
+	status: CheckStatus,
+	progress: number,
+	error?: string | null,
+	created_at: string,
+	meetings: MeetingFigures_Deserialize[],
+	note: string,
+	pairs: Pair_Deserialize[],
+	tally: Tally,
+};
+
+export type ModelCheck_Serialize = {
+	id: string,
+	kind: CheckKind,
+	baseline: string,
+	candidate: string,
+	status: CheckStatus,
+	progress: number,
+	error: string | null,
+	created_at: string,
+	meetings: MeetingFigures_Serialize[],
+	note: string,
+	pairs: Pair_Serialize[],
+	tally: Tally,
+};
 
 /**  A model download ended: `error` is None on success. */
 export type ModelDownloadFinished = ModelDownloadFinished_Serialize | ModelDownloadFinished_Deserialize;
@@ -1053,6 +1146,29 @@ export type Pace =
  */
 "gentle";
 
+/**  A blind pair as the owner sees it. */
+export type Pair = Pair_Serialize | Pair_Deserialize;
+
+/**  A blind pair as the owner sees it. */
+export type Pair_Deserialize = {
+	id: string,
+	meeting: string,
+	label: string,
+	a: string,
+	b: string,
+	pick?: Pick | null,
+};
+
+/**  A blind pair as the owner sees it. */
+export type Pair_Serialize = {
+	id: string,
+	meeting: string,
+	label: string,
+	a: string,
+	b: string,
+	pick: Pick | null,
+};
+
 export type PermissionState = "granted" | "denied" | "not_determined" | "restricted";
 
 export type Person = {
@@ -1084,6 +1200,8 @@ export type PersonInput_Serialize = {
 	organisation: string,
 	aliases: string[],
 };
+
+export type Pick = "a" | "b" | "same";
 
 export type Profile = {
 	/**  "" until the owner sets it. */
@@ -1207,6 +1325,13 @@ export type RecorderStatus_Serialize = {
 	 *  translation stops on its own).
 	 */
 	live: LiveStatus_Serialize | null,
+};
+
+/**  The reference meetings, for Settings → Models. */
+export type Reference = {
+	id: string,
+	title: string,
+	held_on: string,
 };
 
 export type Section = Section_Serialize | Section_Deserialize;
@@ -1452,6 +1577,14 @@ export type SystemAudio =
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
 
+export type Tally = {
+	candidate: number,
+	baseline: number,
+	same: number,
+	/**  Pairs not judged yet. */
+	left: number,
+};
+
 /**  What holds or waits for a turn, for the AI activity list. */
 export type Task = Task_Serialize | Task_Deserialize;
 
@@ -1565,6 +1698,8 @@ export type Task_Deserialize = {
 	workspace_slug?: string | null,
 	meeting_id?: string | null,
 	kind?: JobKind | null,
+	/**  A catch-up job the activity list can run now (a model check's id). */
+	id?: string | null,
 };
 
 /**  What holds or waits for a turn, for the AI activity list. */
@@ -1574,6 +1709,8 @@ export type Task_Serialize = {
 	workspace_slug: string | null,
 	meeting_id: string | null,
 	kind: JobKind | null,
+	/**  A catch-up job the activity list can run now (a model check's id). */
+	id: string | null,
 };
 
 export type TemplateCheck = TemplateCheck_Serialize | TemplateCheck_Deserialize;

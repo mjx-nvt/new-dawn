@@ -1,3 +1,28 @@
+# Last Build — Try a model on your own meetings before you switch · release 0.8.2
+_2026-10-30_
+
+## What changed
+- **Reference meetings.** In a meeting's ⋯ menu, **Use as a reference**: its corrected transcript and edited summary become what other models are compared with (a Reference chip shows it).
+- **Try a model on your meetings** (Settings → Models, D-050):
+  - **Speech**: try another downloaded Whisper model against the one your meetings use, on two 90-second stretches of each reference meeting.
+  - **Summaries**: try another text model against the one writing your summaries, on your summarised reference meetings.
+  - You get figures (how close to your corrected transcript or edited summary, how fast, repeated lines, attendees and action items found), then **blind pairs**: the same stretch or section from both models as A and B. Pick the better one, or "about the same". When the new model wins, one button switches to it.
+  - Nothing a check writes reaches your meetings.
+- **Catch-up work waits for a free Mac.** A check runs when you've been away from the Mac for 5 minutes, it's charged (not on battery below 30 %), cool and has free memory. The ✦ list beside Record says why it waits, with **Run now**. Settings → Models → Catch-up work: "When I'm away" (default) or "Also while I work".
+- **Text models are asked only what they can do**: a model that can't "think" is never asked to, and none is given more context than it has.
+- Checks: 142 Rust tests pass (new: the catch-up gate's reasons, battery reading, the word agreement measure, blind pairs that are stable and go both ways, the windows heard, which errors stop a check). Clippy, tsc and the localhost check are clean.
+- Seen in the dev app: a speech check (large-v3 against turbo on the 88-minute meeting: words as in the corrected transcript 75 % vs 77 %, speed 3.6× vs 8.7× real time; two blind pairs judged, tallied), a summary check where qwen3.5:4b couldn't write a readable summary of that meeting (shown as such), Try refusing a reference summarised before 0.8.1, the Reference chip and menu item.
+- Reviews: migration 0013 was reworked before it was ever applied (no fixed lists of kinds, a deleted meeting takes its checks with it). The architecture review found no rule violations and three must-fixes — Cancel ignored while a check waited for the Mac; old summaries compared with your own edits; a meeting's title left in a check after deletion — all fixed, with most of its other points (see D-050).
+
+## Release
+- **v0.8.2** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new column and table.
+
+## Manual steps
+1. Mark two or three meetings you know well as references (⋯ → Use as a reference), ideally ones whose transcript and summary you've corrected.
+2. To compare speech models, download another one in Settings → Models first (e.g. large-v3-turbo).
+
+---
+
 # Last Build — The app keeps what you correct, and summaries learn from your edits · release 0.8.1
 _2026-10-30_
 

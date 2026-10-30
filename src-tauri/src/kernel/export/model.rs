@@ -152,6 +152,7 @@ pub fn sample_for(sender: &Sender) -> Value {
         format: crate::modules::meetings::MeetingFormat::Discussion,
         presenter: None,
         tasks_at: None,
+        reference: false,
     };
     let doc = SummaryDoc {
         sections: vec![Section {
@@ -328,6 +329,7 @@ mod tests {
             format: crate::modules::meetings::MeetingFormat::Discussion,
             presenter: None,
             tasks_at: None,
+            reference: false,
         }
     }
 

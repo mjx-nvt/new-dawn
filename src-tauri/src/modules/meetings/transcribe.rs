@@ -276,14 +276,7 @@ async fn run(
             &people,
             &terms,
         );
-        transcript
-            .segments
-            .retain(|s| !vocabulary::echoes_prompt(&s.text, &prompt));
-        let mut lines: Vec<String> = transcript.segments.iter().map(|s| s.text.clone()).collect();
-        let raw = vocabulary::correct_lines(&mut lines, &vocabulary::replacements(&people, &terms));
-        for (segment, line) in transcript.segments.iter_mut().zip(lines) {
-            segment.text = line;
-        }
+        let raw = polish(&mut transcript.segments, &prompt, &people, &terms);
         super::save_transcript(
             &pool,
             &meeting.id,
@@ -339,6 +332,23 @@ async fn run(
         }
     }
     outcome
+}
+
+/// What every transcript gets after Whisper: lines that only echo the prompt dropped, and the
+/// vocabulary's spellings applied (D-036). Returns Whisper's text of each corrected line, for Undo.
+pub(crate) fn polish(
+    segments: &mut Vec<Segment>,
+    prompt: &str,
+    people: &[crate::modules::people::Person],
+    terms: &[vocabulary::Term],
+) -> Vec<Option<String>> {
+    segments.retain(|s| !vocabulary::echoes_prompt(&s.text, prompt));
+    let mut lines: Vec<String> = segments.iter().map(|s| s.text.clone()).collect();
+    let raw = vocabulary::correct_lines(&mut lines, &vocabulary::replacements(people, terms));
+    for (segment, line) in segments.iter_mut().zip(lines) {
+        segment.text = line;
+    }
+    raw
 }
 
 /// Deletes a job's saved place (best effort: a stale one is checked before use anyway).

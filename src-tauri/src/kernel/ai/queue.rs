@@ -2,7 +2,8 @@
 //! owner is waiting for first, then the meeting just recorded, then catch-up work. A long job
 //! holds its turn between checkpoints and makes way at the next one when a higher lane waits.
 
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use serde::Serialize;
 use specta::Type;
@@ -36,6 +37,8 @@ pub struct Task {
     pub workspace_slug: Option<String>,
     pub meeting_id: Option<String>,
     pub kind: Option<JobKind>,
+    /// A catch-up job the activity list can run now (a model check's id).
+    pub id: Option<String>,
 }
 
 impl Task {
@@ -45,6 +48,7 @@ impl Task {
             workspace_slug: None,
             meeting_id: None,
             kind: None,
+            id: None,
         }
     }
 
@@ -77,6 +81,12 @@ struct State {
     holder: Option<(Lane, Task)>,
     waiting: Vec<Waiter>,
     seq: u64,
+    /// Catch-up jobs held back before they queue, and why (`resources::acquire`).
+    held_back: Vec<(u64, Task, &'static str)>,
+    /// Catch-up jobs the owner said to run now, by task id.
+    now: HashSet<String>,
+    /// Whether a recording runs (set at launch: the recorder lives outside the AI kernel).
+    recording: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
 }
 
 #[derive(Default)]
@@ -88,6 +98,8 @@ pub struct Activity {
     pub lane: Lane,
     pub task: Task,
     pub running: bool,
+    /// Why a catch-up job hasn't queued yet (low battery, the owner at the Mac…).
+    pub waiting_for: Option<String>,
 }
 
 impl AiQueue {
@@ -157,20 +169,73 @@ impl AiQueue {
         self.state().waiting.iter().any(|w| w.lane < lane)
     }
 
-    /// The running job first, then the waiting ones in the order they'll run.
+    /// Shows a catch-up job held back by the Mac's state; returns its handle for `change_reason` and
+    /// `let_go`.
+    pub fn hold_back(&self, task: Task, reason: &'static str) -> u64 {
+        let mut state = self.state();
+        state.seq += 1;
+        let id = state.seq;
+        state.held_back.push((id, task, reason));
+        id
+    }
+
+    pub fn change_reason(&self, held: u64, reason: &'static str) {
+        if let Some(entry) = self.state().held_back.iter_mut().find(|h| h.0 == held) {
+            entry.2 = reason;
+        }
+    }
+
+    pub fn let_go(&self, held: u64) {
+        self.state().held_back.retain(|h| h.0 != held);
+    }
+
+    /// The owner's Run now for a held-back catch-up job: it stops waiting for the Mac (it still
+    /// waits its turn behind the other lanes).
+    pub fn run_now(&self, id: &str) {
+        self.state().now.insert(id.to_owned());
+    }
+
+    pub fn runs_now(&self, id: &str) -> bool {
+        self.state().now.contains(id)
+    }
+
+    /// The job ended: its Run now doesn't carry over to a later run.
+    pub fn forget_now(&self, id: &str) {
+        self.state().now.remove(id);
+    }
+
+    /// How to tell a recording runs (catch-up work waits for it to end).
+    pub fn set_recording_check(&self, check: impl Fn() -> bool + Send + Sync + 'static) {
+        self.state().recording = Some(Arc::new(check));
+    }
+
+    pub fn recording(&self) -> bool {
+        let check = self.state().recording.clone();
+        check.is_some_and(|recording| recording())
+    }
+
+    /// The running job first, then the waiting ones in the order they'll run, then those held back.
     pub fn activity(&self) -> Vec<Activity> {
         let state = self.state();
         let running = state.holder.iter().map(|(lane, task)| Activity {
             lane: *lane,
             task: task.clone(),
             running: true,
+            waiting_for: None,
         });
         let waiting = state.waiting.iter().map(|w| Activity {
             lane: w.lane,
             task: w.task.clone(),
             running: false,
+            waiting_for: None,
         });
-        running.chain(waiting).collect()
+        let held = state.held_back.iter().map(|(_, task, reason)| Activity {
+            lane: Lane::Background,
+            task: task.clone(),
+            running: false,
+            waiting_for: Some((*reason).to_owned()),
+        });
+        running.chain(waiting).chain(held).collect()
     }
 }
 

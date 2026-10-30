@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.8.1"
+version = "0.8.2"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -66,6 +66,8 @@ regex = "1.13.1"
 # Already in the build through Tauri: NSProcessInfo's thermal state, and one WebKit switch in
 # debug screen checks.
 objc2 = "0.6"
+# Already in the build: the memory-pressure sysctl (kernel/ai/resources.rs).
+libc = "0.2"
 
 # ── Added per phase (see docs/playbook.md). Keep this list honest: add a crate
 #    in the prompt that first needs it, and check its current API on docs.rs. ──

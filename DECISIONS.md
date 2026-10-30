@@ -2,6 +2,28 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-050 — Try a model on your own meetings before switching; catch-up work waits for a free Mac
+_2026-10-30_
+
+**Context** (plan v3, layer 1): models keep improving, and the owner should be able to switch when a better one fits, judged on their own meetings, not on a benchmark. This week's comparisons (D-045, D-047) took scripts and a session each.
+
+**Decision — reference meetings** (migration 0013, `meeting.reference`): the owner marks meetings from their ⋯ menu ("Use as a reference"; a Reference chip shows it). Their corrected transcript and edited summary are the gold.
+
+**Decision — the model check** (`modules/model_check.rs`, Settings → Models → Try a model on your meetings):
+- **Speech**: a downloaded Whisper model against the Meetings model, on two 90-s windows (a third and two thirds in) of up to five references with a recording, decoded exactly as a meeting is (vocabulary prompt, language, cleanup) through the gateway's `whisper::trial` — one model at a time so each loads once, nothing saved. Figures: words as in the owner's transcript (difflib's ratio by words), speed, lines repeated. Because the transcript was written by the model in use and then corrected, the page says so.
+- **Text**: an installed text model against the Summary agent's, on up to three summarised references, written exactly as a run would (`summarise::trial`: the same guide, the owner's examples, people, clean-up; the summary's notes and clean-up are now shared helpers). The model in use is represented by the summary it wrote before the owner's edits (`ai_sections_json`, D-049). Figures: attendees and action items as in the owner's summary, decisions, time.
+- **Blind pairs**: each window (speech) and each meeting's Overview and Action items (text) as A and B; which is which comes from a hash of the check and the pair (stable, not on the page). The owner picks A, B or about the same; the tally decides, and when the candidate wins one button switches (the Meetings speech model, or the Summary agent's model).
+
+**Decision — catch-up work waits for a free Mac** (the Background lane's first user): before it queues, a check waits while the battery is under 30 % on battery, the Mac runs hot (thermal state serious), memory is under pressure (`kern.memorystatus_vm_pressure_level`), or the owner used the Mac in the last 5 minutes — unless Settings → Models → Catch-up work says "Also while I work". The AI activity list shows it held with the reason, and **Run now** lifts the wait for that job (it still queues behind the other lanes).
+
+**Decision — the text-model adapter**: each model's card is asked once (`/api/show`): a model without the "thinking" capability is never asked to think, and the context requested never exceeds the model's own. A model Ollama can't describe keeps the old behaviour.
+
+**Review fixes taken** (migration and architecture reviews): no CHECK on a check's kind or status (the speaker models add a kind); deleting a meeting deletes the checks holding its words (a trigger; each stored meeting and pair carries the meeting's id; a meeting deleted during a check is dropped from its results; only the ten newest checks are kept); Cancel also lifts a held check's wait; a text check uses only references summarised since 0.8.1 (else the "model in use" would be the owner's edited text) and names the model that wrote each when it differs; the speech trial is polished like a meeting (prompt echoes dropped, the vocabulary's spellings, the owner among the people) and scored over the speech the models actually heard, all windows together, "—" when there's nothing to compare; a candidate that can't write a readable summary is a finding, while Ollama gone, a missing model or a cancel stop the check; Ollama answering with another model than the candidate is refused; catch-up work waits while a recording runs, re-reads the Mac every 30 s (Run now every 2 s), and a Whisper trial lets a higher lane go first between stretches; the capability cache is refreshed when a model is pulled or removed, and summaries budget from the model's real context; a check a quit interrupted is marked stopped at launch.
+
+**Means for future work**: the speaker models (0.8.4–0.8.5) get the same check; a check could run unattended when a new model is downloaded. A text trial is one long model call: an interactive job still waits for it (up to minutes).
+
+---
+
 ## D-049 — The feedback ledger: every decision about the AI's work is kept, and the summary learns from your edits
 _2026-10-30_
 

@@ -1128,7 +1128,21 @@ mod tests {
                 delete_meeting(&hub, "test", "m1", true).await.is_err(),
                 "a job is running"
             );
+            // A model check holding the meeting's words goes with it; one about others stays.
+            sqlx::query(
+                "INSERT INTO model_check (id, kind, baseline, candidate, status, result_json) VALUES \
+                 ('c1', 'speech', 'a', 'b', 'done', '{\"pairs\":[{\"id\":\"m1-0\"}]}'), \
+                 ('c2', 'speech', 'a', 'b', 'done', '{\"pairs\":[{\"id\":\"m2-0\"}]}')",
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
             delete_meeting(&hub, "test", "m1", false).await.unwrap();
+            let left: Vec<(String,)> = sqlx::query_as("SELECT id FROM model_check")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+            assert_eq!(left, [("c2".to_owned(),)]);
             assert!(
                 outside.exists(),
                 "a file outside recordings/ is never trashed"

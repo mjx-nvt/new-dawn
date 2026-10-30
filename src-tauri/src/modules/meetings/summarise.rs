@@ -19,7 +19,7 @@ use super::review;
 use super::{Meeting, MeetingStatus, Speaker, TranscriptSegment};
 use crate::error::AppError;
 use crate::events::{SummaryFinished, SummaryProgress};
-use crate::kernel::ai::ollama::{self, Message, NUM_CTX, Request, TextSession};
+use crate::kernel::ai::ollama::{self, Message, Request, TextSession};
 use crate::kernel::ai::queue::{JobKind, Lane, Task};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
@@ -593,9 +593,10 @@ fn answer_budget(deep: bool) -> u32 {
     if deep { 18_000 } else { 14_000 }
 }
 
-/// Tokens the meeting text may use in one call: context minus the system prompt and the answer.
-fn input_budget(deep: bool, system: &str) -> u32 {
-    NUM_CTX.saturating_sub(answer_budget(deep) + estimate_tokens(system) + 500)
+/// Tokens the meeting text may use in one call: the model's context minus the system prompt and the
+/// answer (at most half of a small context).
+fn input_budget(deep: bool, system: &str, context: u32) -> u32 {
+    context.saturating_sub(answer_budget(deep).min(context / 2) + estimate_tokens(system) + 500)
 }
 
 /// "[mm:ss] text" per line; a live discussion's lines say who spoke (`speaker_label`).
@@ -1159,7 +1160,8 @@ async fn summarise_text(
             place.save(path);
         }
     }
-    let budget = input_budget(deep, &system).saturating_sub(estimate_tokens(notes));
+    let context = session.context().await;
+    let budget = input_budget(deep, &system, context).saturating_sub(estimate_tokens(notes));
     if estimate_tokens(text) <= budget {
         match ask(
             session,
@@ -1239,7 +1241,7 @@ async fn reduce(
     cancel: &AtomicBool,
     report: Report<'_>,
 ) -> Result<SummaryDoc> {
-    let budget = input_budget(deep, system);
+    let budget = input_budget(deep, system, session.context().await);
     let mut level = notes;
     while level.len() > 1 {
         let mut groups: Vec<Vec<SummaryDoc>> = vec![Vec::new()];
@@ -1393,6 +1395,146 @@ pub async fn start(
     Ok(())
 }
 
+/// What goes in after the transcript (D-035): the owner's notes, the people memory as reference,
+/// and how the meeting was held.
+fn summary_notes(meeting: &Meeting, people: &[Person]) -> String {
+    let mut notes = meeting
+        .notes_md
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if !people.is_empty() {
+        notes.push_str(&format!(
+            "\n\nKnown people — reference only: they may not be in this meeting. Never name \
+             them, or their organisations, anywhere in the summary unless the transcript or the \
+             notes do. List someone as an attendee only if the transcript mentions them; when you \
+             do, use this spelling, title and organisation:\n{}",
+            people::prompt_block(people)
+        ));
+    }
+    if let Some(note) = super::format_note(meeting) {
+        notes.push_str(&format!("\n\n{note}"));
+    }
+    notes.trim().to_owned()
+}
+
+/// The clean-up every new summary gets: only people the meeting mentions, the presenter first,
+/// spellings and roles from the people memory, who attends by default.
+fn tidy(
+    doc: &mut SummaryDoc,
+    meeting: &Meeting,
+    people: &[Person],
+    segments: &[TranscriptSegment],
+    owner: Option<&Owner>,
+    everyone_attends: bool,
+) {
+    let corpus = mention_corpus(segments, meeting.notes_md.as_deref());
+    keep_mentioned(
+        doc,
+        people,
+        &corpus,
+        meeting.presenter.as_deref(),
+        owner.map(|o| o.name.as_str()),
+    );
+    // Before apply_people, so the people memory fills the presenter's title and organisation.
+    if let Some(presenter) = meeting
+        .presenter
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+    {
+        if !doc
+            .attendees
+            .iter()
+            .any(|a| same_person(&a.name, presenter))
+        {
+            doc.attendees.insert(
+                0,
+                Attendee {
+                    name: presenter.to_owned(),
+                    attendance: "Present".to_owned(),
+                    ..Attendee::default()
+                },
+            );
+        }
+    }
+    apply_people(doc, people, SUMMARY_LANGUAGE);
+    settle_attendees(doc, everyone_attends, meeting.presenter.as_deref(), owner);
+}
+
+/// The model check's summary (D-050): this meeting summarised with `model` exactly as a run would
+/// write it — guide, examples, people, clean-up — in the Background lane, nothing saved. Returns
+/// the summary and how long the model took.
+pub async fn trial(
+    app: &AppHandle,
+    slug: &str,
+    meeting_id: &str,
+    model: &str,
+    task: Task,
+    cancel: &AtomicBool,
+) -> Result<(SummaryDoc, u32)> {
+    let hub = app.state::<WorkspaceHub>();
+    let pool = hub.pool(slug)?;
+    let workspace = hub.workspace(slug).await?;
+    let settings = profile::get(&hub).await?;
+    let owner = profile::owner(&hub, slug).await?;
+    let meeting = super::get(&pool, meeting_id).await?;
+    let segments = super::transcript(&pool, meeting_id).await?;
+    if segments.is_empty() {
+        bail!(AppError::invalid("The transcript is empty"));
+    }
+    let people = people::list(&pool).await?;
+    let guide = agents::guide(Path::new(&workspace.folder_path), Agent::Summary);
+    let examples = owner_examples(&pool, &meeting).await.unwrap_or_default();
+    let mut session = ollama::session(
+        app,
+        pool.clone(),
+        Some(meeting_id),
+        Some(model.to_owned()),
+        Lane::Background,
+        task,
+    )
+    .await?;
+    // Ollama would quietly answer with the app's model if the candidate went missing.
+    if session.model() != model {
+        bail!(AppError::invalid(format!(
+            "Ollama doesn't have {model} any more"
+        )));
+    }
+    if cancel.load(Ordering::Relaxed) {
+        bail!(AppError::new("cancelled", "Model check cancelled"));
+    }
+    session.for_agent("check");
+    let started = std::time::Instant::now();
+    let mut doc = summarise_text(
+        &mut session,
+        &guide,
+        &examples,
+        &default_structure(SUMMARY_LANGUAGE),
+        SUMMARY_LANGUAGE,
+        owner.as_ref(),
+        segments.iter().any(|s| s.speaker.is_some()),
+        &transcript_text(&segments, owner.as_ref().map(|o| o.name.as_str())),
+        &summary_notes(&meeting, &people),
+        false,
+        cancel,
+        &|_, _, _, _| {},
+        &mut Checkpoint::default(),
+        None,
+    )
+    .await?;
+    let ms = started.elapsed().as_millis() as u32;
+    tidy(
+        &mut doc,
+        &meeting,
+        &people,
+        &segments,
+        owner.as_ref(),
+        settings.everyone_attends,
+    );
+    Ok((doc, ms))
+}
+
 /// Marks `summarising`, writes the summary + email, then runs the naming check; on any failure
 /// restores the previous status. Returns how many names wait for the owner.
 async fn run(
@@ -1476,25 +1618,8 @@ async fn run(
         let previous = view(&pool, &meeting.id).await?.map(|v| v.doc);
         // The people memory goes in with the owner's notes: correct spellings and roles.
         let people = people::list(&pool).await?;
-        let mut notes = meeting
-            .notes_md
-            .as_deref()
-            .unwrap_or_default()
-            .trim()
-            .to_owned();
-        if !people.is_empty() {
-            notes.push_str(&format!(
-                "\n\nKnown people — reference only: they may not be in this meeting. Never name \
-                 them, or their organisations, anywhere in the summary unless the transcript or the \
-                 notes do. List someone as an attendee only if the transcript mentions them; when you \
-                 do, use this spelling, title and organisation:\n{}",
-                people::prompt_block(&people)
-            ));
-        }
-        if let Some(note) = super::format_note(&meeting) {
-            notes.push_str(&format!("\n\n{note}"));
-        }
-        let notes = notes.trim();
+        let notes = summary_notes(&meeting, &people);
+        let notes = notes.as_str();
         let structure = default_structure(SUMMARY_LANGUAGE);
         let guide = agents::guide(std::path::Path::new(&workspace.folder_path), Agent::Summary);
         let mut place = Checkpoint::read(&checkpoint).unwrap_or_default();
@@ -1510,8 +1635,15 @@ async fn run(
             slug,
             &meeting.id,
         );
-        let mut session =
-            ollama::session(app, pool.clone(), Some(&meeting.id), model, Lane::Foreground, task).await?;
+        let mut session = ollama::session(
+            app,
+            pool.clone(),
+            Some(&meeting.id),
+            model,
+            Lane::Foreground,
+            task,
+        )
+        .await?;
         session.for_agent("summary");
         if cancel.load(Ordering::Relaxed) {
             bail!(AppError::new("cancelled", "Summary cancelled")); // cancelled while queued
@@ -1540,16 +1672,15 @@ async fn run(
         .await?;
         let model_name = session.model().to_owned();
         doc.generated_at = generated_at;
+        tidy(
+            &mut doc,
+            &meeting,
+            &people,
+            &segments,
+            owner.as_ref(),
+            settings.everyone_attends,
+        );
         let corpus = mention_corpus(&segments, meeting.notes_md.as_deref());
-        keep_mentioned(&mut doc, &people, &corpus, meeting.presenter.as_deref(), owner.as_ref().map(|o| o.name.as_str()));
-        // Before apply_people, so the people memory fills the presenter's title and organisation.
-        if let Some(presenter) = meeting.presenter.as_deref().filter(|p| !p.trim().is_empty()) {
-            if !doc.attendees.iter().any(|a| same_person(&a.name, presenter)) {
-                doc.attendees.insert(0, Attendee { name: presenter.to_owned(), attendance: "Present".to_owned(), ..Attendee::default() });
-            }
-        }
-        apply_people(&mut doc, &people, SUMMARY_LANGUAGE);
-        settle_attendees(&mut doc, settings.everyone_attends, meeting.presenter.as_deref(), owner.as_ref());
         let ai_version = serde_json::to_string(&doc)?;
         if let Some(previous) = &previous {
             if keep_edits {
@@ -1593,9 +1724,15 @@ async fn run(
         session.for_agent("naming");
         // The owner counts as known: never a name to confirm.
         let known = people::with_owner(people, owner.as_ref());
-        let naming = super::naming::review(&session, folder, &meeting, &doc, &known, &segments, &cancel).await;
+        let naming =
+            super::naming::review(&session, folder, &meeting, &doc, &known, &segments, &cancel)
+                .await;
         let count = naming.suspects.len();
-        let json = if count == 0 { None } else { serde_json::to_string(&naming).ok() };
+        let json = if count == 0 {
+            None
+        } else {
+            serde_json::to_string(&naming).ok()
+        };
         if let Err(err) = super::set_naming(&pool, &meeting.id, json.as_deref()).await {
             tracing::warn!("could not store the naming check: {err:#}");
         }
@@ -1616,7 +1753,19 @@ async fn run(
             report(SummaryStage::Tasks, 0, 0, 0);
         }
         session.for_agent("tasks");
-        if let Err(err) = super::tasks::find(&session, folder, &pool, &meeting, &mut doc, owner.as_ref().filter(|_| feeds_tasks), &known, &segments, &cancel).await {
+        if let Err(err) = super::tasks::find(
+            &session,
+            folder,
+            &pool,
+            &meeting,
+            &mut doc,
+            owner.as_ref().filter(|_| feeds_tasks),
+            &known,
+            &segments,
+            &cancel,
+        )
+        .await
+        {
             tracing::warn!("tasks skipped: {err:#}");
         }
         drop(session);

@@ -13,6 +13,7 @@ import {
   type Meeting,
   useSetMeetingFormat,
 } from "../../kernel/bridge/meetings";
+import { useSetMeetingReference } from "../../kernel/bridge/activity";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SparkleIcon } from "../../kernel/shell/icons";
@@ -52,6 +53,7 @@ export default function MeetingPage() {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmRetranscribe, setConfirmRetranscribe] = useState(false);
+  const setReference = useSetMeetingReference(workspace?.slug);
 
   if (meeting.error) {
     return (
@@ -118,6 +120,11 @@ export default function MeetingPage() {
               <StatusChip status={m.status} />
               {workspace && <TypePicker slug={slug} meeting={m} />}
               {workspace && <FormatPicker slug={slug} meeting={m} />}
+              {m.reference && (
+                <span className="chip" title="Model checks compare models with this meeting's transcript and summary">
+                  Reference
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -144,6 +151,11 @@ export default function MeetingPage() {
                   label: m.status === "transcribed" || m.status === "summarised" ? "Transcribe again…" : "Transcribe",
                   onSelect: () => (m.status === "recorded" || m.status === "failed" ? retranscribe.mutate({ slug, meetingId }) : setConfirmRetranscribe(true)),
                   disabled: busy || retranscribe.isPending,
+                },
+                {
+                  label: m.reference ? "Stop using as a reference" : "Use as a reference",
+                  onSelect: () => setReference.mutate({ meetingId, on: !m.reference }),
+                  separator: true,
                 },
                 { label: "Delete…", onSelect: () => setDeleting(true), danger: true, disabled: busy, separator: true },
               ]}

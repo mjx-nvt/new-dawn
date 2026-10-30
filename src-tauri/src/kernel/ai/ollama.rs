@@ -27,6 +27,66 @@ pub const MODEL_SETTING: &str = "ollama_model";
 /// The picked model ("" = default); loaded at launch, changed by `select`.
 static SELECTED: std::sync::RwLock<String> = std::sync::RwLock::new(String::new());
 
+/// What each model can do, as Ollama reports it (`/api/show`), asked once per model (D-050).
+static CAPS: std::sync::Mutex<Vec<(String, Caps)>> = std::sync::Mutex::new(Vec::new());
+
+/// The part of a model's card the app adapts to: whether it can think, and its context length.
+#[derive(Debug, Clone, Copy)]
+struct Caps {
+    thinking: bool,
+    context: u32,
+}
+
+/// A model's abilities; a model Ollama can't describe is assumed to think and to take our context
+/// (the old behaviour), so a failed lookup never makes a run worse.
+async fn caps(model: &str) -> Caps {
+    let known = CAPS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .find(|(name, _)| name == model)
+        .map(|(_, caps)| *caps);
+    if let Some(caps) = known {
+        return caps;
+    }
+    let fallback = Caps {
+        thinking: true,
+        context: NUM_CTX,
+    };
+    let Ok(client) = client(Duration::from_secs(10)) else {
+        return fallback;
+    };
+    let shown: Option<serde_json::Value> = match client
+        .post(format!("{BASE}/api/show"))
+        .json(&serde_json::json!({ "model": model }))
+        .send()
+        .await
+    {
+        Ok(response) if response.status().is_success() => response.json().await.ok(),
+        _ => None,
+    };
+    let Some(shown) = shown else {
+        return fallback;
+    };
+    let caps = Caps {
+        thinking: shown["capabilities"]
+            .as_array()
+            .is_none_or(|all| all.iter().any(|c| c == "thinking")),
+        context: shown["model_info"]
+            .as_object()
+            .and_then(|info| {
+                info.iter()
+                    .find(|(key, _)| key.ends_with(".context_length"))
+                    .and_then(|(_, v)| v.as_u64())
+            })
+            .map_or(NUM_CTX, |n| n.min(u64::from(NUM_CTX)) as u32),
+    };
+    CAPS.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push((model.to_owned(), caps));
+    caps
+}
+
 /// The model the last text session ran on — the one Ollama may still hold in memory (D-038).
 static LOADED: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
@@ -185,6 +245,7 @@ pub fn start_pull(app: &AppHandle, name: &str) -> Result<()> {
         let done = Done;
         let result = pull(&app, &name).await;
         drop(done);
+        forget_caps(&name); // a new pull of a tag can be a different model
         if let Err(err) = &result {
             tracing::warn!("model pull ended: {err:#}");
         }
@@ -310,7 +371,14 @@ pub async fn remove(app: &AppHandle, name: &str) -> Result<()> {
             format!("Ollama couldn't remove {name} ({})", response.status())
         ));
     }
+    forget_caps(name);
     Ok(())
+}
+
+fn forget_caps(model: &str) {
+    CAPS.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .retain(|(name, _)| name != model);
 }
 
 /// Asks Ollama to drop the text models from memory now (before Whisper loads): the app's and the
@@ -404,7 +472,7 @@ pub async fn session<'a>(
     lane: Lane,
     task: Task,
 ) -> Result<TextSession<'a>> {
-    let turn = app.state::<AiQueue>().inner().acquire(lane, task).await;
+    let turn = resources::acquire(app, lane, task).await;
     let ollama = status().await;
     if !ollama.running {
         bail!(AppError::new(
@@ -505,6 +573,11 @@ impl TextSession<'_> {
         &self.model
     }
 
+    /// The context the calls really get: the session's, or less when the model has less (D-050).
+    pub async fn context(&self) -> u32 {
+        self.num_ctx.min(caps(&self.model).await.context)
+    }
+
     /// A higher lane waits for the AI: a long run should `make_way` at its next checkpoint.
     pub fn wanted(&self) -> bool {
         self.turn.wanted()
@@ -554,7 +627,8 @@ impl TextSession<'_> {
         let result = self.stream(request, cancel, &mut on_token).await;
         // Ollama truncates an over-long prompt silently; treat a full context as an overflow,
         // but keep the token counts in the log row that explains it.
-        let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= self.num_ctx);
+        let num_ctx = self.num_ctx.min(caps(&self.model).await.context);
+        let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= num_ctx);
         let (status, error, prompt_tokens, output_tokens) = match &result {
             Ok(c) if overflow => (
                 "error",
@@ -618,13 +692,16 @@ impl TextSession<'_> {
             content: String,
         }
 
+        let caps = caps(&self.model).await;
         let body = serde_json::json!({
             "model": self.model,
             "messages": request.messages,
             "stream": true,
-            "think": request.think,
+            // A model that can't think is never asked to (Ollama refuses), and never more context
+            // than it has (D-050).
+            "think": request.think && caps.thinking,
             "keep_alive": self.keep_alive,
-            "options": { "num_ctx": self.num_ctx, "num_predict": request.max_tokens, "temperature": self.temperature },
+            "options": { "num_ctx": self.num_ctx.min(caps.context), "num_predict": request.max_tokens, "temperature": self.temperature },
         });
         let response = client(Duration::from_secs(180))? // the first token can wait for the model to load
             .post(format!("{BASE}/api/chat"))

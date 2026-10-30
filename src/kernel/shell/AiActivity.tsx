@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAiActivity, type Activity } from "../bridge/activity";
+import { runAiJobNow, useAiActivity, type Activity } from "../bridge/activity";
 import { cancelTranscription, useTranscriptionProgress } from "../bridge/meetings";
 import { cancelSummary, useSummaryProgress } from "../bridge/summary";
 import { SummaryBar, TranscriptionBar } from "../../modules/meetings/AiProgress";
@@ -67,7 +67,8 @@ function Item({ item }: { item: Activity }) {
   const transcription = useTranscriptionProgress(meetingId);
   const summary = useSummaryProgress(meetingId);
   const kind = item.task.kind;
-  const state = item.running ? null : item.lane === "interactive" ? "Next" : "Waiting";
+  const state = item.running ? null : item.waiting_for ? "Held" : item.lane === "interactive" ? "Next" : "Waiting";
+  const jobId = item.task.id;
   const stop = kind === "transcription" ? cancelTranscription : kind === "summary" ? cancelSummary : null;
   // A waiting job notices the cancel when its turn comes: say so until it leaves the list.
   const [stopping, setStopping] = useState(false);
@@ -90,6 +91,19 @@ function Item({ item }: { item: Activity }) {
           </button>
         )}
       </div>
+      {item.waiting_for && (
+        <p className="fieldHint">
+          {item.waiting_for}
+          {jobId && (
+            <>
+              {" · "}
+              <button type="button" className={styles.link} onClick={() => void runAiJobNow(jobId)}>
+                Run now
+              </button>
+            </>
+          )}
+        </p>
+      )}
       {item.running && kind === "transcription" && transcription && <TranscriptionBar progress={transcription} />}
       {item.running && kind === "summary" && summary && <SummaryBar progress={summary} />}
     </li>

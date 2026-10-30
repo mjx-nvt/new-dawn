@@ -20,7 +20,7 @@ use whisper_rs::{
 
 use crate::error::AppError;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
-use crate::kernel::ai::models::{BUNDLED_VAD, SpeechJob};
+use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore, SpeechJob};
 use crate::kernel::ai::queue::{AiQueue, Lane, Task};
 use crate::kernel::ai::resources;
 
@@ -169,8 +169,7 @@ pub async fn transcribe(
         },
     }
     .save(job.checkpoint.as_deref());
-    let queue = app.state::<AiQueue>();
-    let mut turn = queue.acquire(job.lane, job.task.clone()).await;
+    let mut turn = resources::acquire(app, job.lane, job.task.clone()).await;
     if job.cancel.load(Ordering::Relaxed) {
         bail!(AppError::new("cancelled", "Transcription cancelled"));
     }
@@ -293,6 +292,145 @@ pub async fn transcribe(
         tracing::warn!("could not write ai_log: {err:#}");
     }
     result
+}
+
+/// One model's lines for one window of a recording (the model check): the speech it covered (from
+/// the first stretch's start to the last one's end, in ms) and how long Whisper took.
+#[derive(Debug, Clone)]
+pub struct Trial {
+    pub lines: Vec<Segment>,
+    pub covered: (u32, u32),
+    pub ms: u32,
+}
+
+/// The model check's speech gateway (D-050): the speech in each of `windows` (ms ranges: the
+/// stretches that start inside) of a recording, written by each of `models` (downloaded catalogue
+/// ids) with the meeting's decoding, in the Background lane, nothing saved. One model at a time
+/// over every window, so each loads once; a higher lane goes first between stretches. One
+/// `ai_log` row per model. Returns `[model][window]`.
+#[allow(clippy::too_many_arguments)]
+pub async fn trial(
+    app: &AppHandle,
+    pool: &SqlitePool,
+    meeting_id: &str,
+    windows: &[(u32, u32)],
+    models: &[&str],
+    language: Language,
+    prompt: Option<String>,
+    task: Task,
+    cancel: Arc<AtomicBool>,
+    prepare: impl FnOnce() -> Result<Vec<f32>> + Send + 'static,
+) -> Result<Vec<Vec<Trial>>> {
+    let mut turn = resources::acquire(app, Lane::Background, task).await;
+    if cancel.load(Ordering::Relaxed) {
+        bail!(AppError::new("cancelled", "Model check cancelled"));
+    }
+    super::ollama::unload().await;
+    let vad_path = app.path().resolve(BUNDLED_VAD, BaseDirectory::Resource)?;
+    let (samples, speech) = tokio::task::spawn_blocking(move || -> Result<_> {
+        let samples = prepare()?;
+        let speech = detect_speech(&vad_path, &samples)?;
+        Ok((Arc::new(samples), Arc::new(speech)))
+    })
+    .await??;
+    let store = app.state::<ModelStore>();
+    let at = |ms: u32| ms as usize * SAMPLE_RATE / 1000;
+    let ms_of = |sample: usize| (sample * 1000 / SAMPLE_RATE) as u32;
+    let mut out = Vec::with_capacity(models.len());
+    for &id in models {
+        let started = Instant::now();
+        let result: Result<Vec<Trial>> = async {
+            let spec = super::models::spec(id)?;
+            let path = store.dir().join(spec.file);
+            if !path.exists() {
+                bail!(AppError::new(
+                    "model_missing",
+                    format!("{} isn't downloaded", spec.label)
+                ));
+            }
+            let mut per_window = Vec::with_capacity(windows.len());
+            for &(from_ms, to_ms) in windows {
+                let stretches: Vec<(usize, usize)> = speech
+                    .iter()
+                    .copied()
+                    .filter(|&(start, _)| (at(from_ms)..at(to_ms)).contains(&start))
+                    .collect();
+                let covered = match (stretches.first(), stretches.last()) {
+                    (Some(first), Some(last)) => (ms_of(first.0), ms_of(last.1)),
+                    _ => (from_ms, from_ms),
+                };
+                let (mut lines, mut done, mut ms) = (Vec::new(), 0, 0);
+                while done < stretches.len() {
+                    if cancel.load(Ordering::Relaxed) {
+                        bail!(AppError::new("cancelled", "Model check cancelled"));
+                    }
+                    if turn.wanted() {
+                        turn.make_way().await;
+                        super::ollama::unload().await;
+                    }
+                    let (app, samples, prompt, cancel, path) = (
+                        app.clone(),
+                        samples.clone(),
+                        prompt.clone(),
+                        cancel.clone(),
+                        path.clone(),
+                    );
+                    let rest = stretches[done..].to_vec();
+                    let batch_started = Instant::now();
+                    let (more, written) = resources::blocking(false, move || {
+                        let queue = app.state::<AiQueue>();
+                        app.state::<WhisperEngine>().transcribe_stretches(
+                            SpeechModel {
+                                id: spec.id,
+                                path: &path,
+                            },
+                            &samples,
+                            &rest,
+                            language,
+                            prompt.as_deref(),
+                            threads(),
+                            &cancel,
+                            || queue.wanted_above(Lane::Background),
+                            |_| {},
+                        )
+                    })
+                    .await??;
+                    ms += batch_started.elapsed().as_millis() as u32;
+                    lines.extend(more);
+                    done += written.max(1);
+                }
+                per_window.push(Trial {
+                    lines: drop_loops(lines),
+                    covered,
+                    ms,
+                });
+            }
+            Ok(per_window)
+        }
+        .await;
+        let (status, error) = match &result {
+            Ok(_) => ("ok", None),
+            Err(err) if is_cancelled(err) => ("cancelled", None),
+            Err(err) => ("error", Some(format!("{err:#}"))),
+        };
+        let entry = AiLogEntry {
+            kind: "transcribe",
+            agent: Some("check"),
+            model: id,
+            meeting_id: Some(meeting_id),
+            duration_ms: started.elapsed().as_millis() as u32,
+            status,
+            error,
+            prompt_tokens: None,
+            output_tokens: None,
+        };
+        if let Err(err) = ai_log::record(pool, entry).await {
+            tracing::warn!("could not write ai_log: {err:#}");
+        }
+        out.push(result?);
+    }
+    drop(turn);
+    Ok(out)
 }
 
 /// Saves the idle period in `registry.db` and applies it to the running engine.

@@ -70,6 +70,8 @@ pub struct Meeting {
     /// When the meeting first fed Tasks (an automatic task or "Add to Tasks"); after that a
     /// re-run adds no task by itself (0.7.3).
     pub tasks_at: Option<String>,
+    /// A reference for the model check (D-050): its transcript and summary are the gold.
+    pub reference: bool,
 }
 
 /// Who spoke a live line (0.7.5): `you` = this Mac's microphone in a call, `them` = the call's
