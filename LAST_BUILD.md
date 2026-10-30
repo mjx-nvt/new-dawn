@@ -1,3 +1,22 @@
+# Last Build — The app keeps what you correct, and summaries learn from your edits · release 0.8.1
+_2026-10-30_
+
+## What changed
+- **Every correction you make to the AI's work is now kept** (D-049): a transcript line you fix, a vocabulary correction you undo, a correction you write, a summary section you rewrite, attendees you change, a name you confirm or keep, an action item you send to Tasks, an AI task you reword or delete, an email you rewrite. Text only, in the workspace, deleted with its meeting.
+- **Summaries learn how you write.** When you've rewritten sections of earlier summaries of the same meeting type, the newest (up to three) go with each new summary as examples of your length, tone and what you include — never as facts. Only your own rewrites count (not the Corrections agent's), and only from now on: edits made before 0.8.1 weren't recorded.
+- **The AI's own version is kept beside your edits**, so later releases can compare them (and count how often each agent gets it right).
+- Workspace → Agents shows how many of your edits and decisions each agent has.
+- Checks: 136 Rust tests pass (new: an edit reaches the ledger once, and becomes an example for the next summary of the same kind). Clippy, tsc and the localhost check are clean. Seen in the dev app: a section edit recorded, and the count in Workspace → Agents.
+- Reviews: migration 0012 (additive) reviewed SAFE; its comments were corrected before it was ever applied. The architecture review found no rule violations and three must-fixes, all about recording only what really happened: saving a section unchanged no longer counts as an edit; name and attendee decisions are recorded only once saved. Its other points were taken too (examples fenced and only yours; the prompt budget follows the real prompt).
+
+## Release
+- **v0.8.1** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new table.
+
+## Manual steps
+- None.
+
+---
+
 # Last Build — AI work that makes way for you, survives a quit and goes easy while you work · release 0.8.0
 _2026-10-30_
 

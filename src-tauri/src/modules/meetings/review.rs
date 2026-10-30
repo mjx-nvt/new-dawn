@@ -15,6 +15,7 @@ use super::{Meeting, MeetingStatus};
 use crate::error::AppError;
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
+use crate::modules::feedback::{self, Feedback, Kind, Source};
 use crate::modules::people::{self, AttendeeEdit};
 
 /// One top-level bullet (or paragraph) and the bullets nested under it, as plain text.
@@ -141,6 +142,10 @@ pub fn apply_edit(doc: &mut SummaryDoc, index: usize, markdown: &str) -> Result<
         .sections
         .get_mut(index)
         .ok_or_else(|| AppError::invalid("No such section"))?;
+    // Saved as it was: not an edit (it must never pass for the owner's writing, D-049).
+    if section.markdown == markdown.trim() {
+        return Ok(false);
+    }
     section.markdown = markdown.trim().to_owned();
     let was_edited = section.edited;
     section.edited = true;
@@ -384,6 +389,21 @@ pub async fn update_attendees(
     let mut current = summarise::view(pool, meeting_id)
         .await?
         .ok_or_else(|| AppError::not_found("This meeting has no summary yet"))?;
+    let listed = |people: &[Attendee]| {
+        people
+            .iter()
+            .map(|a| {
+                let out = if a.attending {
+                    ""
+                } else {
+                    " (not in the minutes)"
+                };
+                format!("{}{out}", a.name)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let before = listed(&current.doc.attendees);
     current.doc.attendees = attendees
         .iter()
         .filter(|a| !a.name.trim().is_empty())
@@ -438,6 +458,21 @@ pub async fn update_attendees(
         edited,
     )
     .await?;
+    let after = listed(&current.doc.attendees);
+    if before != after {
+        feedback::record(
+            pool,
+            Feedback {
+                meeting_id: Some(meeting_id),
+                source: Source::Summary,
+                kind: Kind::AttendeesChanged,
+                before: &before,
+                after: &after,
+                context: serde_json::json!({}),
+            },
+        )
+        .await;
+    }
     summarise::view(pool, meeting_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("summary vanished while saving"))
@@ -487,6 +522,20 @@ pub async fn update_segment(
     .bind(seq)
     .execute(pool)
     .await?;
+    if old != text {
+        feedback::record(
+            pool,
+            Feedback {
+                meeting_id: Some(meeting_id),
+                source: Source::Transcript,
+                kind: Kind::LineFixed,
+                before: &old,
+                after: text,
+                context: serde_json::json!({ "seq": seq }),
+            },
+        )
+        .await;
+    }
     // A corrected name or term teaches the vocabulary, so the next transcript gets it right.
     let pairs = crate::modules::vocabulary::word_diff(&old, text);
     if !pairs.is_empty() {
@@ -503,6 +552,13 @@ pub async fn restore_segment(pool: &SqlitePool, meeting_id: &str, seq: u32) -> R
             "The meeting is being transcribed — edit it when it's done"
         ));
     }
+    let line: Option<(String, Option<String>)> = sqlx::query_as(
+        "SELECT text, raw_text FROM transcript_segment WHERE meeting_id = ? AND seq = ?",
+    )
+    .bind(meeting_id)
+    .bind(seq)
+    .fetch_optional(pool)
+    .await?;
     let done = sqlx::query(
         "UPDATE transcript_segment SET text = raw_text, raw_text = NULL, \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
@@ -516,6 +572,21 @@ pub async fn restore_segment(pool: &SqlitePool, meeting_id: &str, seq: u32) -> R
         bail!(AppError::not_found(
             "This line wasn't corrected by the vocabulary"
         ));
+    }
+    // The vocabulary's correction was wrong here: Whisper had it right.
+    if let Some((corrected, Some(heard))) = line {
+        feedback::record(
+            pool,
+            Feedback {
+                meeting_id: Some(meeting_id),
+                source: Source::Transcript,
+                kind: Kind::CorrectionUndone,
+                before: &corrected,
+                after: &heard,
+                context: serde_json::json!({ "seq": seq }),
+            },
+        )
+        .await;
     }
     Ok(())
 }
@@ -568,7 +639,7 @@ pub async fn to_trash(path: PathBuf) -> Result<()> {
 }
 
 /// Moves the meeting's recording folder to the Trash, then deletes the meeting (its transcript,
-/// summary and export rows go with it; exported files stay in `exports/`; its tasks stay in
+/// summary, export rows and feedback go with it; exported files stay in `exports/`; its tasks stay in
 /// Tasks, no longer linked — `task.meeting_id` is set NULL, D-042). `job_running`: a
 /// transcription or summary job is registered for it (its status may not show that yet).
 pub async fn delete_meeting(
@@ -932,7 +1003,7 @@ mod tests {
                 ..Attendee::default()
             }];
             let json = serde_json::to_string(&d).unwrap();
-            super::super::save_summary(&pool, "m1", &json, "S", "Duke opened.", None, false)
+            super::super::save_summary(&pool, "m1", &json, "S", "Duke opened.", None, false, None)
                 .await
                 .unwrap();
             sqlx::query(

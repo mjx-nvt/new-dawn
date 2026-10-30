@@ -256,7 +256,7 @@ mod tests {
             }))
             .unwrap();
             let json = serde_json::to_string(&doc).unwrap();
-            save_summary(pool, "m1", &json, "", "", None, false)
+            save_summary(pool, "m1", &json, "", "", None, false, None)
                 .await
                 .unwrap();
             assert!(get(pool, "m1", SummaryLang::Fr).await.unwrap().is_none());
@@ -285,7 +285,7 @@ mod tests {
                 .markdown
                 .replace("- [ ] **Ryan**", "- [x] **Ryan**");
             let json = serde_json::to_string(&ticked).unwrap();
-            save_summary(pool, "m1", &json, "", "", None, false)
+            save_summary(pool, "m1", &json, "", "", None, false, None)
                 .await
                 .unwrap();
             assert!(
@@ -298,7 +298,7 @@ mod tests {
             let mut newer = doc.clone();
             newer.sections[1].markdown = newer.sections[1].markdown.replace("Ryan", "Ryan Do");
             let json = serde_json::to_string(&newer).unwrap();
-            save_summary(pool, "m1", &json, "", "", None, false)
+            save_summary(pool, "m1", &json, "", "", None, false, None)
                 .await
                 .unwrap();
             assert!(

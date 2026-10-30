@@ -438,7 +438,9 @@ pub async fn summary(pool: &SqlitePool, meeting_id: &str) -> Result<Option<Summa
 }
 
 /// Upsert (never REPLACE — keeps the FTS triggers right, D-012). `edited` stamps `edited_at`; an
-/// AI run clears it.
+/// AI run clears it. `ai_sections_json`: the summary as the AI wrote it, before the owner's kept
+/// edits (D-049); None keeps the one stored.
+#[allow(clippy::too_many_arguments)]
 pub async fn save_summary(
     pool: &SqlitePool,
     meeting_id: &str,
@@ -447,13 +449,15 @@ pub async fn save_summary(
     email_md: &str,
     model: Option<&str>,
     edited: bool,
+    ai_sections_json: Option<&str>,
 ) -> Result<()> {
     sqlx::query(
-        "INSERT INTO summary (id, meeting_id, sections_json, email_subject, email_md, model, edited_at) \
-         VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END) \
+        "INSERT INTO summary (id, meeting_id, sections_json, email_subject, email_md, model, edited_at, ai_sections_json) \
+         VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? THEN strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END, ?) \
          ON CONFLICT (meeting_id) DO UPDATE SET sections_json = excluded.sections_json, \
            email_subject = excluded.email_subject, email_md = excluded.email_md, \
            model = coalesce(excluded.model, summary.model), edited_at = excluded.edited_at, \
+           ai_sections_json = coalesce(excluded.ai_sections_json, summary.ai_sections_json), \
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
     )
     .bind(new_id())
@@ -463,6 +467,7 @@ pub async fn save_summary(
     .bind(email_md)
     .bind(model)
     .bind(edited)
+    .bind(ai_sections_json)
     .execute(pool)
     .await?;
     Ok(())

@@ -14,6 +14,7 @@ use super::{Meeting, TranscriptSegment};
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{Message, Request, TextSession};
 use crate::modules::agents::{self, Agent};
+use crate::modules::feedback::{self, Feedback, Kind, Source};
 use crate::modules::people::{self, AttendeeEdit, Person};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -435,6 +436,32 @@ pub async fn confirm(
     );
     summarise::save_doc(pool, workspace, &meeting, &current.doc).await?;
     super::set_naming(pool, meeting_id, None).await?;
+    // Each answer to the check: kept as heard, or the spelling chosen — and whether it was the
+    // check's own suggestion (how often it's right).
+    for d in decisions.iter().filter(|d| !d.name.trim().is_empty()) {
+        let suggested = current
+            .naming
+            .as_ref()
+            .and_then(|n| n.suspects.iter().find(|s| s.heard_as == d.heard_as))
+            .map(|s| s.suggestion.clone());
+        let kept = people::clean(&d.name, 120) == people::clean(&d.heard_as, 120);
+        feedback::record(
+            pool,
+            Feedback {
+                meeting_id: Some(meeting_id),
+                source: Source::Naming,
+                kind: if kept {
+                    Kind::NameKept
+                } else {
+                    Kind::NameConfirmed
+                },
+                before: &d.heard_as,
+                after: &d.name,
+                context: serde_json::json!({ "suggested": suggested }),
+            },
+        )
+        .await;
+    }
     summarise::view(pool, meeting_id)
         .await?
         .context("summary vanished while saving")

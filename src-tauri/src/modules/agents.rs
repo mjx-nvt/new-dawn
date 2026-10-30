@@ -134,6 +134,8 @@ pub struct AgentGuide {
     /// The model this agent uses (None = the app's selected model).
     pub model: Option<String>,
     pub by_model: Vec<ModelStats>,
+    /// The owner's edits and decisions about this agent's work, in the feedback ledger (D-049).
+    pub feedback: u32,
 }
 
 fn file(folder: &Path, agent: Agent) -> PathBuf {
@@ -234,6 +236,10 @@ pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
         .bind(agent.id())
         .fetch_all(pool)
         .await?;
+        let (feedback,): (u32,) = sqlx::query_as("SELECT count(*) FROM feedback WHERE agent = ?")
+            .bind(agent.id())
+            .fetch_one(pool)
+            .await?;
         out.push(AgentGuide {
             agent,
             label: agent.label().to_owned(),
@@ -248,6 +254,7 @@ pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
             last_run: last,
             model: model_for(pool, agent).await,
             by_model,
+            feedback,
         });
     }
     Ok(out)

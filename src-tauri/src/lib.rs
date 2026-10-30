@@ -50,6 +50,7 @@ mod kernel {
 mod modules {
     pub mod agents;
     pub mod brand;
+    pub mod feedback;
     pub mod meetings;
     pub mod people;
     pub mod tasks;

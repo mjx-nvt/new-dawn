@@ -20,6 +20,7 @@ use crate::kernel::ai::queue::{Lane, Task};
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::profile;
 use crate::modules::agents::{self, Agent};
+use crate::modules::feedback::{self, Feedback, Kind, Source};
 use crate::modules::people::{self, AttendeeEdit};
 use crate::modules::vocabulary;
 
@@ -448,6 +449,23 @@ pub async fn apply(
         "corrections on {meeting_id}: {summary_changes} summary change(s), {transcript_lines} transcript line(s), {sections_rewritten} section(s), {} person edit(s), {terms_learned} term(s)",
         edits.len()
     );
+    // What the owner said was wrong, and how much it changed: the most direct feedback there is.
+    feedback::record(
+        &pool,
+        Feedback {
+            meeting_id: Some(meeting_id),
+            source: Source::Summary,
+            kind: Kind::Correction,
+            before: "",
+            after: text,
+            context: serde_json::json!({
+                "summary_changes": summary_changes,
+                "transcript_lines": transcript_lines,
+                "sections_rewritten": sections_rewritten,
+            }),
+        },
+    )
+    .await;
     Ok(CorrectionsOutcome {
         view,
         summary_changes,

@@ -846,7 +846,7 @@ mod tests {
         .await
         .unwrap();
         let json = serde_json::to_string(doc).unwrap();
-        super::super::save_summary(&pool, "m1", &json, "S", "Body", None, false)
+        super::super::save_summary(&pool, "m1", &json, "S", "Body", None, false, None)
             .await
             .unwrap();
         let meeting = super::super::get(&pool, "m1").await.unwrap();
@@ -1080,7 +1080,7 @@ mod live_tests {
                 .await
                 .unwrap();
             let json = serde_json::to_string(&doc).unwrap();
-            super::super::save_summary(&pool, "m1", &json, "S", "Body", None, false)
+            super::super::save_summary(&pool, "m1", &json, "S", "Body", None, false, None)
                 .await
                 .unwrap();
             let meeting = super::super::get(&pool, "m1").await.unwrap();

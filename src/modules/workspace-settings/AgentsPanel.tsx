@@ -6,6 +6,19 @@ import { SparkleIcon } from "../../kernel/shell/icons";
 import { formatWhen } from "../meetings/format";
 import styles from "./AgentsPanel.module.css";
 
+/** The agents whose work you correct (the others leave nothing to record). */
+const LEARNS: AgentGuide["agent"][] = ["summary", "naming", "email", "tasks"];
+
+/** What the agent learns from you (D-049): the feedback ledger's count, and for the summary, the
+ *  examples it gets. */
+function learning(guide: AgentGuide): string {
+  const n = guide.feedback;
+  const recorded = n ? `${n} of your edits and decisions recorded` : "None of your edits or decisions yet";
+  return guide.agent === "summary"
+    ? `${recorded}. Your newest rewritten sections of the same kind of meeting go with each new summary as examples.`
+    : `${recorded}.`;
+}
+
 /** The Live agent's default when installed, before the app model (FAST_MODEL in kernel/ai/live.rs). */
 const FAST_MODEL = "qwen3.5:4b";
 
@@ -115,6 +128,7 @@ function AgentCard({
             {guide.by_model.map((s) => `${s.model}: ${s.runs} run${s.runs === 1 ? "" : "s"}${s.avg_ms != null ? `, ~${Math.round(s.avg_ms / 1000)} s` : ""}`).join(" · ")}
           </p>
         )}
+        {LEARNS.includes(guide.agent) && <p className="fieldHint">{learning(guide)}</p>}
       </div>
       <textarea
         className={`input ${styles.editor}`}

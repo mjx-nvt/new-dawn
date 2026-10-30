@@ -306,6 +306,8 @@ export type AgentGuide_Deserialize = {
 	/**  The model this agent uses (None = the app's selected model). */
 	model?: string | null,
 	by_model: ModelStats_Deserialize[],
+	/**  The owner's edits and decisions about this agent's work, in the feedback ledger (D-049). */
+	feedback: number,
 };
 
 export type AgentGuide_Serialize = {
@@ -319,6 +321,8 @@ export type AgentGuide_Serialize = {
 	/**  The model this agent uses (None = the app's selected model). */
 	model: string | null,
 	by_model: ModelStats_Serialize[],
+	/**  The owner's edits and decisions about this agent's work, in the feedback ledger (D-049). */
+	feedback: number,
 };
 
 /**  The last finished call an agent made, from `ai_log`. */

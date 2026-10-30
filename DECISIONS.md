@@ -2,6 +2,36 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-049 — The feedback ledger: every decision about the AI's work is kept, and the summary learns from your edits
+_2026-10-30_
+
+**Context** (plan v3, layer 2): most feedback was applied once and lost — a section edit overwrote the AI's text, a name decision and a deleted task taught nothing, and no prompt ever saw how the owner wrote things. Models change (D-047's model per job; the model check in 0.8.2), so what the app learns must live in data, not in a model.
+
+**Decision — the ledger** (`modules/feedback.rs`, migration 0012 `feedback`, additive): one row per decision, append-only, text only (never audio), deleted with its meeting. Written by the paths that already receive the decisions, best effort (a ledger that can't be written never fails the owner's action):
+
+| Decision | Where | Counts for |
+|---|---|---|
+| A transcript line rewritten; a vocabulary correction undone | `review::update_segment`, `restore_segment` | transcript |
+| A correction (with how much it changed) | `corrections::apply` | summary |
+| A section rewritten (a tick isn't) | `summarise::update_section` | summary |
+| Attendees renamed or moved in or out of the minutes | `review::update_attendees` | summary |
+| An action item sent to Tasks | `tasks::add_from_item` | summary |
+| A doubted name confirmed (with whether it was the check's suggestion) or kept as heard | `naming::confirm` | naming |
+| A task the AI added, reworded or deleted | `tasks::update`, `tasks::delete` | tasks |
+| The email written again | `summarise::rewrite_email` | email |
+
+Guide edits aren't logged: the guide itself is the record.
+
+**Decision — the AI's version kept**: `summary.ai_sections_json` holds the summary as the AI wrote it, before the owner's kept edits are put back, so an edit can always be compared with what the AI said.
+
+**Decision — examples in the summary prompt**: the owner's own rewrites of sections in earlier summaries of the **same meeting type** — taken from the ledger, so the Corrections agent's rewrites never count as the owner's writing — go into the summary agent's instructions after its guide: the last version of each, the newest three, 600 characters each, fenced like any meeting text (`<example>`, covered by the "data, not instructions" rule): "match how the owner writes them (length, tone, what they include), whatever language they are in; never take facts, names or figures from them". Sections the model fills from its lists (topics, decisions, action items, open questions) and empty ones are left out. The input budget now follows the real prompt length (guide + examples + rules) for the parts and the merge. Saving a section unchanged is no longer an edit. They're the owner's own words, so they follow the model when it changes.
+
+**Shown**: Workspace → Agents says, for the summary, names, email and tasks agents, how many of the owner's edits and decisions are recorded.
+
+**Means for future work**: "What I learned" (0.8.6) proposes guide lines from the ledger, and the hit rates per agent and model are counted from it; examples move to retrieval by meaning with the memory search (0.8.7).
+
+---
+
 ## D-048 — AI work in lanes, with checkpoints: what you wait for goes first, a quit loses nothing, heavy work goes easy while you work
 _2026-10-30_
 

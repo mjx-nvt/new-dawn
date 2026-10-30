@@ -15,6 +15,7 @@ use sqlx::{SqliteConnection, SqlitePool};
 use crate::error::AppError;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::profile;
+use crate::modules::feedback::{self, Feedback, Kind, Source};
 use crate::modules::meetings::summarise::{self, ActionItem, SummaryDoc, SummaryView};
 use crate::modules::meetings::tasks::{Who, shown_owner};
 use crate::modules::meetings::{self, Meeting, MeetingStatus, review};
@@ -228,6 +229,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
     if patch.priority.is_some_and(|p| p > 3) {
         bail!(AppError::invalid("A priority is 0 (none) to 3 (high)"));
     }
+    let before = agent_task(pool, id).await?;
     let due_on = match patch.due_on {
         Some(Some(day)) => Some(Some(
             NaiveDate::parse_from_str(day.trim(), "%Y-%m-%d")
@@ -245,7 +247,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?5 AND deleted_at IS NULL",
     )
-    .bind(title)
+    .bind(title.as_deref())
     .bind(due_on.is_some())
     .bind(due_on.flatten())
     .bind(patch.done)
@@ -256,15 +258,43 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
     if done.rows_affected() == 0 {
         bail!(AppError::not_found("No such task"));
     }
+    // A task the AI added, reworded by the owner.
+    if let (Some((old, meeting_id)), Some(new)) = (before, title.as_deref()) {
+        if old != new {
+            feedback::record(
+                pool,
+                Feedback {
+                    meeting_id: meeting_id.as_deref(),
+                    source: Source::Tasks,
+                    kind: Kind::TaskReworded,
+                    before: &old,
+                    after: new,
+                    context: serde_json::json!({}),
+                },
+            )
+            .await;
+        }
+    }
     if let Some(done) = patch.done {
         tick_item(pool, id, done).await?;
     }
     get(pool, id).await
 }
 
+/// The title and meeting of a task the AI added (None for one added by hand).
+async fn agent_task(pool: &SqlitePool, id: &str) -> Result<Option<(String, Option<String>)>> {
+    Ok(sqlx::query_as(
+        "SELECT title, meeting_id FROM task WHERE id = ? AND origin = 'auto' AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// Hides a task for good (a tombstone): a summary never makes it again, and "Add to Tasks" on
 /// its action item brings it back. The item keeps its link.
 pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
+    let before = agent_task(pool, id).await?;
     let done = sqlx::query(
         "UPDATE task SET deleted_at = coalesce(deleted_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
@@ -274,6 +304,21 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
     .await?;
     if done.rows_affected() == 0 {
         bail!(AppError::not_found("No such task"));
+    }
+    // A task the AI added that the owner didn't want.
+    if let Some((title, meeting_id)) = before {
+        feedback::record(
+            pool,
+            Feedback {
+                meeting_id: meeting_id.as_deref(),
+                source: Source::Tasks,
+                kind: Kind::TaskDeleted,
+                before: &title,
+                after: "",
+                context: serde_json::json!({}),
+            },
+        )
+        .await;
     }
     Ok(())
 }
@@ -405,6 +450,19 @@ pub async fn add_from_item(
         }
     };
     tx.commit().await?;
+    // The owner found this action item worth a task: the summary got it right.
+    feedback::record(
+        &pool,
+        Feedback {
+            meeting_id: Some(meeting_id),
+            source: Source::Summary,
+            kind: Kind::TaskAdded,
+            before: "",
+            after: &item.item,
+            context: serde_json::json!({ "owner": item.owner }),
+        },
+    )
+    .await;
     if item.task_id.as_deref() != Some(id.as_str()) {
         // The same owner and text are one task, and a task follows one item: an identical item
         // linked to it lets it go, so it follows the item added here (and its tick, set above).
@@ -567,7 +625,7 @@ mod tests {
                 ..SummaryDoc::default()
             };
             let json = serde_json::to_string(&doc).unwrap();
-            meetings::save_summary(&pool, "m1", &json, "S", "Body", None, false)
+            meetings::save_summary(&pool, "m1", &json, "S", "Body", None, false, None)
                 .await
                 .unwrap();
 
