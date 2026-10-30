@@ -1,3 +1,48 @@
+# Last Build — People, and what they promised you · release 0.9.1
+_2026-10-30_
+
+## What changed
+- **People** (sidebar, D-055). New page:
+  - first, **commitments waiting for you**: what someone said they would do in your meetings;
+  - then everyone your meetings named, grouped by organisation, each with when you last met them and their open commitments.
+- **Commitments come from your summaries.** After each summary, the action items that belong to someone else become commitments for you to confirm: who, what, and by when as said. Your own items still go to Tasks. Nothing extra runs: the summary already says who does what.
+  - **Confirm** keeps one open on the person's page until you mark it **Kept** or **Dropped**. **Dismiss** sets aside one that isn't really a commitment.
+  - **Look through earlier meetings** collects them from meetings summarised before this release.
+- **A page per person:**
+  - **Waiting for you**
+  - **What they owe you**
+  - the **Meetings** they attended
+  - your **Notes**
+  - **Kept and dropped**
+
+  Names and spellings are still managed in Workspace → People.
+- Deleting a meeting keeps the commitments you confirmed, as Tasks does. Deleting a person keeps their commitments under their name.
+- Checks: 154 Rust tests pass. New ones cover:
+  - a name finds one person or none: never a family name alone, never one of two namesakes;
+  - statuses only move forward, or back by Undo.
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app:
+  - Look through earlier meetings found 8 commitments in the two dev meetings.
+  - Confirming Ms. Chi's put it under "What they owe you" on her page.
+  - Her page lists the meeting that named her ("Chi" matched "Ms. Chi"), marked Involved.
+  - Dismissing Mr. Duc's moved it to Dismissed, with Undo.
+- Reviews:
+  - The migration review asked that the database keep your confirmed commitments if a meeting is deleted, and that merging two people move their commitments and notes. Both were done before the migration ever ran.
+  - The architecture review found no rule violations and three must-fixes, all fixed:
+    - commitments by organisations vanished once confirmed;
+    - commitments didn't follow name corrections;
+    - the check for "is this item yours" differed from the one Tasks uses.
+  - Its other points were taken too (see D-055).
+
+## Release
+- **v0.9.1** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new table.
+
+## Manual steps
+1. People → Look through earlier meetings, once, to collect the commitments from meetings summarised before this release.
+
+---
+
 # Last Build — Projects that keep themselves up to date · release 0.9.0
 _2026-10-30_
 

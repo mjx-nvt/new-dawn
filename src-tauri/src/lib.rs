@@ -50,6 +50,7 @@ mod kernel {
 mod modules {
     pub mod agents;
     pub mod brand;
+    pub mod crm;
     pub mod feedback;
     pub mod lessons;
     pub mod meetings;
@@ -73,6 +74,7 @@ mod commands {
     pub mod agents;
     pub mod backup;
     pub mod brand;
+    pub mod crm;
     pub mod glass;
     pub mod meetings;
     pub mod minutes;
@@ -190,6 +192,14 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::projects::apply_project_update,
             commands::projects::dismiss_project_update,
             commands::projects::find_project_updates,
+            commands::crm::list_people_cards,
+            commands::crm::list_waiting_commitments,
+            commands::crm::get_person,
+            commands::crm::set_commitment_status,
+            commands::crm::set_person_notes,
+            commands::crm::collect_commitments,
+            commands::crm::list_unlinked_commitments,
+            commands::crm::list_dismissed_commitments,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

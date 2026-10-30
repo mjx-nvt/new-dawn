@@ -443,6 +443,7 @@ pub async fn update_attendees(
             tracing::info!("attendee edit renamed {renamed} mention(s) in meeting {meeting_id}");
         }
         crate::modules::tasks::rename(pool, meeting_id, &pairs).await?;
+        crate::modules::crm::rename(pool, meeting_id, &pairs).await?;
         let mut email = current.email_md.clone();
         if people::rename_in_text(&mut email, &pairs) > 0 {
             super::save_email(pool, meeting_id, &current.email_subject, &email).await?;

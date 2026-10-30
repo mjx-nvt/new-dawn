@@ -419,6 +419,7 @@ pub async fn confirm(
         .collect();
     let renamed = people::rename_in_doc(&mut current.doc, &pairs);
     crate::modules::tasks::rename(pool, meeting_id, &pairs).await?;
+    crate::modules::crm::rename(pool, meeting_id, &pairs).await?;
     let mut email = current.email_md.clone();
     if people::rename_in_text(&mut email, &pairs) > 0 {
         super::save_email(pool, meeting_id, &current.email_subject, &email).await?;

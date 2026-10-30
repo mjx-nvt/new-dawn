@@ -2,6 +2,23 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-055 — People become dossiers: commitments from others' action items, last contact from attendance
+_2026-10-30_
+
+**Context** (plan v3 §5, CRM): the owner works with the same people across many meetings; what they promised and when the owner last met them lived only inside summaries.
+
+**Decision — commitments without a model** (migration 0017 `commitment`, `person.notes`): the summary already says who will do what by when (its action items, D-038). After each summary, every action item whose owner isn't the meeting owner — not linked to a task, not the owner's name or a part of it, not "unassigned"/"everyone" — becomes a **proposed commitment**: who (matched to a person of the people memory by name or another spelling, else kept as said: a person or an organisation), what, the date as said, and the meeting. Once per item per meeting (a re-run summary adds only new ones). The owner **confirms** it (open), then marks it **kept** or **dropped**, or **dismisses** it (not a commitment). Like the minutes, this step is rules over what the summary agent already wrote: no second model call, nothing to wait for. **Look through earlier meetings** does the same for meetings summarised before.
+
+**Decision — people as dossiers**: **People** in the sidebar (with the number of commitments waiting) lists the commitments waiting across everyone, then everyone in the people memory grouped by organisation, each with when the owner last met them (the newest summarised meeting where they attended) and their open commitments. A person's page: waiting, what they owe, the meetings they attended, the owner's notes, kept and dropped. Organisations are the people memory's organisation names, not a table of their own; names and spellings are still managed in Workspace → People.
+
+**Deleting**: a person deleted keeps their commitments by name; a meeting deleted keeps the commitments the owner decided (unlinked, the owner's record, like tasks, D-042) and takes the ones still proposed.
+
+**Review fixes taken** (migration and architecture reviews): the database keeps a decided commitment when its meeting goes (SET NULL) and the trigger deletes only the waiting ones, so a skipped trigger can't lose the owner's record; merging two people moves the commitments and joins the notes; whether an item is the owner's uses the same rules as Tasks (`Who`), and without the owner's name nothing is proposed; items already done aren't proposed; a person is linked only when exactly one matches (the summary's same-person rule — never a family name alone, never one of two namesakes); names corrected in a meeting (naming check, attendee edit, corrections) carry over to its commitments, like its tasks, and edited or corrected action items re-sync them; a re-run summary drops the waiting commitments it no longer has; statuses only move forward (Undo back to waiting or open); confirmed commitments of organisations and unknown names show under Others, dismissed ones with Undo; the owner isn't in their own People list; one transaction per meeting; the cards carry the AI marker (the action items are the summary agent's words). Confirm and Dismiss aren't recorded in the feedback ledger yet: there is no agent whose guide they would teach.
+
+**Means for future work**: the Email expert (0.9.2) adds commitments from emails; the Cockpit (0.9.3) shows open commitments across workspaces. Dates stay as said — a commitment has no calendar date to sort by until an expert resolves it.
+
+---
+
 ## D-054 — Experts propose, the owner applies: Projects first
 _2026-10-30_
 

@@ -86,6 +86,7 @@ pub fn cancel_summary(jobs: State<'_, SummaryJobs>, meeting_id: String) -> Resul
 #[tauri::command]
 #[specta::specta]
 pub async fn update_summary_section(
+    app: AppHandle,
     hub: State<'_, WorkspaceHub>,
     slug: String,
     meeting_id: String,
@@ -93,14 +94,17 @@ pub async fn update_summary_section(
     markdown: String,
 ) -> Result<SummaryView, AppError> {
     let workspace = hub.workspace(&slug).await?;
-    Ok(summarise::update_section(
+    let view = summarise::update_section(
         &hub.pool(&slug)?,
         &workspace.name,
         &meeting_id,
         index,
         &markdown,
     )
-    .await?)
+    .await?;
+    // Edited action items: the commitments follow, in the background (D-055).
+    crate::modules::crm::follow(&app, &slug, &meeting_id);
+    Ok(view)
 }
 
 /// Puts the email on the clipboard as HTML, with the Markdown text as the plain-text fallback.

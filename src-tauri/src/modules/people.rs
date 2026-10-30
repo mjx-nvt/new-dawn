@@ -237,6 +237,20 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
     .bind(&k.id)
     .execute(&mut *tx)
     .await?;
+    // The merged-away person's commitments and notes move to the one kept (D-055).
+    sqlx::query("UPDATE commitment SET person_id = ?1 WHERE person_id = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "UPDATE person SET notes = trim(notes || char(10) || char(10) || \
+         (SELECT notes FROM person WHERE id = ?2), char(10)) WHERE id = ?1",
+    )
+    .bind(&k.id)
+    .bind(&o.id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query("DELETE FROM person WHERE id = ?")
         .bind(&o.id)
         .execute(&mut *tx)

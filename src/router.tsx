@@ -12,6 +12,8 @@ import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboardi
 import TasksPage from "./modules/tasks/TasksPage";
 import ProjectsPage from "./modules/projects/ProjectsPage";
 import ProjectPage from "./modules/projects/ProjectPage";
+import PeoplePage from "./modules/people/PeoplePage";
+import PersonPage from "./modules/people/PersonPage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
 import ShellMockup from "./modules/dev/ShellMockup";
 import TenantSetupPage, { SETUP_STEPS, type SetupSearch } from "./modules/tenant-setup/TenantSetupPage";
@@ -97,6 +99,21 @@ const projectRoute = createRoute({
   staticData: { title: "Project", breadcrumb: "Projects" },
 });
 
+// People as dossiers: last contact, commitments, notes (D-055).
+const peopleRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/people",
+  component: PeoplePage,
+  staticData: { title: "People" },
+});
+
+const personRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/people/$personId",
+  component: PersonPage,
+  staticData: { title: "Person", breadcrumb: "People" },
+});
+
 const workspaceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/workspace",
@@ -148,7 +165,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

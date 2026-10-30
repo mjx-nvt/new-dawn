@@ -778,7 +778,7 @@ pub(super) const FAMILY_NAMES: &[&str] = &[
 /// in the other ("Lan" and "Dr. Lan"; "Tien Nguyen" and "Nguyễn Văn Tiến"). A shared surname
 /// isn't enough — "Nguyễn Thị Lan" is someone else, and so is "Mr. Nguyen", who has nothing
 /// but a family name.
-pub(super) fn same_person(a: &str, b: &str) -> bool {
+pub(crate) fn same_person(a: &str, b: &str) -> bool {
     let (words_a, words_b) = (name_words(a), name_words(b));
     let within = |x: &[String], y: &[String]| {
         x.iter().any(|w| !FAMILY_NAMES.contains(&w.as_str())) && x.iter().all(|w| y.contains(w))
@@ -1384,9 +1384,11 @@ pub async fn start(
             };
             crate::kernel::notify::show(&app, heading, &body);
         }
-        // The Projects expert reads the new summary in the background (D-054).
+        // The Projects expert reads the new summary in the background (D-054); others' action
+        // items become proposed commitments (D-055).
         if result.is_ok() {
             crate::modules::projects::follow(&app, &slug, &meeting_id);
+            crate::modules::crm::follow(&app, &slug, &meeting_id);
         }
         let error = result.err().map(AppError::from);
         let _ = SummaryFinished {

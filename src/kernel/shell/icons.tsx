@@ -68,6 +68,13 @@ export const CheckIcon = () => (
   </Icon>
 );
 
+export const PeopleIcon = () => (
+  <Icon>
+    <circle cx="6" cy="5.5" r="2.5" />
+    <path d="M1.5 13.5c.6-2.3 2.3-3.5 4.5-3.5s3.9 1.2 4.5 3.5M10.5 3.2a2.5 2.5 0 0 1 0 4.6M12 10.3c1.2.5 2 1.6 2.5 3.2" />
+  </Icon>
+);
+
 export const ProjectsIcon = () => (
   <Icon>
     <path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" />

@@ -179,6 +179,21 @@ export const commands = {
 	 *  updates it proposed.
 	 */
 	findProjectUpdates: (slug: string, meetingId: string) => typedError<number, AppError>(__TAURI_INVOKE("find_project_updates", { slug, meetingId })),
+	/**  The People page: everyone in the people memory, with last contact and commitments. */
+	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
+	/**  Commitments from new summaries, waiting for the owner. */
+	listWaitingCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_waiting_commitments", { slug })),
+	/**  A person's page: meetings, commitments, notes. */
+	getPerson: (slug: string, id: string) => typedError<PersonDossier_Serialize, AppError>(__TAURI_INVOKE("get_person", { slug, id })),
+	/**  Confirm, kept, dropped or dismissed. */
+	setCommitmentStatus: (slug: string, id: string, status: CommitmentStatus) => typedError<Commitment_Serialize, AppError>(__TAURI_INVOKE("set_commitment_status", { slug, id, status })),
+	setPersonNotes: (slug: string, id: string, notes: string) => typedError<null, AppError>(__TAURI_INVOKE("set_person_notes", { slug, id, notes })),
+	/**  "Look through earlier meetings": their others' action items become commitments to confirm. */
+	collectCommitments: (slug: string) => typedError<number, AppError>(__TAURI_INVOKE("collect_commitments", { slug })),
+	/**  Confirmed commitments of someone the people memory doesn't know (an organisation, a name). */
+	listUnlinkedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_unlinked_commitments", { slug })),
+	/**  The newest dismissed, for Undo. */
+	listDismissedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_dismissed_commitments", { slug })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -665,6 +680,46 @@ export type Clarity =
 /**  Not translated: several voices at once or a weak signal. */
 "unclear";
 
+export type Commitment = Commitment_Serialize | Commitment_Deserialize;
+
+export type CommitmentStatus = 
+/**  From a new summary, waiting for the owner. */
+"proposed" | 
+/**  The owner confirmed it: someone owes it. */
+"open" | "kept" | "dropped" | 
+/**  Not a commitment. */
+"dismissed";
+
+export type Commitment_Deserialize = {
+	id: string,
+	person_id?: string | null,
+	person_name: string,
+	what: string,
+	/**  The date as said ("" = none). */
+	due_text: string,
+	meeting_id?: string | null,
+	meeting_title?: string | null,
+	held_on?: string | null,
+	status: CommitmentStatus,
+	created_at: string,
+	updated_at: string,
+};
+
+export type Commitment_Serialize = {
+	id: string,
+	person_id: string | null,
+	person_name: string,
+	what: string,
+	/**  The date as said ("" = none). */
+	due_text: string,
+	meeting_id: string | null,
+	meeting_title: string | null,
+	held_on: string | null,
+	status: CommitmentStatus,
+	created_at: string,
+	updated_at: string,
+};
+
 export type Converter = "word" | "libreoffice" | "pages";
 
 export type ConverterInfo = ConverterInfo_Serialize | ConverterInfo_Deserialize;
@@ -1036,6 +1091,14 @@ export type MenuAction = "switch_workspace" | "toggle_sidebar" | "open_tenant_se
 /**  File → New Live Translation… (⇧⌘R): the Live page's start sheet (D-041). */
 "new_live";
 
+export type MetIn = {
+	id: string,
+	title: string,
+	held_on: string,
+	/**  Present (else named among those involved). */
+	attended: boolean,
+};
+
 export type MinutesExport = MinutesExport_Serialize | MinutesExport_Deserialize;
 
 export type MinutesExport_Deserialize = {
@@ -1291,6 +1354,48 @@ export type Person = {
 	/**  Other spellings that mean this person. */
 	aliases: string[],
 	updated_at: string,
+};
+
+/**  A person in the People list. */
+export type PersonCard = PersonCard_Serialize | PersonCard_Deserialize;
+
+/**  A person in the People list. */
+export type PersonCard_Deserialize = {
+	person: Person,
+	/**  The newest meeting they attended. */
+	last_contact?: MetIn | null,
+	open: number,
+	waiting: number,
+};
+
+/**  A person in the People list. */
+export type PersonCard_Serialize = {
+	person: Person,
+	/**  The newest meeting they attended. */
+	last_contact: MetIn | null,
+	open: number,
+	waiting: number,
+};
+
+/**  A person's page. */
+export type PersonDossier = PersonDossier_Serialize | PersonDossier_Deserialize;
+
+/**  A person's page. */
+export type PersonDossier_Deserialize = {
+	person: Person,
+	notes: string,
+	/**  The meetings that named them, newest first. */
+	meetings: MetIn[],
+	commitments: Commitment_Deserialize[],
+};
+
+/**  A person's page. */
+export type PersonDossier_Serialize = {
+	person: Person,
+	notes: string,
+	/**  The meetings that named them, newest first. */
+	meetings: MetIn[],
+	commitments: Commitment_Serialize[],
 };
 
 export type PersonInput = PersonInput_Serialize | PersonInput_Deserialize;
