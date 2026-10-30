@@ -33,6 +33,17 @@ pub async fn search_meetings(
     Ok(meetings::search(&hub.pool(&slug)?, &query).await?)
 }
 
+/// Search by meaning (D-053): the meetings closest to `query`, whatever words they used.
+#[tauri::command]
+#[specta::specta]
+pub async fn search_by_meaning(
+    hub: State<'_, WorkspaceHub>,
+    slug: String,
+    query: String,
+) -> Result<crate::modules::memory::MeaningSearch, AppError> {
+    Ok(crate::modules::memory::search(&hub.pool(&slug)?, &query).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn list_meeting_types(

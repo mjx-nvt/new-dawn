@@ -88,6 +88,20 @@ export function useSearchMeetings(slug: string | undefined, query: string) {
   });
 }
 
+/** Search by meaning (D-053): meetings close to what the words mean, whatever words they used,
+ *  with how many meetings are indexed so far. Needs the embedding model; off below three characters. */
+export function useSearchByMeaning(slug: string | undefined, query: string, enabled: boolean) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: ["meeting-meaning", slug ?? "", q],
+    queryFn: () => unwrap(commands.searchByMeaning(slug ?? "", q)),
+    enabled: enabled && !!slug && q.length >= 3,
+    placeholderData: (previous) => previous,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 export function useMeetingTypes(slug: string | undefined) {
   return useQuery({
     queryKey: keys.types(slug ?? ""),

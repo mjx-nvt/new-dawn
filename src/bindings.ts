@@ -44,6 +44,8 @@ export const commands = {
 	listMeetingTypes: (slug: string) => typedError<MeetingTypeSummary[], AppError>(__TAURI_INVOKE("list_meeting_types", { slug })),
 	/**  Title, transcript and summary search in one workspace (FTS5). */
 	searchMeetings: (slug: string, query: string) => typedError<MeetingHit_Serialize[], AppError>(__TAURI_INVOKE("search_meetings", { slug, query })),
+	/**  Search by meaning (D-053): the meetings closest to `query`, whatever words they used. */
+	searchByMeaning: (slug: string, query: string) => typedError<MeaningSearch_Serialize, AppError>(__TAURI_INVOKE("search_by_meaning", { slug, query })),
 	getSummary: (slug: string, meetingId: string) => typedError<SummaryView_Serialize | null, AppError>(__TAURI_INVOKE("get_summary", { slug, meetingId })),
 	/**
 	 *  (Re)writes the executive summary; `deep` turns Qwen's thinking on (slower, D-021);
@@ -859,6 +861,25 @@ export type LiveStatus_Serialize = {
 	overheard: number,
 };
 
+/**  What a search by meaning found, and how much of the workspace it could look at. */
+export type MeaningSearch = MeaningSearch_Serialize | MeaningSearch_Deserialize;
+
+/**  What a search by meaning found, and how much of the workspace it could look at. */
+export type MeaningSearch_Deserialize = {
+	hits: MeetingHit_Deserialize[],
+	/**  Meetings indexed with the current model, of those with a transcript. */
+	indexed: number,
+	meetings: number,
+};
+
+/**  What a search by meaning found, and how much of the workspace it could look at. */
+export type MeaningSearch_Serialize = {
+	hits: MeetingHit_Serialize[],
+	/**  Meetings indexed with the current model, of those with a transcript. */
+	indexed: number,
+	meetings: number,
+};
+
 export type Meeting = Meeting_Serialize | Meeting_Deserialize;
 
 export type MeetingFigures = MeetingFigures_Serialize | MeetingFigures_Deserialize;
@@ -1161,8 +1182,10 @@ export type OllamaStatus = {
 	model_installed: boolean,
 	/**  The selected model. */
 	model: string,
-	/**  Every model Ollama has, for the picker. */
+	/**  Every text model Ollama has, for the picker (embedding models aren't text models). */
 	installed: InstalledModel[],
+	/**  The embedding model for search by meaning is pulled (D-053). */
+	embed_installed: boolean,
 };
 
 export type OpenIssue = OpenIssue_Serialize | OpenIssue_Deserialize;

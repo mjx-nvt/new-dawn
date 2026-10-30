@@ -19,6 +19,8 @@ import MenuButton from "../../kernel/shell/MenuButton";
 import styles from "./ModelsPanel.module.css";
 import ModelCheckSection from "./ModelCheck";
 import TextModels from "./TextModels";
+import { useOllamaPull } from "../../kernel/bridge/onboarding";
+import { useOllamaStatus, useRemoveOllamaModel } from "../../kernel/bridge/summary";
 
 const MB = 1024 * 1024;
 
@@ -41,6 +43,12 @@ export default function ModelsPanel() {
         <h2 className="sectionTitle">Text model</h2>
         <p className="sectionSubtitle">Writes the summaries, through Ollama on this Mac</p>
         <TextModels />
+      </section>
+
+      <section className="section">
+        <h2 className="sectionTitle">Search by meaning</h2>
+        <p className="sectionSubtitle">Finds meetings by what was meant, in Vietnamese or English, through Ollama on this Mac</p>
+        <EmbedModel />
       </section>
 
       <section className="section">
@@ -293,5 +301,57 @@ function ModelRow({ model, progress, error }: { model: ModelInfo; progress?: Dow
         />
       </div>
     </li>
+  );
+}
+
+
+/** The embedding model behind search by meaning (D-053): download it through Ollama; once there,
+ *  meetings are indexed in the background when the Mac is free. */
+function EmbedModel() {
+  const status = useOllamaStatus();
+  const pull = useOllamaPull();
+  const remove = useRemoveOllamaModel();
+  const s = status.data;
+  if (!s) return <div className={`${styles.ghost} ghostCard`} />;
+  const pulling = pull.running && pull.model === "bge-m3";
+  const percent = pull.totalMb > 0 ? Math.round((pull.completedMb / pull.totalMb) * 100) : 0;
+  return (
+    <ul className={styles.list}>
+      <li className={`card ${styles.row}`}>
+        <div className={styles.main}>
+          <p className={styles.name}>
+            bge-m3
+            <span className="fieldHint">1.2 GB</span>
+            {s.embed_installed && <span className="chip chipPrimary">Installed</span>}
+          </p>
+          <p className="fieldHint">
+            {s.embed_installed
+              ? "Your meetings are indexed in the background when the Mac is free; search on the Meetings page."
+              : !s.running
+                ? "Needs Ollama running on this Mac."
+                : pulling
+                  ? `Downloading… ${percent} %`
+                  : "Not downloaded. Text search works without it."}
+          </p>
+          {pull.error && pull.model === "bge-m3" && <p className="formError">{pull.error.message}</p>}
+          {remove.error && <p className="formError">{remove.error.message}</p>}
+        </div>
+        {s.embed_installed && (
+          <div className={styles.actions}>
+            <MenuButton
+              label="More actions for bge-m3"
+              items={[{ label: "Remove from Ollama", onSelect: () => remove.mutate("bge-m3"), danger: true, disabled: remove.isPending }]}
+            />
+          </div>
+        )}
+        {!s.embed_installed && s.running && (
+          <div className={styles.actions}>
+            <button type="button" className="btn btnPrimary btnCompact" disabled={pulling} aria-busy={pulling || undefined} onClick={() => pull.start("bge-m3")}>
+              {pulling ? "Downloading…" : "Download"}
+            </button>
+          </div>
+        )}
+      </li>
+    </ul>
   );
 }

@@ -53,6 +53,7 @@ mod modules {
     pub mod feedback;
     pub mod lessons;
     pub mod meetings;
+    pub mod memory;
     pub mod model_check;
     pub mod people;
     pub mod tasks;
@@ -123,6 +124,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::models::set_meeting_reference,
             commands::meetings::list_meeting_types,
             commands::meetings::search_meetings,
+            commands::meetings::search_by_meaning,
             commands::summary::get_summary,
             commands::summary::summarise_meeting,
             commands::summary::cancel_summary,
@@ -415,6 +417,7 @@ pub fn run() {
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
             modules::lessons::spawn(app.handle());
+            modules::memory::spawn(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 for (slug, jobs) in interrupted {

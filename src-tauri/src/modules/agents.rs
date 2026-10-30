@@ -381,12 +381,20 @@ mod tests {
         assert!(guide(dir.path(), Agent::Summary).starts_with("# Summary agent"));
         reset(dir.path(), Agent::Summary).unwrap(); // twice is fine
         // Approved lines come after the guide, under their heading, and survive a reset.
-        set_learned(dir.path(), Agent::Summary, &["Keep the overview short.".into()]).unwrap();
+        set_learned(
+            dir.path(),
+            Agent::Summary,
+            &["Keep the overview short.".into()],
+        )
+        .unwrap();
         reset(dir.path(), Agent::Summary).unwrap();
         let told = guide(dir.path(), Agent::Summary);
         assert!(told.starts_with("# Summary agent"));
         assert!(told.ends_with(&format!("{LEARNED_HEADING}\n- Keep the overview short.")));
-        assert_eq!(learned(dir.path(), Agent::Summary), ["Keep the overview short."]);
+        assert_eq!(
+            learned(dir.path(), Agent::Summary),
+            ["Keep the overview short."]
+        );
         set_learned(dir.path(), Agent::Summary, &[]).unwrap();
         assert!(!guide(dir.path(), Agent::Summary).contains(LEARNED_HEADING));
         for agent in Agent::ALL {

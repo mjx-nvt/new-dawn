@@ -2109,6 +2109,7 @@ mod tests {
                     size_mb: 1,
                 })
                 .collect(),
+            embed_installed: false,
         };
         let both = ollama(true, &["qwen3.5:4b", "qwen3.5:9b"]);
         assert_eq!(choose_model(&both, None).unwrap(), "qwen3.5:4b");

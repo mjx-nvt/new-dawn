@@ -1,3 +1,37 @@
+# Last Build — Search your meetings by meaning · release 0.8.5
+_2026-10-30_
+
+## What changed
+- **Search by meaning** (D-053). Searching on the Meetings page now also shows **Related by meaning**: meetings close to what you typed that don't use your words, in Vietnamese or English. For example, "concrete core testing" finds the Vietnamese meeting about drilling concrete cores. Each result shows its closest passage and opens the transcript there. The page's filters apply to these results too.
+- It needs the **bge-m3** model (1.2 GB): Settings → Models → Search by meaning → Download. Ollama fetches it. Text search works without it.
+- Your meetings are indexed in the background, when your Mac is free, like the other catch-up work. After that, a changed transcript or summary is indexed again, but only the parts that changed.
+- Embedding models no longer show in the text-model lists (they can't write summaries). Settings can remove bge-m3 again.
+- When Ollama is busy writing a summary, a search by meaning may say so and give up after 20 seconds. The text results are always there.
+- Checks: 150 Rust tests pass. New ones cover:
+  - lines become pieces of a few lines, and a long line is cut;
+  - the similarity measure is safe on odd vectors.
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app:
+  - The two dev meetings were indexed in the background: 129 pieces of the 88-minute meeting in 7 seconds, 8 of the short one in 2.
+  - "load-bearing capacity of the structure" matches no meeting by its words, but Related by meaning finds "Building defects review" at 59:36. That's the Vietnamese passage about drilling cores to test compressive strength.
+  - "who pays to repair the cracks" finds the same meeting through its summary.
+  - Settings → Models shows bge-m3 as installed, with Remove.
+- Reviews:
+  - The migration review asked for one combined index instead of two, and for the "checked" time to be taken before the pieces are read. Both were done before the migration ever ran.
+  - The architecture review found no rule violations and two must-fixes, both fixed:
+    - a meeting with nothing to index would have been retried every 30 minutes;
+    - one meeting that failed would have stopped a workspace's indexing and left its Run now on.
+  - Its other points were taken too: streaming search, busy vs not running, unloading the text model first, making way for your work, logging, Remove, and the page's states (see D-053).
+
+## Release
+- **v0.8.5** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new table.
+
+## Manual steps
+1. To search by meaning: Settings → Models → Search by meaning → Download (1.2 GB). Your meetings are indexed in the following half hour, when the Mac is free (or Run now in the ✦ list).
+
+---
+
 # Last Build — The agents learn from your edits, and you see how they're doing · release 0.8.4
 _2026-10-30_
 

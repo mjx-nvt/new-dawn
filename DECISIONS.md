@@ -2,6 +2,25 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-053 — Search by meaning: bge-m3 through Ollama, vectors in the workspace, compared in Rust
+_2026-10-30_
+
+**Context** (plan v3 §3.5): search finds meetings by their words (FTS5). A meeting about "khoan lõi bê tông" isn't found by "concrete core testing", and "partner onboarding" misses the call where nobody said those words.
+
+**Decision — the model**: **bge-m3** (BAAI, MIT, 567M parameters, 1.2 GB) through Ollama's `/api/embed`, behind `ollama::embed` in the gateway. It is multilingual: an English query and a Vietnamese meeting meet in one space. On the dev meetings, the right piece ranked first for each test query (concrete core testing → the Vietnamese drilling discussion 0.48, against 0.29–0.40 for unrelated text). Downloaded through Ollama from Settings → Models → Search by meaning (Ollama fetches it; the app still only talks to localhost). Embedding models are kept out of every text-model list.
+
+**Decision — storage and search without new dependencies**: the plan named `sqlite-vec`; it is a C extension, and this build may not add native code fetched from outside (see D-051), so vectors are plain f32 BLOBs in `embedding` (migration 0015) and a search compares the query with every vector of the workspace in Rust (cosine; about 150 pieces of 4 KB an hour of meetings — milliseconds for hundreds of meetings). An index (sqlite-vec, or an in-memory one) waits until a workspace is big enough to need it.
+
+**Decision — what is indexed, and when**: a meeting's transcript in pieces of consecutive lines up to ~800 characters (each keeps where it starts, so a result opens the transcript there) and its summary by section. Each piece is hashed: when a transcript is run again or a section edited, only new pieces are embedded and gone ones deleted. A background loop (every 30 minutes, first after three) indexes changed meetings, each in its own catch-up turn — it waits for a free Mac (D-050) and lets the owner's work go first; Run now is in the AI activity list. A search embeds the query directly (one short text, no queue turn) and shows, under the text results on the Meetings page, **Related by meaning**: up to eight meetings the words didn't find whose closest piece scores 0.42 or more, with that piece as the snippet and the AI marker; the page's filters apply to them too.
+
+**An exception to "one model at a time"**: a search embeds its query without a queue turn (one short text, like D-046's translations): it can run beside a summary being written. If Ollama is busy it times out after 20 s and says "busy", not "not running"; the text results stay. The indexer holds a catch-up turn, unloads the text model first and makes way for the owner's work between batches; `unload()` before Whisper also drops bge-m3. Each indexed meeting writes an `ai_log` row (agent "memory").
+
+**Review fixes taken** (migration and architecture reviews): one check row per meeting (`embedding_check`) says when it was last indexed and with which model, so a meeting with nothing to embed counts as done and checking never rewrites its vectors; a composite index replaced two single ones; the check time is taken before the pieces are read; one meeting that fails is logged and skipped (Ollama gone or the model removed end the sweep), and Run now is let go however the sweep ends; a search reads the vectors a page at a time inside one snapshot and fetches only the winners' text; a line longer than a piece is cut; embedding models (any `bge-m3` tag or `*embed*`) stay out of the text-model lists, and bge-m3 can be removed from Settings; the Meetings page says when Ollama isn't running, when the model isn't downloaded, and how many meetings are indexed so far.
+
+**Means for future work**: the summary's examples (D-049) can be chosen by similarity instead of recency; the experts (D-054) can find related meetings for a project or a person the same way. Pieces are packed greedily, so an edited transcript line re-embeds the pieces after it (seconds); a fixed time grid would avoid it if it matters.
+
+---
+
 ## D-052 — "What I learned": the ledger proposes guide lines, the owner approves; a number per agent and model
 _2026-10-30_
 

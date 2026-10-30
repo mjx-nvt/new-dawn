@@ -1,5 +1,9 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useMeetings, useMeetingTypes, useSearchMeetings, useTranscriptionProgress, type Meeting } from "../../kernel/bridge/meetings";
+import { useEffect, useState } from "react";
+import { useMeetings, useMeetingTypes, useSearchByMeaning, useSearchMeetings, useTranscriptionProgress, type Meeting, type MeetingHit } from "../../kernel/bridge/meetings";
+import { openSettings } from "../../kernel/bridge/settings";
+import { openOllamaApp, useOllamaStatus } from "../../kernel/bridge/summary";
+import { SparkleIcon } from "../../kernel/shell/icons";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { formatClock, formatWhen } from "./format";
 import ImportAudioSheet from "./ImportAudioSheet";
@@ -41,6 +45,15 @@ export default function MeetingsPage() {
   const { range, rest } = parseDateQuery(q);
   const textSearch = useSearchMeetings(workspace?.slug, rest);
   const searching = rest.trim().length > 0;
+  // By meaning, once typing pauses (each query is a call to the embedding model).
+  const [meaningQuery, setMeaningQuery] = useState(rest.trim());
+  useEffect(() => {
+    const t = setTimeout(() => setMeaningQuery(rest.trim()), 400);
+    return () => clearTimeout(t);
+  }, [rest]);
+  const ollama = useOllamaStatus();
+  const embedReady = !!ollama.data?.running && !!ollama.data.embed_installed;
+  const meaning = useSearchByMeaning(workspace?.slug, meaningQuery, searching && embedReady);
 
   const set = (next: Partial<MeetingsSearch>, replace = true) => {
     const merged: MeetingsSearch = { ...search, ...next };
@@ -69,6 +82,10 @@ export default function MeetingsPage() {
   const loading = searching ? textSearch.isPending : meetings.isPending;
   const error = searching ? textSearch.error : meetings.error;
   const filtering = filters.status !== "all" || filters.type !== "" || filters.when !== "all" || !!range || searching;
+  // By meaning: what the words didn't find, narrowed by the same filters.
+  const meaningHits = meaning.data?.hits ?? [];
+  const kept = new Set(applyFilters(meaningHits.map((h) => h.meeting), filters, range).map((m) => m.id));
+  const related = meaningHits.filter((h) => kept.has(h.meeting.id) && !byId.has(h.meeting.id));
   const total = meetings.data?.length ?? 0;
 
   return (
@@ -147,13 +164,27 @@ export default function MeetingsPage() {
         ))
       ) : (
         <section className={styles.group}>
-          <p className="ghostText">{loading ? "Loading…" : filtering ? "No meetings match" : "Not yet captured — record a call or import audio"}</p>
-          <div className={styles.list}>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className={`${styles.slot} ghostCard`} />
-            ))}
-          </div>
+          <p className="ghostText">
+            {loading ? "Loading…" : related.length ? "No meeting uses these words" : filtering ? "No meetings match" : "Not yet captured — record a call or import audio"}
+          </p>
+          {!related.length && (
+            <div className={styles.list}>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className={`${styles.slot} ghostCard`} />
+              ))}
+            </div>
+          )}
         </section>
+      )}
+
+      {searching && rest.trim().length >= 3 && ollama.data && (
+        <ByMeaning
+          hits={related}
+          state={!ollama.data.running ? "no-ollama" : !ollama.data.embed_installed ? "no-model" : "ready"}
+          indexed={meaning.data ? [meaning.data.indexed, meaning.data.meetings] : null}
+          loading={meaning.isFetching}
+          error={meaning.error?.message ?? null}
+        />
       )}
 
       {importOpen && <ImportAudioSheet onClose={() => set({ import: undefined })} />}
@@ -201,5 +232,67 @@ function MeetingRow({ meeting, snippet, atMs }: RowProps) {
       </div>
       <StatusChip status={meeting.status} />
     </Link>
+  );
+}
+
+/** Search by meaning (D-053): the meetings close to the search that its words didn't find —
+ *  found by the embedding model on this Mac, so they carry the AI marker. Says why when it can't
+ *  look (Ollama not running, the model not downloaded) and how much is indexed so far. */
+function ByMeaning({
+  hits,
+  state,
+  indexed,
+  loading,
+  error,
+}: {
+  hits: MeetingHit[];
+  state: "no-ollama" | "no-model" | "ready";
+  indexed: [number, number] | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className={styles.group}>
+      <h2 className={styles.groupTitle}>Related by meaning</h2>
+      {state === "no-ollama" ? (
+        <p className="fieldHint">
+          Searching by meaning needs Ollama running on this Mac.{" "}
+          <button type="button" className={styles.clear} onClick={() => void openOllamaApp()}>
+            Open Ollama
+          </button>
+        </p>
+      ) : state === "no-model" ? (
+        <p className="fieldHint">
+          Finds meetings by what was meant, in Vietnamese or English, even without the words.{" "}
+          <button type="button" className={styles.clear} onClick={() => void openSettings("models")}>
+            Download bge-m3 in Settings → Models
+          </button>
+        </p>
+      ) : (
+        <>
+          <p className="fieldHint aiMark">
+            <SparkleIcon /> Found by meaning, not by the words — bge-m3 on this Mac
+            {indexed && indexed[0] < indexed[1] ? ` · ${indexed[0]} of ${indexed[1]} meetings indexed so far, the rest when your Mac is free` : ""}
+          </p>
+          {error && <p className="formError">{error}</p>}
+          {hits.length ? (
+            <div className={styles.list}>
+              {hits.map((h) => (
+                <MeetingRow key={h.meeting.id} meeting={h.meeting} snippet={h.snippet} atMs={h.at_ms} />
+              ))}
+            </div>
+          ) : (
+            <>
+              <p className="ghostText">{loading ? "Looking…" : "Nothing else close in meaning"}</p>
+              <div className={styles.list}>
+                {[0, 1].map((i) => (
+                  <div key={i} className={`${styles.slot} ghostCard`} />
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </section>
   );
 }

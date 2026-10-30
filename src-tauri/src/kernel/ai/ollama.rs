@@ -133,8 +133,10 @@ pub struct OllamaStatus {
     pub model_installed: bool,
     /// The selected model.
     pub model: String,
-    /// Every model Ollama has, for the picker.
+    /// Every text model Ollama has, for the picker (embedding models aren't text models).
     pub installed: Vec<InstalledModel>,
+    /// The embedding model for search by meaning is pulled (D-053).
+    pub embed_installed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -151,6 +153,78 @@ fn client(read_timeout: Duration) -> Result<reqwest::Client> {
         .connect_timeout(Duration::from_secs(5))
         .read_timeout(read_timeout)
         .build()?)
+}
+
+/// The embedding model behind search by meaning (D-053): multilingual, so Vietnamese and English
+/// meet in one space; 1024 numbers per text.
+pub const EMBED_MODEL: &str = "bge-m3";
+/// Texts per request.
+const EMBED_BATCH: usize = 16;
+
+/// `bge-m3` and `bge-m3:latest` are the same model.
+pub fn is_embed_model(name: &str) -> bool {
+    name == EMBED_MODEL || name.strip_suffix(":latest") == Some(EMBED_MODEL)
+}
+
+/// An embedding model can't write: kept out of every text-model list.
+fn is_embedding(name: &str) -> bool {
+    name.starts_with("bge-m3") || name.contains("embed")
+}
+
+/// Vectors for `texts` from the embedding model, in order (D-053). Takes no queue turn itself: a
+/// search's one short text runs beside anything, and the background indexer holds a turn around
+/// its calls. The model (1.2 GB) leaves memory two minutes after its last use.
+pub async fn embed(texts: &[String], timeout: Duration) -> Result<Vec<Vec<f32>>> {
+    #[derive(Deserialize)]
+    struct Embedded {
+        embeddings: Vec<Vec<f32>>,
+    }
+    let client = client(timeout)?;
+    let mut out = Vec::with_capacity(texts.len());
+    for batch in texts.chunks(EMBED_BATCH) {
+        let response = client
+            .post(format!("{BASE}/api/embed"))
+            .json(&serde_json::json!({ "model": EMBED_MODEL, "input": batch, "keep_alive": "2m" }))
+            .send()
+            .await
+            .map_err(|err| {
+                if err.is_timeout() {
+                    // Another job holds Ollama (a summary being written): not a failure of Ollama.
+                    AppError::new(
+                        "ollama_busy",
+                        "Ollama is busy with another job — try again in a moment",
+                    )
+                } else {
+                    AppError::new(
+                        "ollama_unavailable",
+                        "Ollama isn't running — open the Ollama app and try again",
+                    )
+                }
+            })?;
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            bail!(AppError::new(
+                "model_missing",
+                format!(
+                    "{EMBED_MODEL} isn't downloaded yet (Settings → Models → Search by meaning)"
+                )
+            ));
+        }
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            bail!("Ollama returned {status}: {text}");
+        }
+        let embedded: Embedded = response.json().await?;
+        if embedded.embeddings.len() != batch.len() {
+            bail!(
+                "Ollama returned {} vectors for {} texts",
+                embedded.embeddings.len(),
+                batch.len()
+            );
+        }
+        out.extend(embedded.embeddings);
+    }
+    Ok(out)
 }
 
 /// Is Ollama reachable, and is the model pulled?
@@ -171,6 +245,7 @@ pub async fn status() -> OllamaStatus {
         model_installed: false,
         model: model.clone(),
         installed: Vec::new(),
+        embed_installed: false,
     };
     let Ok(client) = client(Duration::from_secs(2)) else {
         return down();
@@ -194,11 +269,14 @@ pub async fn status() -> OllamaStatus {
                 })
                 .collect();
             installed.sort_by(|a, b| a.name.cmp(&b.name));
+            let embed_installed = installed.iter().any(|m| is_embed_model(&m.name));
+            installed.retain(|m| !is_embedding(&m.name));
             OllamaStatus {
                 running: true,
                 model_installed: installed.iter().any(|m| m.name == model),
                 model,
                 installed,
+                embed_installed,
             }
         }
         Err(_) => down(),
@@ -381,9 +459,16 @@ fn forget_caps(model: &str) {
         .retain(|(name, _)| name != model);
 }
 
-/// Asks Ollama to drop the text models from memory now (before Whisper loads): the app's and the
-/// one the last session used, which may be an agent's own. Best effort.
+/// Asks Ollama to drop its models from memory now (before Whisper loads): the text models and the
+/// embedding model. Best effort.
 pub async fn unload() {
+    unload_text().await;
+    unload_one(EMBED_MODEL).await;
+}
+
+/// Drops the text models only (before the search indexer embeds): the app's and the one the last
+/// session used, which may be an agent's own. Best effort.
+pub async fn unload_text() {
     let last = std::mem::take(
         &mut *LOADED
             .lock()
