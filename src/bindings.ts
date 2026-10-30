@@ -17,6 +17,10 @@ export const commands = {
 	getWhisperIdleUnload: () => typedError<number, AppError>(__TAURI_INVOKE("get_whisper_idle_unload")),
 	/**  How long the Whisper model stays in memory after a job, in seconds (saved in registry.db). */
 	setWhisperIdleUnload: (secs: number) => typedError<null, AppError>(__TAURI_INVOKE("set_whisper_idle_unload", { secs })),
+	/**  Each speech job's model: the owner's choice and what runs now. */
+	getSpeechChoices: () => typedError<SpeechChoice_Serialize[], AppError>(__TAURI_INVOKE("get_speech_choices")),
+	/**  The Whisper model for meetings or Live (None = automatic). */
+	setSpeechModel: (job: SpeechJob, model: string | null) => typedError<null, AppError>(__TAURI_INVOKE("set_speech_model", { job, model })),
 	listMeetingTypes: (slug: string) => typedError<MeetingTypeSummary[], AppError>(__TAURI_INVOKE("list_meeting_types", { slug })),
 	/**  Title, transcript and summary search in one workspace (FTS5). */
 	searchMeetings: (slug: string, query: string) => typedError<MeetingHit_Serialize[], AppError>(__TAURI_INVOKE("search_meetings", { slug, query })),
@@ -1192,6 +1196,34 @@ export type Slogan_Serialize = {
  *  audio. Batch lines, presentations and meetings in a room have none.
  */
 export type Speaker = "you" | "them";
+
+/**  One job's model in Settings → Models: the owner's choice and what runs now. */
+export type SpeechChoice = SpeechChoice_Serialize | SpeechChoice_Deserialize;
+
+/**  One job's model in Settings → Models: the owner's choice and what runs now. */
+export type SpeechChoice_Deserialize = {
+	job: SpeechJob,
+	/**  None = automatic. */
+	chosen?: string | null,
+	/**  What automatic picks now; None when no model is downloaded. */
+	automatic?: string | null,
+};
+
+/**  One job's model in Settings → Models: the owner's choice and what runs now. */
+export type SpeechChoice_Serialize = {
+	job: SpeechJob,
+	/**  None = automatic. */
+	chosen: string | null,
+	/**  What automatic picks now; None when no model is downloaded. */
+	automatic: string | null,
+};
+
+/**  What a Whisper model is used for; each has its own model (Settings → Models, D-047). */
+export type SpeechJob = 
+/**  A meeting's transcript after Stop or an import: accuracy first. */
+"meetings" | 
+/**  A Live session: speed first. */
+"live";
 
 /**  Where a transcription job is; sent to the UI with a 0–100 percent. */
 export type Stage = "queued" | "decoding" | "detecting_speech" | "transcribing" | "saving";

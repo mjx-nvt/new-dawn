@@ -20,7 +20,7 @@ use whisper_rs::{
 
 use crate::error::AppError;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
-use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore};
+use crate::kernel::ai::models::{BUNDLED_VAD, SpeechJob};
 use crate::kernel::ai::queue::AiQueue;
 
 pub const SAMPLE_RATE: usize = 16_000;
@@ -93,7 +93,7 @@ pub async fn transcribe(
     }
     // Never two models in memory: drop Qwen from Ollama before Whisper loads (best effort).
     super::ollama::unload().await;
-    let (model, model_path) = app.state::<ModelStore>().preferred_speech_model()?;
+    let (model, model_path) = super::models::speech_model(app, SpeechJob::Meetings).await?;
     let vad_path = app.path().resolve(BUNDLED_VAD, BaseDirectory::Resource)?;
     let started = Instant::now();
 
@@ -363,12 +363,13 @@ impl WhisperEngine {
             }
         }
         loaded.last_used = Instant::now();
-        let Some(text) = clean_text(&raw) else {
+        let Some(kept) = drop_hallucinations(&raw) else {
             return Ok(None);
         };
+        let text = collapse_repeats(&kept);
         let (confidence, avg_logprob, ended) = score(&tokens);
-        // Shorter than what Whisper wrote: `collapse_repeats` cut a loop.
-        let runaway = !ended || text.len() < raw.trim().len();
+        // Shorter than what was kept: `collapse_repeats` cut a loop (a dropped sign-off isn't one).
+        let runaway = !ended || text.len() < kept.len();
         Ok(Some(Heard {
             text,
             confidence,
@@ -528,7 +529,7 @@ impl WhisperEngine {
         }
 
         loaded.last_used = Instant::now();
-        Ok(segments)
+        Ok(drop_loops(segments))
     }
 }
 
@@ -693,35 +694,101 @@ const DROP_IF_EQUALS: &[&str] = &[
     "please subscribe",
     "you",
 ];
-/// Distinctive fragments that only ever appear as hallucinations (EN and VI).
+/// Distinctive fragments that only ever appear as hallucinations (EN and VI): video-channel
+/// sign-offs Whisper learnt from subtitles, in their call-to-action form ("lượt đăng ký kênh tăng
+/// 15 %" is a real sales line). The sentence holding one is dropped.
 const DROP_IF_CONTAINS: &[&str] = &[
     "amara.org",
     "subscribe to my channel",
     "ghiền mì gõ",
     "subscribe cho kênh",
+    "hãy đăng ký kênh",
+    "nhớ đăng ký kênh",
+    "like, share và đăng ký",
+    "ủng hộ kênh của mình",
+    "cảm ơn các bạn đã theo dõi",
+    "nhận thêm nhiều video mới",
+    "không bỏ lỡ những video",
+    "la la school",
 ];
 /// A chunk repeated this many times in a row is collapsed to one copy.
 const MIN_REPEATS: usize = 4;
+/// A run of this many identical lines in a row is Whisper looping over silence or noise: one copy
+/// is kept. Two in a row can be real ("Dạ." "Dạ.").
+const MIN_LOOP_LINES: usize = 3;
 
-/// Language-safe cleanup: drops annotation-only and known hallucination segments and collapses
-/// runaway repetition by character n-grams, never by splitting on spaces (so Vietnamese
-/// reduplication like "từ từ" survives). Returns None when nothing real is left.
+/// Language-safe cleanup: drops annotation-only segments and the sentences of known
+/// hallucinations (Whisper appends a channel sign-off to real speech as often as it writes one
+/// alone), and collapses runaway repetition by character n-grams, never by splitting on spaces
+/// (so Vietnamese reduplication like "từ từ" survives). Returns None when nothing real is left.
 pub fn clean_text(raw: &str) -> Option<String> {
+    drop_hallucinations(raw).map(|kept| collapse_repeats(&kept))
+}
+
+/// `clean_text` without the repeat collapse: what is left once annotations and known
+/// hallucinations are gone.
+fn drop_hallucinations(raw: &str) -> Option<String> {
     let text = raw.trim();
-    let is_annotation = (text.starts_with('[') && text.ends_with(']'))
-        || (text.starts_with('(') && text.ends_with(')'));
-    let core =
-        text.trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace() || c == '♪');
-    if is_annotation || core.is_empty() {
-        return None;
-    }
-    let lower = core.to_lowercase();
-    if DROP_IF_EQUALS.contains(&lower.as_str())
-        || DROP_IF_CONTAINS.iter().any(|p| lower.contains(p))
+    if (text.starts_with('[') && text.ends_with(']'))
+        || (text.starts_with('(') && text.ends_with(')'))
     {
         return None;
     }
-    Some(collapse_repeats(text))
+    let kept: String = sentences(text)
+        .into_iter()
+        .filter(|sentence| {
+            let lower = sentence.to_lowercase();
+            !DROP_IF_CONTAINS.iter().any(|p| lower.contains(p))
+        })
+        .collect();
+    let core =
+        kept.trim_matches(|c: char| c.is_ascii_punctuation() || c.is_whitespace() || c == '♪');
+    if core.is_empty() || DROP_IF_EQUALS.contains(&core.to_lowercase().as_str()) {
+        return None;
+    }
+    Some(kept.trim().to_owned())
+}
+
+/// `text` cut after each `.`, `!`, `?` or `…` that ends a sentence (followed by a space or the
+/// end, so "amara.org" and "3.5" stay whole).
+fn sentences(text: &str) -> Vec<&str> {
+    let (mut out, mut start) = (Vec::new(), 0);
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if matches!(c, '.' | '!' | '?' | '…')
+            && chars.peek().is_none_or(|(_, next)| next.is_whitespace())
+        {
+            out.push(&text[start..i + c.len_utf8()]);
+            start = i + c.len_utf8();
+        }
+    }
+    if start < text.len() {
+        out.push(&text[start..]);
+    }
+    out
+}
+
+/// Keeps one line of each run of `MIN_LOOP_LINES` or more identical lines (case and punctuation
+/// aside): "Như vậy, lập tức." came out 18 times in a row in a real meeting.
+fn drop_loops(segments: Vec<Segment>) -> Vec<Segment> {
+    let key = |s: &Segment| -> String {
+        s.text
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect()
+    };
+    segments
+        .chunk_by(|a, b| key(a) == key(b))
+        .flat_map(|run| {
+            if run.len() >= MIN_LOOP_LINES {
+                &run[..1]
+            } else {
+                run
+            }
+        })
+        .cloned()
+        .collect()
 }
 
 fn collapse_repeats(text: &str) -> String {
@@ -761,7 +828,7 @@ mod tests {
     use std::sync::atomic::AtomicBool;
 
     use super::{Language, SpeechModel, WhisperEngine, clean_text};
-    use crate::kernel::ai::models::{BUNDLED_VAD, CATALOGUE, ModelStore};
+    use crate::kernel::ai::models::{BUNDLED_VAD, CATALOGUE, ModelStore, SpeechJob};
     use crate::kernel::hub::WorkspaceHub;
     use crate::modules::meetings::{self, NewMeeting, audio};
 
@@ -829,11 +896,6 @@ mod tests {
         );
     }
 
-    /// Model comparison, step 1 (see `modules::meetings::eval`): a recording transcribed the way
-    /// a meeting is — language auto, the workspace's people and terms as Whisper's prompt, echoes
-    /// of the prompt dropped, the vocabulary's corrections — with the debug build's preferred
-    /// Whisper model. `NEWDAWN_EVAL_AUDIO=<file> NEWDAWN_EVAL_SEGMENTS=<out .json>
-    /// [NEWDAWN_EVAL_PEOPLE_SQL=<.sql>] cargo test eval_transcribe -- --ignored --nocapture`.
     #[test]
     fn writes_a_close_call_both_ways_likelier_first() {
         use super::candidates;
@@ -843,6 +905,11 @@ mod tests {
         assert_eq!(candidates(0.15, 0.27), vec![Language::En, Language::Vi]);
     }
 
+    /// Model comparison, step 1 (see `modules::meetings::eval`): a recording transcribed the way
+    /// a meeting is — language auto, the workspace's people and terms as Whisper's prompt, echoes
+    /// of the prompt dropped, the vocabulary's corrections — with the debug build's Meetings
+    /// model (or `NEWDAWN_EVAL_WHISPER`). `NEWDAWN_EVAL_AUDIO=<file> NEWDAWN_EVAL_SEGMENTS=<out .json>
+    /// [NEWDAWN_EVAL_PEOPLE_SQL=<.sql>] cargo test eval_transcribe -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn eval_transcribe() {
@@ -854,7 +921,7 @@ mod tests {
             .join("Library/Application Support/co.majorisdigital.newdawn.dev"); // the debug build's own (D-044)
         let models = ModelStore::new(app_data.join("models")).unwrap();
         let (spec, model_path) = models
-            .preferred_speech_model()
+            .speech_model(SpeechJob::Meetings, None)
             .expect("download a Whisper model first");
         // NEWDAWN_EVAL_WHISPER: another downloaded model's file (e.g. the full large-v3).
         let (spec, model_path) = match eval::var("NEWDAWN_EVAL_WHISPER") {
@@ -927,7 +994,7 @@ mod tests {
             .join("Library/Application Support/co.majorisdigital.newdawn.dev"); // the debug build's own (D-044)
         let models = ModelStore::new(app_data.join("models")).unwrap();
         let (spec, model_path) = models
-            .preferred_speech_model()
+            .speech_model(SpeechJob::Meetings, None)
             .expect("download a Whisper model first");
         let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")
@@ -1085,5 +1152,51 @@ mod tests {
             Some("OK. Let's start")
         );
         assert_eq!(clean_text("từ từ từ từ từ").as_deref(), Some("từ"));
+    }
+
+    #[test]
+    fn drops_channel_sign_offs_sentence_by_sentence() {
+        // Both from large-v3 on real meetings.
+        let alone = "Các bạn có thể nhớ like, share và đăng ký kênh để ủng hộ kênh của mình nhé. \
+                     Cảm ơn các bạn đã theo dõi.";
+        assert_eq!(clean_text(alone), None);
+        assert_eq!(
+            clean_text(
+                "Hãy đăng ký kênh để nhận thêm nhiều video mới nhé. Vì vậy, Vikki One sẽ làm hết."
+            )
+            .as_deref(),
+            Some("Vì vậy, Vikki One sẽ làm hết.")
+        );
+        // A dot inside a word doesn't end a sentence.
+        assert_eq!(clean_text("Subtitles by the Amara.org community"), None);
+        assert_eq!(
+            clean_text("Version 3.5 ships today. Thanks.").as_deref(),
+            Some("Version 3.5 ships today. Thanks.")
+        );
+        assert_eq!(
+            clean_text("Để xem… Hãy đăng ký kênh nhé.").as_deref(),
+            Some("Để xem…")
+        );
+        let sales = "Lượt đăng ký kênh tăng 15% sau chiến dịch.";
+        assert_eq!(clean_text(sales).as_deref(), Some(sales));
+    }
+
+    #[test]
+    fn drops_looped_lines() {
+        use super::{Segment, drop_loops};
+        let line = |i: u32, text: &str| Segment {
+            start_ms: i * 1000,
+            end_ms: i * 1000 + 900,
+            text: text.to_owned(),
+            lang: None,
+        };
+        let mut segments = vec![line(0, "Bắt đầu nhé.")];
+        segments.extend((1..=18).map(|i| line(i, "Như vậy, lập tức.")));
+        segments.extend([line(19, "Dạ."), line(20, "dạ"), line(21, "Xong.")]);
+        let kept: Vec<String> = drop_loops(segments).into_iter().map(|s| s.text).collect();
+        assert_eq!(
+            kept,
+            ["Bắt đầu nhé.", "Như vậy, lập tức.", "Dạ.", "dạ", "Xong."]
+        );
     }
 }

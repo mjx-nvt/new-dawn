@@ -105,6 +105,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::models::reveal_models_folder,
             commands::models::get_whisper_idle_unload,
             commands::models::set_whisper_idle_unload,
+            commands::models::get_speech_choices,
+            commands::models::set_speech_model,
             commands::meetings::list_meeting_types,
             commands::meetings::search_meetings,
             commands::summary::get_summary,
@@ -374,6 +376,10 @@ pub fn run() {
             app.manage(modules::meetings::summarise::SummaryJobs::default());
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
+            #[cfg(debug_assertions)]
+            if let Err(err) = kernel::windows::dev_open(app.handle()) {
+                tracing::warn!("NEWDAWN_DEV_OPEN ignored: {err:#}");
+            }
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {

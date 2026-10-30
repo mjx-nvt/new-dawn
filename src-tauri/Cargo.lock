@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "new-dawn"
-version = "0.7.7"
+version = "0.7.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2997,6 +2997,7 @@ dependencies = [
  "cpal",
  "ebur128",
  "futures-util",
+ "objc2",
  "pulldown-cmark",
  "quick-xml 0.42.0",
  "regex",

@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.7.7"
+version = "0.7.8"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -63,6 +63,8 @@ cidre = { version = "0.29", default-features = false, features = ["core_audio", 
 tauri-plugin-updater = "2.12.0"
 tauri-plugin-process = "2.3.1"
 regex = "1.13.1"
+# Already in the build through Tauri; used for one WebKit switch in debug screen checks.
+objc2 = "0.6"
 
 # ── Added per phase (see docs/playbook.md). Keep this list honest: add a crate
 #    in the prompt that first needs it, and check its current API on docs.rs. ──

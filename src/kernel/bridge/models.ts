@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { commands, events, type AppError, type ModelInfo } from "../../bindings";
+import { commands, events, type AppError, type ModelInfo, type SpeechJob } from "../../bindings";
 import { unwrap } from "./unwrap";
 
-export type { ModelInfo };
+export type { ModelInfo, SpeechJob };
 
 const MODELS_KEY = ["models"] as const;
 
@@ -36,6 +36,7 @@ export function useModelDownloads() {
       const error = payload.error?.code === "cancelled" ? null : payload.error;
       setErrors((e) => ({ ...e, [payload.id]: error }));
       void queryClient.invalidateQueries({ queryKey: MODELS_KEY });
+      void queryClient.invalidateQueries({ queryKey: SPEECH_CHOICES_KEY });
     });
     return () => {
       void onProgress.then((stop) => stop());
@@ -48,7 +49,13 @@ export function useModelDownloads() {
 
 function useModelMutation(run: (id: string) => Promise<unknown>) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: run, onSettled: () => queryClient.invalidateQueries({ queryKey: MODELS_KEY }) });
+  return useMutation({
+    mutationFn: run,
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: MODELS_KEY });
+      void queryClient.invalidateQueries({ queryKey: SPEECH_CHOICES_KEY });
+    },
+  });
 }
 
 export const useStartModelDownload = () => useModelMutation((id) => unwrap(commands.startModelDownload(id)));
@@ -68,5 +75,20 @@ export function useSetWhisperIdleUnload() {
   return useMutation({
     mutationFn: (secs: number) => unwrap(commands.setWhisperIdleUnload(secs)),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["whisper-idle-unload"] }),
+  });
+}
+
+const SPEECH_CHOICES_KEY = ["speech-choices"] as const;
+
+/** Each speech job's Whisper model: the owner's choice (null = automatic) and what runs now. */
+export function useSpeechChoices() {
+  return useQuery({ queryKey: SPEECH_CHOICES_KEY, queryFn: () => unwrap(commands.getSpeechChoices()) });
+}
+
+export function useSetSpeechModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { job: SpeechJob; model: string | null }) => unwrap(commands.setSpeechModel(v.job, v.model)),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: SPEECH_CHOICES_KEY }),
   });
 }

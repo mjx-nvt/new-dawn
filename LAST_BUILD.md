@@ -1,3 +1,30 @@
+# Last Build — A Whisper model per job, cleaner transcripts · release 0.7.8
+_2026-10-30_
+
+The first release of plan v3 (`docs/plan.md`).
+
+## What changed
+- **Meetings and Live each have their own speech model** (D-047). Settings → Models → **Used for**:
+  - **Meetings** (transcripts after Stop, and imports): Automatic picks **large-v3**, the most accurate (it beat turbo 17–7 judged blind this week).
+  - **Live**: Automatic picks **turbo**, twice as fast.
+  - Or pick a downloaded model for either. Before, downloading turbo for Live also switched your meeting transcripts to it.
+  - Your installed app has large-v3 only, so nothing changes until you download turbo: then Live gets faster and meetings stay on large-v3.
+- **Cleaner transcripts**:
+  - When Whisper repeats the same line three or more times in a row (it does over silence or noise), one copy is kept. Two in a row stay ("Dạ." "Dạ." is real).
+  - YouTube-style sign-offs Whisper learnt from subtitles ("Hãy đăng ký kênh…", "Cảm ơn các bạn đã theo dõi") are removed sentence by sentence, so real speech in the same line stays. Only the sign-off forms are matched: "lượt đăng ký kênh tăng 15 %" in a sales meeting stays.
+  - On this week's six test transcripts: 27 looped lines removed (17 from "Như vậy, lập tức." ×18), and both sign-offs cut.
+- **Developer tooling** (debug builds only): the dev app can open a page, take dark or light appearance and be scrolled or clicked through a script file, without taking over the screen. Release builds don't contain it.
+- Checks: 129 Rust tests pass (new: the model per job, looped lines, sign-offs); clippy, tsc and the localhost check are clean. Seen in the running dev app, light and dark: the Used for rows, choosing a model, back to Automatic.
+- Review: the architecture review found no rule violations. Its fixes were taken: only the call-to-action forms of the sign-offs are matched, and a Live line that only lost a sign-off is no longer marked Unclear.
+
+## Release
+- **v0.7.8** is published on GitHub. **Your installed New Dawn wasn't touched**: update it from Settings → About → Check for updates when you're ready.
+
+## Manual steps
+1. Optional: download **Whisper large-v3-turbo** in Settings → Models (1.5 GB). Live then uses it; meetings stay on large-v3.
+
+---
+
 # Last Build — Transcripts in each speaker's own language, English summaries, summaries in one more language · release 0.7.7
 _2026-10-29_
 

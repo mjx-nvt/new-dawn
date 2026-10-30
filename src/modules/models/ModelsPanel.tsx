@@ -6,9 +6,12 @@ import {
   useDeleteModel,
   useModelDownloads,
   useModels,
+  useSetSpeechModel,
+  useSpeechChoices,
   useStartModelDownload,
   type DownloadProgress,
   type ModelInfo,
+  type SpeechJob,
 } from "../../kernel/bridge/models";
 import type { AppError } from "../../kernel/bridge/unwrap";
 import MenuButton from "../../kernel/shell/MenuButton";
@@ -40,8 +43,9 @@ export default function ModelsPanel() {
 
       <section className="section">
         <h2 className="sectionTitle">Speech model</h2>
-        <p className="sectionSubtitle">Whisper transcribes recordings on this Mac; turbo is the default</p>
+        <p className="sectionSubtitle">Whisper transcribes on this Mac: the most accurate model for meetings, the fastest for Live</p>
         <SpeechModels />
+        <SpeechChoices />
       </section>
 
       <section className="section">
@@ -74,6 +78,57 @@ export default function ModelsPanel() {
           Reveal models folder
         </button>
       </section>
+    </>
+  );
+}
+
+const JOBS: { job: SpeechJob; label: string; hint: string }[] = [
+  { job: "meetings", label: "Meetings", hint: "Transcripts after Stop and imports. Automatic: large-v3, the most accurate." },
+  { job: "live", label: "Live", hint: "Lines as people speak. Automatic: turbo, twice as fast." },
+];
+
+/** Which downloaded model each job uses; "Automatic" follows the job's order. */
+function SpeechChoices() {
+  const { data: models } = useModels();
+  const { data: choices } = useSpeechChoices();
+  const save = useSetSpeechModel();
+  const ready = (models ?? []).filter((m) => m.status.state === "ready");
+  const label = (id: string | null | undefined) => models?.find((m) => m.id === id)?.label ?? "no model downloaded";
+  return (
+    <>
+      <p className="groupTitle">Used for</p>
+      <div className="group">
+        {JOBS.map(({ job, label: jobLabel, hint }) => {
+          const choice = choices?.find((c) => c.job === job);
+          return (
+            <div key={job} className="groupRow">
+              <div className="rowText">
+                <p className="rowLabel">{jobLabel}</p>
+                <p className="rowHint">{hint}</p>
+              </div>
+              <div className="rowControl">
+                <select
+                  className="input"
+                  aria-label={`Speech model for ${jobLabel}`}
+                  value={choice?.chosen ?? ""}
+                  disabled={!choice}
+                  onChange={(e) => save.mutate({ job, model: e.target.value || null })}
+                >
+                  <option value="">Automatic ({label(choice?.automatic)})</option>
+                  {ready.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                  {choice?.chosen && !ready.some((m) => m.id === choice.chosen) && (
+                    <option value={choice.chosen}>{label(choice.chosen)} (not downloaded: automatic runs)</option>
+                  )}
+                </select>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </>
   );
 }

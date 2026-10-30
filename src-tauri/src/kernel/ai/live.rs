@@ -34,7 +34,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::error::AppError;
 use crate::kernel::ai::days;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
-use crate::kernel::ai::models::{BUNDLED_VAD, ModelStore};
+use crate::kernel::ai::models::{BUNDLED_VAD, SpeechJob};
 use crate::kernel::ai::ollama::{self, Message, OllamaStatus, Request, TextSession};
 use crate::kernel::ai::queue::AiQueue;
 use crate::kernel::ai::whisper::{
@@ -349,7 +349,7 @@ pub async fn start(
     if app.state::<SummaryJobs>().any() {
         bail!(busy("a summary"));
     }
-    let (spec, model_path) = app.state::<ModelStore>().preferred_speech_model()?;
+    let (spec, model_path) = super::models::speech_model(app, SpeechJob::Live).await?;
     let vad = app.path().resolve(BUNDLED_VAD, BaseDirectory::Resource)?;
     let status = Arc::new(Mutex::new(Some(LiveStatus::new(&meeting))));
     let cancel = Arc::new(AtomicBool::new(false));
@@ -1531,6 +1531,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kernel::ai::models::ModelStore;
     use crate::kernel::ai::ollama::InstalledModel;
     use crate::kernel::ai::whisper::Tok;
 
@@ -2333,7 +2334,7 @@ mod tests {
             .try_init();
         let (spec, model_path) = ModelStore::new(app_data().join("models"))
             .unwrap()
-            .preferred_speech_model()
+            .speech_model(SpeechJob::Live, None)
             .expect("download a Whisper model first");
         let vad = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("resources")

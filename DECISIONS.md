@@ -2,6 +2,27 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-047 — A Whisper model per job; looped lines and channel sign-offs cleaned; screen checks without clicks
+_2026-10-30_
+
+**Context**: the blind large-v3-turbo vs large-v3 comparison on three real meetings: large-v3 won 17–7 on typical stretches at about twice the time; turbo looped on Vietnamese ("Như vậy, lập tức." 18 times in a row). The app used the first downloaded model in catalogue order for everything, so downloading turbo for Live also switched meeting transcripts to it. Plan v3 (`docs/plan.md`) starts here.
+
+**Decision — a model per job** (`models::SpeechJob`, `models::speech_model`):
+- Meetings (transcripts after Stop and imports) and Live each have a model, chosen in Settings → Models → *Used for* and saved in `registry.db` (`speech_model_meetings` / `speech_model_live`; empty = automatic).
+- Automatic, among downloaded models: Meetings large-v3 → turbo → turbo-q5; Live turbo → turbo-q5 → large-v3. A chosen model that isn't downloaded falls back to automatic (the select says so).
+
+**Decision — cleanup** (`whisper::clean_text`, `whisper::drop_loops`):
+- A run of 3 or more identical lines (case and punctuation aside) keeps one. Two in a row stay: "Dạ." "Dạ." is real. Batch only: Live never rewrites a shown line.
+- Channel sign-offs are dropped **sentence by sentence** (a sentence ends at `.` `!` `?` `…` before a space or the end, so "Amara.org" and "3.5" stay whole), because Whisper appends them to real speech as often as it writes them alone. New Vietnamese phrases, in their call-to-action form only: "hãy đăng ký kênh", "nhớ đăng ký kênh", "like, share và đăng ký", "ủng hộ kênh của mình", "cảm ơn các bạn đã theo dõi", "nhận thêm nhiều video mới", "không bỏ lỡ những video", "la la school". "Lượt đăng ký kênh tăng 15 %" is a real sales line and stays, as "subscribe" alone does in English.
+- In Live, a line that only lost a sign-off isn't "runaway" (Unclear, untranslated): only a collapsed repeat counts.
+- Replayed on the six test transcripts: 27 looped lines dropped (17 from turbo on the Vietnamese meeting, 5 from large-v3's "Thứ ba, lỡ khoan…" ×6, 5 from turbo on the mixed meeting); the two sign-offs cut, the real speech after one of them kept.
+
+**Decision — screen checks in debug builds** (`windows::dev_open`): `NEWDAWN_DEV_OPEN=/route` (or `settings:<tab>`) opens a page at launch, `NEWDAWN_DEV_THEME=dark|light` sets the app's appearance (never the Mac's), and JavaScript written to `<dev data>/dev-eval.js` runs in the main window when the file changes (scroll, click, type — no Accessibility rights needed). The dev app runs as an accessory (no Dock icon, never activated), so a check doesn't take the keyboard. WebKit stops painting a window that other windows cover; the main window's WKWebView gets `_setWindowOcclusionDetectionEnabled: NO` (the SPI Playwright's WebKit uses; checked with `respondsToSelector:` first), through `objc2`, which was already in the build through Tauri. The separate Settings window stays grey while covered even so, so Settings panes are checked in the main window (`/settings?tab=…`). Release builds compile none of this.
+
+**Means for future work**: the model check (0.8.2) compares models per job. Live's segmenting is unchanged.
+
+---
+
 ## D-046 — Transcripts keep each voice's language; summaries are written in English; Apple translates on this Mac
 _2026-10-29_
 

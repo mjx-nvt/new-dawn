@@ -4,7 +4,7 @@ use crate::kernel::ai::whisper::{self, WhisperEngine};
 use crate::kernel::hub::WorkspaceHub;
 
 use crate::error::AppError;
-use crate::kernel::ai::models::{self, ModelInfo, ModelStore};
+use crate::kernel::ai::models::{self, ModelInfo, ModelStore, SpeechChoice, SpeechJob};
 
 #[tauri::command]
 #[specta::specta]
@@ -54,4 +54,25 @@ pub async fn set_whisper_idle_unload(
     secs: u32,
 ) -> Result<(), AppError> {
     Ok(whisper::set_idle_unload(&hub, &engine, secs).await?)
+}
+
+/// Each speech job's model: the owner's choice and what runs now.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_speech_choices(
+    hub: State<'_, WorkspaceHub>,
+    store: State<'_, ModelStore>,
+) -> Result<Vec<SpeechChoice>, AppError> {
+    Ok(models::speech_choices(&hub, &store).await?)
+}
+
+/// The Whisper model for meetings or Live (None = automatic).
+#[tauri::command]
+#[specta::specta]
+pub async fn set_speech_model(
+    hub: State<'_, WorkspaceHub>,
+    job: SpeechJob,
+    model: Option<String>,
+) -> Result<(), AppError> {
+    Ok(models::choose_speech_model(&hub, job, model.as_deref()).await?)
 }

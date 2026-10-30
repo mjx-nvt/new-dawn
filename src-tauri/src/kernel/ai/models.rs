@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use futures_util::StreamExt;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use specta::Type;
 use tokio::io::AsyncWriteExt;
@@ -23,6 +23,7 @@ use tauri_specta::Event;
 
 use crate::error::AppError;
 use crate::events::{ModelDownloadFinished, ModelDownloadProgress};
+use crate::kernel::hub::WorkspaceHub;
 
 const WHISPER_REPO: &str = "ggerganov/whisper.cpp";
 const WHISPER_COMMIT: &str = "5359861c739e955e79d9a303bcbc70fb988958b1";
@@ -60,7 +61,7 @@ pub const CATALOGUE: &[ModelSpec] = &[
     ModelSpec {
         id: "large-v3-turbo",
         label: "Whisper large-v3-turbo",
-        description: "Default. Best speed and accuracy balance on Apple Silicon.",
+        description: "Twice as fast as large-v3; Live uses it first.",
         file: "ggml-large-v3-turbo.bin",
         repo: WHISPER_REPO,
         commit: WHISPER_COMMIT,
@@ -80,7 +81,7 @@ pub const CATALOGUE: &[ModelSpec] = &[
     ModelSpec {
         id: "large-v3",
         label: "Whisper large-v3",
-        description: "Most accurate, about twice as slow as turbo.",
+        description: "Most accurate; meetings use it first. About twice as slow as turbo.",
         file: "ggml-large-v3.bin",
         repo: WHISPER_REPO,
         commit: WHISPER_COMMIT,
@@ -94,6 +95,91 @@ pub fn spec(id: &str) -> Result<&'static ModelSpec> {
         .iter()
         .find(|m| m.id == id)
         .ok_or_else(|| AppError::not_found(format!("Unknown model '{id}'")))?)
+}
+
+/// What a Whisper model is used for; each has its own model (Settings → Models, D-047).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum SpeechJob {
+    /// A meeting's transcript after Stop or an import: accuracy first.
+    Meetings,
+    /// A Live session: speed first.
+    Live,
+}
+
+impl SpeechJob {
+    /// Registry setting with the owner's choice (absent or empty = automatic).
+    fn setting(self) -> &'static str {
+        match self {
+            Self::Meetings => "speech_model_meetings",
+            Self::Live => "speech_model_live",
+        }
+    }
+
+    /// The automatic choice, best first. large-v3 beat turbo 17–7 judged blind on typical
+    /// stretches of three real meetings, at twice the time; Live needs the speed.
+    fn preference(self) -> [&'static str; 3] {
+        match self {
+            Self::Meetings => ["large-v3", "large-v3-turbo", "large-v3-turbo-q5_0"],
+            Self::Live => ["large-v3-turbo", "large-v3-turbo-q5_0", "large-v3"],
+        }
+    }
+}
+
+/// One job's model in Settings → Models: the owner's choice and what runs now.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct SpeechChoice {
+    pub job: SpeechJob,
+    /// None = automatic.
+    pub chosen: Option<String>,
+    /// What automatic picks now; None when no model is downloaded.
+    pub automatic: Option<String>,
+}
+
+/// The model `job` uses now: the owner's choice when it's downloaded, else the job's automatic one.
+pub async fn speech_model(
+    app: &AppHandle,
+    job: SpeechJob,
+) -> Result<(&'static ModelSpec, PathBuf)> {
+    let chosen = chosen_model(&app.state::<WorkspaceHub>(), job).await?;
+    app.state::<ModelStore>()
+        .speech_model(job, chosen.as_deref())
+}
+
+async fn chosen_model(hub: &WorkspaceHub, job: SpeechJob) -> Result<Option<String>> {
+    Ok(hub
+        .app_setting(job.setting())
+        .await?
+        .filter(|id| !id.is_empty()))
+}
+
+pub async fn speech_choices(hub: &WorkspaceHub, store: &ModelStore) -> Result<Vec<SpeechChoice>> {
+    let mut out = Vec::new();
+    for job in [SpeechJob::Meetings, SpeechJob::Live] {
+        let automatic = store
+            .speech_model(job, None)
+            .ok()
+            .map(|(spec, _)| spec.id.to_owned());
+        out.push(SpeechChoice {
+            job,
+            chosen: chosen_model(hub, job).await?,
+            automatic,
+        });
+    }
+    Ok(out)
+}
+
+/// Saves the model for `job` (None = automatic).
+pub async fn choose_speech_model(
+    hub: &WorkspaceHub,
+    job: SpeechJob,
+    id: Option<&str>,
+) -> Result<()> {
+    if let Some(id) = id {
+        spec(id)?;
+    }
+    hub.set_app_setting(job.setting(), id.unwrap_or_default())
+        .await
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -143,10 +229,16 @@ impl ModelStore {
         &self.dir
     }
 
-    /// The first downloaded Whisper model in catalogue order (turbo first).
-    pub fn preferred_speech_model(&self) -> Result<(&'static ModelSpec, PathBuf)> {
-        CATALOGUE
-            .iter()
+    /// `chosen` when it's downloaded, else the first downloaded model in the job's order.
+    pub fn speech_model(
+        &self,
+        job: SpeechJob,
+        chosen: Option<&str>,
+    ) -> Result<(&'static ModelSpec, PathBuf)> {
+        chosen
+            .into_iter()
+            .chain(job.preference())
+            .filter_map(|id| spec(id).ok())
             .map(|spec| (spec, self.dir.join(spec.file)))
             .find(|(_, path)| path.exists())
             .ok_or_else(|| {
@@ -418,7 +510,37 @@ fn verify(path: &Path, size: u64, sha256_hex: &str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CATALOGUE, verify};
+    use super::{CATALOGUE, ModelStore, SpeechJob, spec, verify};
+
+    /// Meetings take the most accurate downloaded model, Live the fastest; a choice wins only
+    /// while its file is there.
+    #[test]
+    fn each_job_takes_its_own_model() {
+        let dir = std::env::temp_dir().join(format!("newdawn-models-{}", uuid::Uuid::now_v7()));
+        let store = ModelStore::new(dir.clone()).unwrap();
+        let pick = |job, chosen| {
+            store
+                .speech_model(job, chosen)
+                .map(|(spec, _)| spec.id)
+                .ok()
+        };
+        assert_eq!(pick(SpeechJob::Meetings, None), None);
+
+        std::fs::write(dir.join(spec("large-v3-turbo").unwrap().file), b"").unwrap();
+        assert_eq!(pick(SpeechJob::Meetings, None), Some("large-v3-turbo"));
+        assert_eq!(pick(SpeechJob::Live, None), Some("large-v3-turbo"));
+
+        std::fs::write(dir.join(spec("large-v3").unwrap().file), b"").unwrap();
+        assert_eq!(pick(SpeechJob::Meetings, None), Some("large-v3"));
+        assert_eq!(pick(SpeechJob::Live, None), Some("large-v3-turbo"));
+        assert_eq!(pick(SpeechJob::Live, Some("large-v3")), Some("large-v3"));
+        // Chosen but not downloaded: the job's automatic model runs.
+        assert_eq!(
+            pick(SpeechJob::Live, Some("large-v3-turbo-q5_0")),
+            Some("large-v3-turbo")
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     /// Byte counts cross the bridge as u32 (see ModelInfo); every catalogue file must fit.
     #[test]
