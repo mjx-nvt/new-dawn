@@ -2,6 +2,23 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-052 — "What I learned": the ledger proposes guide lines, the owner approves; a number per agent and model
+_2026-10-30_
+
+**Context** (plan v3 §3.3–3.4): since 0.8.1 the ledger keeps every decision the owner makes about the AI's work, and summaries already take the owner's rewritten sections as examples. Two things were missing: turning repeated edits into a lasting rule, and seeing whether an agent (and its model) is getting better.
+
+**Decision — proposals, never automatic** (`modules/lessons.rs`, migration 0014 `lesson`): for the agents whose work the owner rewrites in their own words — **Summary** (sections rewritten, corrections, attendees changed) and **Tasks** (tasks deleted or reworded, action items sent to Tasks by hand) — a catch-up job reads the newest 25 decisions once five new ones have arrived (or any have waited a week; checked every 30 minutes, each run waits for a free Mac like any catch-up job, D-050). The text model notes how each decision changed the agent's work, then proposes at most three lines, each resting on at least three decisions, with its evidence ("You shortened the overview in 4 of 5 meetings"). The code keeps only lines that cite three real decisions and say something not already in the guide or proposed before. Workspace → Agents shows them under **What I learned** with **Approve** and **Dismiss** (kept only so it isn't proposed again); **Check now** reads at once. Approved lines live in their own file beside the guide (`brand/agents/<agent>.learned.md`) and every prompt gets them after the guide, under "Learned from your edits (these win over the rest of this guide)": Reset to default keeps them, the bundled default keeps reaching the workspace, and each has **Remove**. Naming and Email have no lesson: their ledger rows aren't the owner's own text.
+
+**Decision — a number per agent and model** (`feedback::numbers`): Workspace → Agents shows, per model, how the owner judged the work since the ledger exists — summaries kept without rewriting a section, emails kept as first written, names the check doubted that the owner changed (the doubt was right) or kept, tasks the agent added that were kept, reworded or deleted. The model is the one that wrote the meeting's summary. Reworded tasks are now recorded with their id.
+
+**Found while building**: with thinking on, the 9B model ran past 6,000 tokens on 25 decisions without answering; without thinking it was undecided (an empty answer one run in two at temperature 0.3), and the default guide's "Be detailed" kept it from proposing a shorter overview. Asking first for a note per decision, and saying that learned lines win over the guide, gave the right line in three runs of three.
+
+**Review fixes taken**: deleting a ledger row (with its meeting) deletes a proposal resting on it and clears a decided lesson's evidence, which may quote the meeting (a trigger, as 0013 does for checks; migration review). From the architecture review: Check now lifts the wait of a scheduled reading of the same agent and waits for its result instead of failing; the decisions are read only once the job's turn has come, and a proposal is stored only while every decision it cites still exists; Approve waits while the guide has unsaved changes; a reading that fails on a too-long answer or prompt counts its decisions as read (no retry every 30 minutes); the job's hold and its Run now are let go however it ends; Approve is one transaction (a double click or two approvals can't lose a line); proposals are one line each; several saves of one section of one meeting are one decision (from the AI's text to the owner's last); the texts carry their word counts; each proposal shows how many edits it rests on, counted by the app; the numbers count a summary, its email or a task once it is three days old and only the edits made since the AI last wrote it; the Agents page queries less.
+
+**Means for future work**: the speech side (vocabulary corrections undone, lines fixed by hand) has its counts in the ledger but no place on screen yet; thresholds that are guesses today (Live's Unclear, the names check's distance) get their counts once they have a setting to sit next to.
+
+---
+
 ## D-051 — Who spoke: sherpa-onnx for speakers; a discussion keeps the microphone and the call apart
 _2026-10-30_
 

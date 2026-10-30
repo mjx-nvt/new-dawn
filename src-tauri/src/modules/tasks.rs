@@ -269,7 +269,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
                     kind: Kind::TaskReworded,
                     before: &old,
                     after: new,
-                    context: serde_json::json!({}),
+                    context: serde_json::json!({ "task": id }),
                 },
             )
             .await;
@@ -315,7 +315,7 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
                 kind: Kind::TaskDeleted,
                 before: &title,
                 after: "",
-                context: serde_json::json!({}),
+                context: serde_json::json!({ "task": id }),
             },
         )
         .await;

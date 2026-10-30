@@ -51,6 +51,7 @@ mod modules {
     pub mod agents;
     pub mod brand;
     pub mod feedback;
+    pub mod lessons;
     pub mod meetings;
     pub mod model_check;
     pub mod people;
@@ -173,6 +174,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::agents::set_agent_guide,
             commands::agents::reset_agent_guide,
             commands::agents::set_agent_model,
+            commands::agents::learn_now,
+            commands::agents::approve_lesson,
+            commands::agents::dismiss_lesson,
+            commands::agents::forget_learned,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,
@@ -409,6 +414,7 @@ pub fn run() {
                 });
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
+            modules::lessons::spawn(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 for (slug, jobs) in interrupted {

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands, type Agent, type AgentGuide } from "../../bindings";
+import { commands, type Agent, type AgentGuide, type Judged, type Lesson } from "../../bindings";
 import { unwrap } from "./unwrap";
 
-export type { Agent, AgentGuide };
+export type { Agent, AgentGuide, Judged, Lesson };
 
 const key = (slug: string) => ["agents", slug] as const;
 
@@ -33,6 +33,34 @@ export function useResetAgentGuide(slug: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (agent: Agent) => unwrap(commands.resetAgentGuide(slug, agent)),
+    onSuccess: (guides) => queryClient.setQueryData(key(slug), guides),
+  });
+}
+
+/** "Check now": reads your newest decisions about the agent's work without waiting for a free Mac
+ *  (D-052); resolves with how many lines it proposes. */
+export function useLearnNow(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (agent: Agent) => unwrap(commands.learnNow(slug, agent)),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: key(slug) }),
+  });
+}
+
+/** Approve adds the proposed line to the agent's guide; Dismiss sets it aside for good. */
+export function useJudgeLesson(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; approve: boolean }) => unwrap(v.approve ? commands.approveLesson(slug, v.id) : commands.dismissLesson(slug, v.id)),
+    onSuccess: (guides) => queryClient.setQueryData(key(slug), guides),
+  });
+}
+
+/** Stops using a line approved from "What I learned"; it isn't proposed again. */
+export function useForgetLearned(slug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { agent: Agent; line: string }) => unwrap(commands.forgetLearned(slug, v.agent, v.line)),
     onSuccess: (guides) => queryClient.setQueryData(key(slug), guides),
   });
 }

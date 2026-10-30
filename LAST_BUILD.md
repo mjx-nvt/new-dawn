@@ -1,3 +1,44 @@
+# Last Build — The agents learn from your edits, and you see how they're doing · release 0.8.4
+_2026-10-30_
+
+## What changed
+- **What I learned** (Workspace → Agents, D-052). Once you've made five edits to the Summary agent's or the Tasks agent's work, New Dawn reads them in the background and proposes up to three lines for that agent's guide, each with its evidence ("You shortened the overview in 4 of 5 meetings").
+  - **Approve** adds the line to what the agent is told, after its guide and winning over it. **Dismiss** sets it aside for good. Nothing changes until you approve.
+  - Lines in use are listed under the proposals, each with **Remove**. They're kept apart from the guide text, so Reset to default doesn't lose them.
+  - Approve waits while the guide editor has unsaved changes.
+  - **Check now** reads your newest edits at once. Otherwise it runs when your Mac is free, like the other catch-up work.
+  - It reads what you rewrote in the summary (sections, corrections, attendees) and in Tasks (tasks the agent added that you deleted or reworded, action items you sent to Tasks yourself).
+- **A number per agent and model.** Each agent's card now says how its work fared with you, per model:
+  - summaries kept without rewriting a section;
+  - emails kept as first written;
+  - names the check doubted, which you changed or kept;
+  - tasks it added that you kept, reworded or deleted.
+  A summary, its email or a task counts once it's three days old (time for you to read it), and only your edits since the AI last wrote it. Nothing from before 0.8.1 counts: that's when the app started keeping your edits.
+- Checks: 148 Rust tests pass. New ones cover:
+  - only lines with three decisions behind them, and not already known, are proposed;
+  - several saves of one section count as one decision;
+  - five new edits, or one a week old, make a reading due;
+  - a task reworded and then deleted counts once;
+  - approved lines follow the guide and survive Reset.
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app: from four Overview rewrites (plus one real edit), Check now proposed "Keep the overview to one sentence that leads with the outcome." in 20 seconds, citing the four. Approve put it in the agent's prompt. After the review's changes it shows under "In use" with Remove, and the guide itself stays the default. Checked in dark and light.
+- Found on the way: with thinking on, the model used 6,000 tokens on 25 edits without answering. Without thinking it was undecided, and the default guide's "Be detailed" held it back. Asking for a note on each edit first, and saying learned lines win over the guide, gave the right line in three runs out of three.
+- Reviews: migration 0014 (additive) was reviewed. Its one point was taken before release: deleting a meeting also removes proposals built on its edits. The architecture review found no rule violations and three must-fixes, all fixed:
+  - Check now failed while a scheduled reading was waiting for a free Mac;
+  - a meeting deleted during that wait could still feed a proposal;
+  - Approve threw away unsaved edits in the guide editor.
+
+  Its other points were taken too (see D-052).
+
+## Release
+- **v0.8.4** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new table.
+
+## Manual steps
+- None. Proposals appear by themselves after five edits to an agent's work; Workspace → Agents → Check now asks at once.
+
+---
+
 # Last Build — Your voice and theirs, kept apart · release 0.8.3
 _2026-10-30_
 

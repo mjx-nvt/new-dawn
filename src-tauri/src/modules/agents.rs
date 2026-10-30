@@ -136,6 +136,14 @@ pub struct AgentGuide {
     pub by_model: Vec<ModelStats>,
     /// The owner's edits and decisions about this agent's work, in the feedback ledger (D-049).
     pub feedback: u32,
+    /// How the owner judged its work, per model (D-052).
+    pub numbers: Vec<crate::modules::feedback::Judged>,
+    /// It learns from the owner's edits ("What I learned").
+    pub learns: bool,
+    /// Lines proposed for its guide, waiting for the owner.
+    pub lessons: Vec<crate::modules::lessons::Lesson>,
+    /// Lines the owner approved, which every prompt gets after the guide.
+    pub learned: Vec<String>,
 }
 
 fn file(folder: &Path, agent: Agent) -> PathBuf {
@@ -209,18 +217,68 @@ pub async fn set_model(pool: &SqlitePool, agent: Agent, model: Option<&str>) -> 
     Ok(())
 }
 
-/// The guide in force: the workspace's file, else the default.
+/// The heading the approved lines go under in every prompt (D-052).
+pub const LEARNED_HEADING: &str =
+    "## Learned from your edits (these win over the rest of this guide)";
+
+/// The guide in force: the workspace's file, else the default — then the lines the owner approved
+/// from "What I learned", which win over the rest.
 pub fn guide(folder: &Path, agent: Agent) -> String {
-    std::fs::read_to_string(file(folder, agent))
+    let own = std::fs::read_to_string(file(folder, agent))
         .ok()
         .map(|s| s.trim().to_owned())
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| agent.default_guide().trim().to_owned())
+        .unwrap_or_else(|| agent.default_guide().trim().to_owned());
+    let learned = learned(folder, agent);
+    if learned.is_empty() {
+        return own;
+    }
+    let lines: Vec<String> = learned.iter().map(|l| format!("- {l}")).collect();
+    format!("{own}\n\n{LEARNED_HEADING}\n{}", lines.join("\n"))
+}
+
+/// Approved lines live beside the guide, not in it: Reset to default keeps them, and the bundled
+/// default keeps reaching a workspace that approved some.
+fn learned_file(folder: &Path, agent: Agent) -> PathBuf {
+    folder
+        .join("brand")
+        .join("agents")
+        .join(format!("{}.learned.md", agent.id()))
+}
+
+/// The lines the owner approved for `agent`, in the order approved.
+pub fn learned(folder: &Path, agent: Agent) -> Vec<String> {
+    std::fs::read_to_string(learned_file(folder, agent))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| l.strip_prefix("- "))
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+/// Saves the approved lines (temp file, fsync, rename); none = no file.
+pub fn set_learned(folder: &Path, agent: Agent, lines: &[String]) -> Result<()> {
+    let path = learned_file(folder, agent);
+    if lines.is_empty() {
+        return match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+            _ => Ok(()),
+        };
+    }
+    std::fs::create_dir_all(path.parent().context("guide has no folder")?)?;
+    let body: String = lines.iter().map(|l| format!("- {l}\n")).collect();
+    let tmp = path.with_extension("md.tmp");
+    std::fs::write(&tmp, body)?;
+    std::fs::File::open(&tmp)?.sync_all()?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
 }
 
 pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
     let mut out = Vec::with_capacity(Agent::ALL.len());
     for agent in Agent::ALL {
+        let learns = crate::modules::lessons::LEARNERS.contains(&agent);
         let custom = std::fs::read_to_string(file(folder, agent)).ok();
         let last: Option<AgentRun> = sqlx::query_as(
             "SELECT model, status, duration_ms, prompt_tokens, output_tokens, created_at FROM ai_log \
@@ -255,6 +313,14 @@ pub async fn list(pool: &SqlitePool, folder: &Path) -> Result<Vec<AgentGuide>> {
             model: model_for(pool, agent).await,
             by_model,
             feedback,
+            numbers: crate::modules::feedback::numbers(pool, agent).await?,
+            learns,
+            lessons: if learns {
+                crate::modules::lessons::proposed(pool, agent).await?
+            } else {
+                Vec::new()
+            },
+            learned: learned(folder, agent),
         });
     }
     Ok(out)
@@ -314,6 +380,15 @@ mod tests {
         set_guide(dir.path(), Agent::Summary, "").unwrap();
         assert!(guide(dir.path(), Agent::Summary).starts_with("# Summary agent"));
         reset(dir.path(), Agent::Summary).unwrap(); // twice is fine
+        // Approved lines come after the guide, under their heading, and survive a reset.
+        set_learned(dir.path(), Agent::Summary, &["Keep the overview short.".into()]).unwrap();
+        reset(dir.path(), Agent::Summary).unwrap();
+        let told = guide(dir.path(), Agent::Summary);
+        assert!(told.starts_with("# Summary agent"));
+        assert!(told.ends_with(&format!("{LEARNED_HEADING}\n- Keep the overview short.")));
+        assert_eq!(learned(dir.path(), Agent::Summary), ["Keep the overview short."]);
+        set_learned(dir.path(), Agent::Summary, &[]).unwrap();
+        assert!(!guide(dir.path(), Agent::Summary).contains(LEARNED_HEADING));
         for agent in Agent::ALL {
             assert!(!agent.default_guide().trim().is_empty());
         }

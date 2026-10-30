@@ -151,6 +151,17 @@ export const commands = {
 	resetAgentGuide: (slug: string, agent: Agent) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("reset_agent_guide", { slug, agent })),
 	/**  Chooses the model an agent runs on (None = the app's selected model). */
 	setAgentModel: (slug: string, agent: Agent, model: string | null) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("set_agent_model", { slug, agent, model })),
+	/**
+	 *  "Check now": reads the owner's newest decisions about the agent's work without waiting for a
+	 *  free Mac (D-052). Returns how many lines it proposes.
+	 */
+	learnNow: (slug: string, agent: Agent) => typedError<number, AppError>(__TAURI_INVOKE("learn_now", { slug, agent })),
+	/**  Approve: the proposed line is added to the agent's guide. */
+	approveLesson: (slug: string, id: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("approve_lesson", { slug, id })),
+	/**  Dismiss: the proposed line is set aside and not proposed again. */
+	dismissLesson: (slug: string, id: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("dismiss_lesson", { slug, id })),
+	/**  Stops using a line approved from "What I learned"; it isn't proposed again. */
+	forgetLearned: (slug: string, agent: Agent, line: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("forget_learned", { slug, agent, line })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -327,6 +338,14 @@ export type AgentGuide_Deserialize = {
 	by_model: ModelStats_Deserialize[],
 	/**  The owner's edits and decisions about this agent's work, in the feedback ledger (D-049). */
 	feedback: number,
+	/**  How the owner judged its work, per model (D-052). */
+	numbers: Judged[],
+	/**  It learns from the owner's edits ("What I learned"). */
+	learns: boolean,
+	/**  Lines proposed for its guide, waiting for the owner. */
+	lessons: Lesson[],
+	/**  Lines the owner approved, which every prompt gets after the guide. */
+	learned: string[],
 };
 
 export type AgentGuide_Serialize = {
@@ -342,6 +361,14 @@ export type AgentGuide_Serialize = {
 	by_model: ModelStats_Serialize[],
 	/**  The owner's edits and decisions about this agent's work, in the feedback ledger (D-049). */
 	feedback: number,
+	/**  How the owner judged its work, per model (D-052). */
+	numbers: Judged[],
+	/**  It learns from the owner's edits ("What I learned"). */
+	learns: boolean,
+	/**  Lines proposed for its guide, waiting for the owner. */
+	lessons: Lesson[],
+	/**  Lines the owner approved, which every prompt gets after the guide. */
+	learned: string[],
 };
 
 /**  The last finished call an agent made, from `ai_log`. */
@@ -714,6 +741,21 @@ export type InstalledModel = {
 /**  A meeting's long job: the activity list shows its progress and can stop it. */
 export type JobKind = "transcription" | "summary";
 
+/**
+ *  How the owner judged an agent's work on one model (D-052): of `judged` pieces of work —
+ *  summaries, emails, names the check doubted, tasks it added — `changed` were rewritten by hand
+ *  (an email: written again on request; a name: changed from what was heard, so the doubt was
+ *  right) and `dropped` deleted (tasks); the rest stood. `model` is "" when it isn't known. A
+ *  summary, its email or a task counts once it is three days old (time to be read), and only the
+ *  edits made since the AI last wrote it; the ledger exists since 0.8.1.
+ */
+export type Judged = {
+	model: string,
+	judged: number,
+	changed: number,
+	dropped: number,
+};
+
 /**  Priority order: a lower lane waits for every higher one. */
 export type Lane = 
 /**  The owner is waiting for it (Corrections, Rewrite email, a slogan's translation). */
@@ -727,6 +769,16 @@ export type Lane =
 export type Lang = "vi" | "en";
 
 export type Language = "en" | "vi" | "auto";
+
+/**  A proposed line for an agent's guide. */
+export type Lesson = {
+	id: string,
+	line: string,
+	evidence: string,
+	/**  How many of the owner's edits it rests on (counted by the app, not claimed by the model). */
+	edits: number,
+	created_at: string,
+};
 
 /**  Which way a live session translates (0.7.5). */
 export type LiveDirection = 

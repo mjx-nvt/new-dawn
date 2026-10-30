@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAgents, useResetAgentGuide, useSetAgentGuide, useSetAgentModel, type AgentGuide } from "../../kernel/bridge/agents";
+import { useAgents, useForgetLearned, useJudgeLesson, useLearnNow, useResetAgentGuide, useSetAgentGuide, useSetAgentModel, type AgentGuide, type Judged } from "../../kernel/bridge/agents";
 import { useOllamaStatus } from "../../kernel/bridge/summary";
 import DangerButton from "../../kernel/shell/DangerButton";
 import { SparkleIcon } from "../../kernel/shell/icons";
@@ -17,6 +17,24 @@ function learning(guide: AgentGuide): string {
   return guide.agent === "summary"
     ? `${recorded}. Your newest rewritten sections of the same kind of meeting go with each new summary as examples.`
     : `${recorded}.`;
+}
+
+/** How you judged its work on one model, in words (D-052). */
+function verdict(agent: AgentGuide["agent"], n: Judged): string {
+  const model = n.model || "Unknown model";
+  const stood = n.judged - n.changed - n.dropped;
+  switch (agent) {
+    case "summary":
+      return `${model}: ${stood} of ${n.judged} summaries kept without rewriting a section`;
+    case "email":
+      return `${model}: ${stood} of ${n.judged} emails kept as first written`;
+    case "naming":
+      return `${model}: of ${n.judged} names it doubted, you changed ${n.changed} and kept ${stood} as heard`;
+    case "tasks":
+      return `${model}: ${stood} of ${n.judged} tasks it added kept as written (${n.changed} reworded, ${n.dropped} deleted)`;
+    default:
+      return "";
+  }
 }
 
 /** The Live agent's default when installed, before the app model (FAST_MODEL in kernel/ai/live.rs). */
@@ -41,6 +59,7 @@ export default function AgentsPanel({ slug }: { slug: string }) {
         agents.data.map((g) => (
           <AgentCard
             key={g.agent}
+            slug={slug}
             guide={g}
             saving={save.isPending && save.variables?.agent === g.agent}
             onSave={(text) => save.mutate({ agent: g.agent, text })}
@@ -67,6 +86,7 @@ export default function AgentsPanel({ slug }: { slug: string }) {
 }
 
 function AgentCard({
+  slug,
   guide,
   saving,
   onSave,
@@ -75,6 +95,7 @@ function AgentCard({
   appModel,
   onModel,
 }: {
+  slug: string;
   guide: AgentGuide;
   saving: boolean;
   onSave: (text: string) => void;
@@ -129,7 +150,9 @@ function AgentCard({
           </p>
         )}
         {LEARNS.includes(guide.agent) && <p className="fieldHint">{learning(guide)}</p>}
+        {guide.numbers.length > 0 && <p className="fieldHint">{guide.numbers.map((n) => verdict(guide.agent, n)).join(" · ")}</p>}
       </div>
+      {guide.learns && <Learned slug={slug} guide={guide} dirty={dirty} />}
       <textarea
         className={`input ${styles.editor}`}
         value={draft}
@@ -154,6 +177,81 @@ function AgentCard({
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** "What I learned" (D-052): lines proposed from your edits, each with its evidence — Approve adds
+ *  it to what the agent is told after its guide, Dismiss sets it aside; never applied by itself.
+ *  Below them, the lines in use, each with Remove. Approve waits while the guide has unsaved
+ *  changes (saving the list reloads the editor). */
+function Learned({ slug, guide, dirty }: { slug: string; guide: AgentGuide; dirty: boolean }) {
+  const learn = useLearnNow(slug);
+  const judge = useJudgeLesson(slug);
+  const forget = useForgetLearned(slug);
+  const checking = learn.isPending && learn.variables === guide.agent;
+  const checked = learn.isSuccess && learn.variables === guide.agent ? learn.data : null;
+  const error = (learn.variables === guide.agent ? learn.error : null) ?? judge.error ?? forget.error;
+
+  return (
+    <div className={styles.learned}>
+      <div className={styles.learnedHead}>
+        <p className="rowLabel">What I learned</p>
+        <button type="button" className="btn btnAi btnCompact" aria-busy={checking || undefined} disabled={checking} onClick={() => learn.mutate(guide.agent)}>
+          <SparkleIcon />
+          {checking ? "Reading your edits…" : "Check now"}
+        </button>
+      </div>
+      {guide.lessons.length ? (
+        guide.lessons.map((l) => (
+          <div key={l.id} className={styles.lesson}>
+            <div className={styles.lessonText}>
+              <p className={styles.lessonLine}>{l.line}</p>
+              <p className="fieldHint">
+                {l.evidence ? `${l.evidence} · ` : ""}From {l.edits} of your edits
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btnSecondary btnCompact"
+              disabled={judge.isPending || dirty}
+              title={dirty ? "Save or discard your changes to the guide first" : undefined}
+              aria-label={`Approve “${l.line}”`}
+              onClick={() => judge.mutate({ id: l.id, approve: true })}
+            >
+              Approve
+            </button>
+            <button type="button" className="btn btnGhost btnCompact" disabled={judge.isPending} aria-label={`Dismiss “${l.line}”`} onClick={() => judge.mutate({ id: l.id, approve: false })}>
+              Dismiss
+            </button>
+          </div>
+        ))
+      ) : (
+        <p className={`${styles.lesson} ${styles.lessonGhost} fieldHint ghostText`}>
+          {checked === 0 ? "Nothing new to propose from your recent edits." : "After five of your edits to its work, what they have in common shows here for you to approve."}
+        </p>
+      )}
+      {dirty && guide.lessons.length > 0 && <p className="fieldHint">Save or discard your changes to the guide first, then approve.</p>}
+      {guide.learned.length > 0 && (
+        <>
+          <p className="fieldHint">In use — told to the agent after its guide, and they win over it:</p>
+          <ul className={styles.learnedLines}>
+            {guide.learned.map((line) => (
+              <li key={line} className={styles.learnedLine}>
+                <span>{line}</span>
+                <button type="button" className="btn btnGhost btnCompact" disabled={forget.isPending} aria-label={`Stop using “${line}”`} onClick={() => forget.mutate({ agent: guide.agent, line })}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {error && (
+        <p className="formError" role="alert">
+          {error.message}
+        </p>
+      )}
     </div>
   );
 }
