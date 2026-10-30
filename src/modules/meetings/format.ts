@@ -50,7 +50,7 @@ export const STATUS_LABEL: Record<MeetingStatus, string> = {
 };
 
 export const STAGE_LABEL: Record<Stage, string> = {
-  queued: "Waiting for the previous job",
+  queued: "Waiting for another AI job",
   decoding: "Reading the audio",
   detecting_speech: "Finding speech",
   transcribing: "Transcribing",

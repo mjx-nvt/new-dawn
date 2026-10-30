@@ -3,6 +3,7 @@
 //! round), map → recursive reduce only when the transcript doesn't fit the context.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -19,6 +20,7 @@ use super::{Meeting, MeetingStatus, Speaker, TranscriptSegment};
 use crate::error::AppError;
 use crate::events::{SummaryFinished, SummaryProgress};
 use crate::kernel::ai::ollama::{self, Message, NUM_CTX, Request, TextSession};
+use crate::kernel::ai::queue::{JobKind, Lane, Task};
 use crate::kernel::ai::whisper::Language;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::profile::{self, Owner};
@@ -49,8 +51,13 @@ pub struct Section {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ActionItem {
+    /// "Unassigned" when the model left it out, as the prompt asks for nobody's tasks.
+    #[serde(default = "unassigned")]
     pub owner: String,
+    /// An item the model sent without it is dropped (`shape`).
+    #[serde(default)]
     pub item: String,
+    #[serde(default = "not_set")]
     pub due: String,
     /// Ticked off in the to-do list (D-038).
     #[serde(default)]
@@ -416,14 +423,78 @@ fn parse_doc(answer: &str) -> Result<RawDoc> {
             )
         })?;
     lenient(&mut value, false);
-    serde_json::from_value(value).map_err(|e| {
-        anyhow::anyhow!(
-            "the model's answer was not the expected JSON ({:?} at line {}, column {})",
-            e.classify(),
-            e.line(),
-            e.column()
-        )
+    serde_json::from_value(value.clone()).or_else(|e| {
+        // Its structure only — never the words (D-026) — so the next slip can be read from logs.
+        tracing::warn!("summary answer of the wrong shape: {}", structure(&value));
+        salvage(value).ok_or_else(|| {
+            anyhow::anyhow!(
+                "the model's answer was not the expected JSON ({:?} at line {}, column {})",
+                e.classify(),
+                e.line(),
+                e.column()
+            )
+        })
     })
+}
+
+/// An answer whose prose sections read but one of its lists doesn't (names where objects were
+/// asked for, say): that list is left out, as if nothing was said for it, instead of failing the
+/// whole summary. None when the sections themselves don't read: then the model is asked again.
+fn salvage(value: serde_json::Value) -> Option<RawDoc> {
+    let serde_json::Value::Object(map) = value else {
+        return None;
+    };
+    let reads = |key: &str, field: &serde_json::Value| {
+        let mut one = serde_json::Map::new();
+        one.insert("sections".into(), serde_json::json!([]));
+        one.insert(key.to_owned(), field.clone());
+        serde_json::from_value::<RawDoc>(serde_json::Value::Object(one)).is_ok()
+    };
+    if !map.get("sections").is_some_and(|s| reads("sections", s)) {
+        return None;
+    }
+    let (kept, dropped): (serde_json::Map<_, _>, Vec<_>) = map.into_iter().fold(
+        (serde_json::Map::new(), Vec::new()),
+        |(mut kept, mut dropped), (key, field)| {
+            if reads(&key, &field) {
+                kept.insert(key, field);
+            } else {
+                dropped.push(key);
+            }
+            (kept, dropped)
+        },
+    );
+    tracing::warn!("summary answer read without {dropped:?} (not the expected shape)");
+    serde_json::from_value(serde_json::Value::Object(kept)).ok()
+}
+
+/// A JSON value's shape without its text: `{sections: [object…], attendees: [string…]}`.
+fn structure(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Object(map) => format!(
+            "{{{}}}",
+            map.iter()
+                .map(|(key, v)| format!("{key}: {}", structure(v)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        Value::Array(items) => {
+            // Every distinct item shape: the odd one out is the one that matters.
+            let mut shapes: Vec<String> = Vec::new();
+            for item in items {
+                let shape = structure(item);
+                if !shapes.contains(&shape) {
+                    shapes.push(shape);
+                }
+            }
+            format!("[{} ×{}]", shapes.join(" | "), items.len())
+        }
+        Value::String(_) => "string".into(),
+        Value::Number(_) => "number".into(),
+        Value::Bool(_) => "bool".into(),
+        Value::Null => "null".into(),
+    }
 }
 
 /// Small models drift from the shape: `null` for "", numbers for text, an object where a
@@ -596,6 +667,14 @@ struct RawDoc {
 struct RawSection {
     title: String,
     markdown: String,
+}
+
+fn unassigned() -> String {
+    "Unassigned".into()
+}
+
+fn not_set() -> String {
+    "Not set".into()
 }
 
 /// "- [ ] **Owner** — task — *due*" lines, a to-do list (the format review.rs reads back).
@@ -860,6 +939,7 @@ fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryD
         action_items: raw
             .action_items
             .into_iter()
+            .filter(|a| !a.item.trim().is_empty())
             .map(|a| ActionItem { task_id: None, ..a })
             .collect(),
         open_issues: raw.open_issues,
@@ -942,12 +1022,64 @@ fn with_notes(text: &str, notes: &str) -> String {
     }
 }
 
+/// A summary's place, next to the meeting's recording (D-048): the parts written so far, saved after
+/// each, so a quit or a turn given away loses at most one part. Resumed after a quit; deleted once
+/// the summary is saved.
+pub const CHECKPOINT: &str = "summarising.json";
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Checkpoint {
+    /// How the run was asked for, so a resume asks the same.
+    pub deep: bool,
+    pub keep_edits: bool,
+    /// What the parts were written from (prompt, transcript, notes): anything else starts over.
+    key: String,
+    parts: Vec<SummaryDoc>,
+    /// Runs that started from this file; launches stop resuming after the third.
+    pub attempts: u32,
+}
+
+impl Checkpoint {
+    pub fn read(path: &Path) -> Option<Self> {
+        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+    }
+
+    fn write(&self, path: &Path) -> Result<()> {
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(self)?)?;
+        std::fs::rename(&tmp, path).context("saving the summary's place")
+    }
+
+    /// Saves the place; a failure costs only the resume, not the summary.
+    fn save(&self, path: &Path) {
+        if let Err(err) = self.write(path) {
+            tracing::warn!("{err:#}");
+        }
+    }
+}
+
+fn fingerprint(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// At a checkpoint: a higher lane waits for the AI (Corrections, say), so it goes first (D-048).
+async fn make_way(session: &mut TextSession<'_>, report: Report<'_>) {
+    if session.wanted() {
+        report(SummaryStage::Queued, 0, 0, 0);
+        session.make_way().await;
+    }
+}
+
 /// Summary of `text` (+ the owner's `notes`, given to every part); chunks and merges when it
 /// doesn't fit (or when Ollama reports overflow). `owner`: who recorded it, when known;
 /// `speakers`: some lines of `text` say who spoke them.
 #[allow(clippy::too_many_arguments)]
 async fn summarise_text(
-    session: &TextSession<'_>,
+    session: &mut TextSession<'_>,
     guide: &str,
     structure: &[SectionSpec],
     language: Language,
@@ -958,9 +1090,24 @@ async fn summarise_text(
     deep: bool,
     cancel: &AtomicBool,
     report: Report<'_>,
+    place: &mut Checkpoint,
+    saved_at: Option<&Path>,
 ) -> Result<SummaryDoc> {
     // Every part and the merge share it, so the owner is named in each call.
     let system = system_prompt(guide, structure, language, owner, speakers);
+    let key = fingerprint(&format!(
+        "{system}\0{text}\0{notes}\0{deep}\0{}",
+        session.model()
+    ));
+    if place.key != key {
+        // Another run: its tries count from this one.
+        place.key = key;
+        place.parts.clear();
+        place.attempts = 1;
+        if let Some(path) = saved_at {
+            place.save(path);
+        }
+    }
     let budget = input_budget(deep).saturating_sub(estimate_tokens(notes));
     if estimate_tokens(text) <= budget {
         match ask(
@@ -985,11 +1132,21 @@ async fn summarise_text(
             Err(err) => return Err(err),
         }
     }
-    // Map: each part becomes partial notes in the same schema.
+    // Map: each part becomes partial notes in the same schema; parts already written (before a quit)
+    // are kept, and each new one is saved before the next.
     let chunks = chunk_lines(text, budget / 2);
     let parts = chunks.len() as u32;
-    let mut partials = Vec::with_capacity(chunks.len());
-    for (i, chunk) in chunks.iter().enumerate() {
+    if place.parts.len() > chunks.len() {
+        place.parts.clear();
+    }
+    if !place.parts.is_empty() {
+        tracing::info!(
+            "summary goes on at part {} of {parts}",
+            place.parts.len() + 1
+        );
+    }
+    for (i, chunk) in chunks.iter().enumerate().skip(place.parts.len()) {
+        make_way(session, report).await;
         let raw = ask(
             session,
             &system,
@@ -1000,10 +1157,21 @@ async fn summarise_text(
             |t| report(SummaryStage::Writing, i as u32 + 1, parts, t),
         )
         .await?;
-        partials.push(shape(raw, structure, language));
+        place.parts.push(shape(raw, structure, language));
+        if let Some(path) = saved_at {
+            place.save(path);
+        }
     }
+    make_way(session, report).await;
     reduce(
-        session, &system, structure, language, partials, deep, cancel, report,
+        session,
+        &system,
+        structure,
+        language,
+        place.parts.clone(),
+        deep,
+        cancel,
+        report,
     )
     .await
 }
@@ -1236,6 +1404,7 @@ async fn run(
         }
     };
     report(SummaryStage::Queued, 0, 0, 0);
+    let checkpoint = super::job_file(app, slug, &meeting.id, CHECKPOINT).await?;
     super::set_status(&pool, &meeting.id, MeetingStatus::Summarising).await?;
 
     let outcome: Result<usize> = async {
@@ -1277,16 +1446,28 @@ async fn run(
         let notes = notes.trim();
         let structure = default_structure(SUMMARY_LANGUAGE);
         let guide = agents::guide(std::path::Path::new(&workspace.folder_path), Agent::Summary);
+        let mut place = Checkpoint::read(&checkpoint).unwrap_or_default();
+        place.deep = deep;
+        place.keep_edits = keep_edits;
+        place.attempts += 1;
+        place.save(&checkpoint);
         // The whole run (summary → names check → cover note) stays on the Summary agent's model.
         let model = agents::model_for(&pool, Agent::Summary).await;
-        let mut session = ollama::session(app, pool.clone(), Some(&meeting.id), model).await?;
+        let task = Task::job(
+            JobKind::Summary,
+            format!("Writing the summary of “{}”", meeting.title),
+            slug,
+            &meeting.id,
+        );
+        let mut session =
+            ollama::session(app, pool.clone(), Some(&meeting.id), model, Lane::Foreground, task).await?;
         session.for_agent("summary");
         if cancel.load(Ordering::Relaxed) {
             bail!(AppError::new("cancelled", "Summary cancelled")); // cancelled while queued
         }
         let owner_name = owner.as_ref().map(|o| o.name.as_str());
         let mut doc = summarise_text(
-            &session,
+            &mut session,
             &guide,
             &structure,
             SUMMARY_LANGUAGE,
@@ -1297,6 +1478,8 @@ async fn run(
             deep,
             &cancel,
             &report,
+            &mut place,
+            Some(&checkpoint),
         )
         .await?;
         let model_name = session.model().to_owned();
@@ -1343,9 +1526,11 @@ async fn run(
             doc.sections.iter().any(|s| s.edited),
         )
         .await?;
-        // The summary is saved: the two agents that follow are best effort, on the same session
-        // (the queue is held once; Whisper isn't reloaded in between).
+        super::transcribe::forget(Some(&checkpoint));
+        // The summary is saved: the agents that follow are best effort, on the same session
+        // (Whisper isn't reloaded in between); a higher lane may go first between them.
         let folder = std::path::Path::new(&workspace.folder_path);
+        make_way(&mut session, &report).await;
         report(SummaryStage::Naming, 0, 0, 0);
         session.for_agent("naming");
         // The owner counts as known: never a name to confirm.
@@ -1356,6 +1541,7 @@ async fn run(
         if let Err(err) = super::set_naming(&pool, &meeting.id, json.as_deref()).await {
             tracing::warn!("could not store the naming check: {err:#}");
         }
+        make_way(&mut session, &report).await;
         report(SummaryStage::Email, 0, 0, 0);
         session.for_agent("email");
         match email::compose(&session, folder, &doc, &ctx, &cancel).await {
@@ -1367,6 +1553,7 @@ async fn run(
             Err(err) => tracing::warn!("email agent skipped (the rendered note stands): {err:#}"),
         }
         // The owner's action items go to Tasks (once per meeting); the links are saved.
+        make_way(&mut session, &report).await;
         if owner.is_some() && feeds_tasks {
             report(SummaryStage::Tasks, 0, 0, 0);
         }
@@ -1380,7 +1567,14 @@ async fn run(
     }
     .await;
 
-    if outcome.is_err() {
+    if let Err(err) = &outcome {
+        // Cancelled: nothing to resume. An error keeps the place, so a re-run goes on from it.
+        if err
+            .downcast_ref::<AppError>()
+            .is_some_and(|e| e.code == "cancelled")
+        {
+            super::transcribe::forget(Some(&checkpoint));
+        }
         let restore = if previous == MeetingStatus::Summarised {
             previous
         } else {
@@ -1407,6 +1601,44 @@ mod tests {
         let chunks = chunk_lines(&text, 60); // ~20 tokens per line → 3 lines per chunk
         assert_eq!(chunks.len(), 4);
         assert_eq!(chunks.join("\n"), text, "no line lost or duplicated");
+    }
+
+    #[test]
+    fn a_misshaped_list_is_left_out_not_the_summary() {
+        let answer = r#"{"sections": [{"title": "Overview", "markdown": "Core drilling results."}],
+            "attendees": ["Mr. Phuc", "Mr. Tom"], "decisions": [{"text": "Drill two more cores"}]}"#;
+        let doc = parse_doc(answer).unwrap();
+        assert_eq!(doc.sections.len(), 1);
+        assert!(
+            doc.attendees.is_empty(),
+            "names where objects were asked for are dropped"
+        );
+        assert_eq!(doc.decisions.len(), 1);
+        assert!(
+            parse_doc(r#"{"attendees": [], "decisions": []}"#).is_err(),
+            "no sections: ask again"
+        );
+        assert!(parse_doc(r#"{"sections": {"Overview": "…"}}"#).is_err());
+        // An item without its due or owner keeps its task; one without a task is dropped.
+        let items = r#"{"sections": [], "action_items": [{"owner": "Mr. Tom", "item": "Drill two cores"},
+            {"item": "Book the lab"}, {"owner": "Duc", "due": "Friday"}]}"#;
+        let doc = shape(
+            parse_doc(items).unwrap(),
+            &default_structure(Language::En),
+            Language::En,
+        );
+        let kept: Vec<_> = doc
+            .action_items
+            .iter()
+            .map(|a| (a.owner.as_str(), a.item.as_str(), a.due.as_str()))
+            .collect();
+        assert_eq!(
+            kept,
+            [
+                ("Mr. Tom", "Drill two cores", "Not set"),
+                ("Unassigned", "Book the lab", "Not set")
+            ]
+        );
     }
 
     #[test]
@@ -1946,7 +2178,16 @@ pub async fn rewrite_email(app: &AppHandle, slug: &str, meeting_id: &str) -> Res
     };
     let cancel = AtomicBool::new(false);
     let model = agents::model_for(&pool, Agent::Email).await;
-    let mut session = ollama::session(app, pool.clone(), Some(meeting_id), model).await?;
+    let task = Task::meeting("Rewriting the email", slug, meeting_id);
+    let mut session = ollama::session(
+        app,
+        pool.clone(),
+        Some(meeting_id),
+        model,
+        Lane::Interactive,
+        task,
+    )
+    .await?;
     session.for_agent("email");
     let (subject, body) = email::compose(
         &session,
@@ -2029,7 +2270,7 @@ mod eval_tests {
     use serde_json::json;
 
     use super::*;
-    use crate::kernel::ai::queue::AiQueue;
+    use crate::kernel::ai::queue::{AiQueue, Lane, Task};
     use crate::modules::meetings::eval;
 
     /// Model comparison, step 2 (see `modules::meetings::eval`): a meeting's automatic run on
@@ -2051,7 +2292,10 @@ mod eval_tests {
             let folder = std::path::Path::new(&workspace.folder_path);
             let people = people::list(pool).await.unwrap();
             let queue = AiQueue::default();
-            let mut session = ollama::TextSession::for_test(queue.acquire().await, pool.clone());
+            let mut session = ollama::TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                pool.clone(),
+            );
             let cancel = AtomicBool::new(false);
             let mut seconds = serde_json::Map::new();
 
@@ -2081,7 +2325,7 @@ mod eval_tests {
                     session.for_agent("summary");
                     let started = Instant::now();
                     let result = summarise_text(
-                        &session,
+                        &mut session,
                         &guide,
                         &default_structure(SUMMARY_LANGUAGE),
                         SUMMARY_LANGUAGE,
@@ -2092,6 +2336,8 @@ mod eval_tests {
                         false,
                         &cancel,
                         &|_, _, _, _| {},
+                        &mut Checkpoint::default(),
+                        None,
                     )
                     .await;
                     seconds.insert("summary".into(), json!(started.elapsed().as_secs_f64()));
@@ -2182,7 +2428,7 @@ mod eval_tests {
 #[cfg(test)]
 mod live_tests {
     use super::*;
-    use crate::kernel::ai::queue::AiQueue;
+    use crate::kernel::ai::queue::{AiQueue, Lane, Task};
 
     /// Real Qwen through Ollama (`cargo test summarises_with_qwen -- --ignored --nocapture`).
     #[test]
@@ -2225,13 +2471,16 @@ mod live_tests {
             hub.create_workspace("Test", "test").await.unwrap();
             let pool = hub.pool("test").unwrap();
             let queue = AiQueue::default();
-            let session = ollama::TextSession::for_test(queue.acquire().await, pool.clone());
+            let mut session = ollama::TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                pool.clone(),
+            );
             let structure = default_structure(Language::En);
             let cancel = AtomicBool::new(false);
             let started = std::time::Instant::now();
             let report = |_: SummaryStage, _: u32, _: u32, _: u32| {};
             let doc = summarise_text(
-                &session,
+                &mut session,
                 Agent::Summary.default_guide(),
                 &structure,
                 Language::En,
@@ -2242,6 +2491,8 @@ mod live_tests {
                 false,
                 &cancel,
                 &report,
+                &mut Checkpoint::default(),
+                None,
             )
             .await
             .unwrap();

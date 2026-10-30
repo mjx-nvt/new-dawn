@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{self, Message, Request};
+use crate::kernel::ai::queue::{Lane, Task};
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::profile;
 use crate::modules::agents::{self, Agent};
@@ -47,7 +48,8 @@ pub async fn translate_slogan(app: &AppHandle, slug: &str, text: &str) -> Result
     let workspace = hub.workspace(slug).await?;
     let guide = agents::guide(Path::new(&workspace.folder_path), Agent::Translate);
     let model = agents::model_for(&pool, Agent::Translate).await;
-    let mut session = ollama::session(app, pool, None, model).await?;
+    let task = Task::new("Translating the slogan");
+    let mut session = ollama::session(app, pool, None, model, Lane::Interactive, task).await?;
     session.for_agent("translate");
     let answer = session
         .complete(
@@ -122,7 +124,7 @@ mod tests {
         use std::sync::atomic::AtomicBool;
 
         use crate::kernel::ai::ollama;
-        use crate::kernel::ai::queue::AiQueue;
+        use crate::kernel::ai::queue::{AiQueue, Lane, Task};
         use crate::modules::agents::Agent;
         use crate::modules::meetings::eval;
         let model = eval::use_model();
@@ -133,8 +135,10 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let setup = eval::setup(None).await;
             let queue = AiQueue::default();
-            let mut session =
-                ollama::TextSession::for_test(queue.acquire().await, setup.pool.clone());
+            let mut session = ollama::TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                setup.pool.clone(),
+            );
             session.for_agent("translate");
             let mut runs = Vec::new();
             for line in file.lines().map(str::trim).filter(|l| !l.is_empty()) {

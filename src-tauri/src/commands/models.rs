@@ -5,6 +5,8 @@ use crate::kernel::hub::WorkspaceHub;
 
 use crate::error::AppError;
 use crate::kernel::ai::models::{self, ModelInfo, ModelStore, SpeechChoice, SpeechJob};
+use crate::kernel::ai::queue::{Activity, AiQueue};
+use crate::kernel::ai::resources::{self, Pace};
 
 #[tauri::command]
 #[specta::specta]
@@ -75,4 +77,24 @@ pub async fn set_speech_model(
     model: Option<String>,
 ) -> Result<(), AppError> {
     Ok(models::choose_speech_model(&hub, job, model.as_deref()).await?)
+}
+
+/// What the AI is doing and what waits for it, in the order it will run (D-048).
+#[tauri::command]
+#[specta::specta]
+pub fn ai_activity(queue: State<'_, AiQueue>) -> Result<Vec<Activity>, AppError> {
+    Ok(queue.activity())
+}
+
+/// Gentle (the default) or full speed while you work.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_ai_pace(hub: State<'_, WorkspaceHub>) -> Result<Pace, AppError> {
+    Ok(resources::read_pace(&hub).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_ai_pace(hub: State<'_, WorkspaceHub>, pace: Pace) -> Result<(), AppError> {
+    Ok(resources::set_pace(&hub, pace).await?)
 }

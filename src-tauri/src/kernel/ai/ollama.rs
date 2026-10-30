@@ -5,6 +5,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use crate::error::AppError;
+use crate::events::{OllamaPullFinished, OllamaPullProgress};
+use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
+use crate::kernel::ai::queue::{AiQueue, Lane, Task, Turn};
+use crate::kernel::ai::resources;
+use crate::kernel::ai::whisper::WhisperEngine;
 use anyhow::{Context, Result, bail};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -12,13 +18,6 @@ use specta::Type;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
-use tokio::sync::MutexGuard;
-
-use crate::error::AppError;
-use crate::events::{OllamaPullFinished, OllamaPullProgress};
-use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
-use crate::kernel::ai::queue::AiQueue;
-use crate::kernel::ai::whisper::WhisperEngine;
 
 const BASE: &str = "http://localhost:11434";
 /// The text model until the user picks another in Settings → Models (D-027).
@@ -62,6 +61,8 @@ pub fn valid_name(name: &str) -> bool {
 pub const NUM_CTX: u32 = 32_768;
 /// How long Ollama keeps Qwen loaded after a call (several calls per summary reuse it).
 const KEEP_ALIVE: &str = "5m";
+/// The same while the owner works on the Mac at a gentle pace: its 8–9 GB go back sooner (D-048).
+const KEEP_ALIVE_GENTLE: &str = "1m";
 /// Sampling temperature unless a session sets its own.
 const TEMPERATURE: f32 = 0.3;
 
@@ -262,7 +263,12 @@ pub async fn select(app: &AppHandle, name: &str) -> Result<OllamaStatus> {
     if !valid_name(name) {
         bail!(AppError::invalid("That isn't an Ollama model name"));
     }
-    let _turn = app.state::<AiQueue>().inner().acquire().await;
+    // Foreground, like a summary: it waits for a running one rather than interrupting it.
+    let _turn = app
+        .state::<AiQueue>()
+        .inner()
+        .acquire(Lane::Foreground, Task::new("Switching the text model"))
+        .await;
     if !status().await.installed.iter().any(|m| m.name == name) {
         bail!(AppError::invalid(format!(
             "Download {name} before choosing it"
@@ -287,7 +293,11 @@ pub async fn remove(app: &AppHandle, name: &str) -> Result<()> {
             "This model writes the summaries — choose another one first"
         ));
     }
-    let _turn = app.state::<AiQueue>().inner().acquire().await;
+    let _turn = app
+        .state::<AiQueue>()
+        .inner()
+        .acquire(Lane::Foreground, Task::new("Removing a text model"))
+        .await;
     let response = client(Duration::from_secs(30))?
         .delete(format!("{BASE}/api/delete"))
         .json(&serde_json::json!({ "model": name }))
@@ -367,9 +377,10 @@ pub struct Completion {
     pub output_tokens: u32,
 }
 
-/// A feature's turn with the text model: holds the AI queue so nothing else runs meanwhile.
+/// A feature's turn with the text model: holds the AI queue so nothing else runs meanwhile; a long
+/// one lets a higher lane go first at its checkpoints (`make_way`, D-048).
 pub struct TextSession<'a> {
-    _turn: MutexGuard<'a, ()>,
+    turn: Turn<'a>,
     pool: SqlitePool,
     meeting_id: Option<String>,
     /// Which agent is talking, for `ai_log` (D-035).
@@ -379,17 +390,21 @@ pub struct TextSession<'a> {
     temperature: f32,
     /// Context window for every call of the session (a change makes Ollama reload the model).
     num_ctx: u32,
+    keep_alive: &'static str,
 }
 
-/// Waits for the AI queue, checks Ollama, and unloads Whisper (never two models at once).
-/// `model`: an agent's own model (D-038); None = the app's selected one.
+/// Waits for a turn in `lane`, checks Ollama, and unloads Whisper (never two models at once).
+/// `model`: an agent's own model (D-038); None = the app's selected one. `task` is what the AI
+/// activity list shows.
 pub async fn session<'a>(
     app: &'a AppHandle,
     pool: SqlitePool,
     meeting_id: Option<&str>,
     model: Option<String>,
+    lane: Lane,
+    task: Task,
 ) -> Result<TextSession<'a>> {
-    let turn = app.state::<AiQueue>().inner().acquire().await;
+    let turn = app.state::<AiQueue>().inner().acquire(lane, task).await;
     let ollama = status().await;
     if !ollama.running {
         bail!(AppError::new(
@@ -414,35 +429,44 @@ pub async fn session<'a>(
         ));
     }
     app.state::<WhisperEngine>().unload_now();
-    Ok(session_on(turn, pool, meeting_id, chosen).await)
+    let mut session = session_on(turn, pool, meeting_id, chosen).await;
+    if resources::go_easy(app).await {
+        session.keep_alive = KEEP_ALIVE_GENTLE;
+    }
+    Ok(session)
 }
 
 /// A session on a turn the caller already holds, with Whisper left loaded: the live worker keeps
 /// both models for its whole session (D-041). `model` must be installed (see `status`).
 pub async fn session_on<'a>(
-    turn: MutexGuard<'a, ()>,
+    turn: Turn<'a>,
     pool: SqlitePool,
     meeting_id: Option<&str>,
     model: String,
 ) -> TextSession<'a> {
-    // Never two text models at once: drop the previous one when an agent uses another.
-    let previous = std::mem::replace(
-        &mut *LOADED
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-        model.clone(),
-    );
-    if !previous.is_empty() && previous != model {
-        unload_one(&previous).await;
-    }
+    only_loaded(&model).await;
     TextSession {
-        _turn: turn,
+        turn,
         pool,
         meeting_id: meeting_id.map(str::to_owned),
         agent: None,
         model,
         temperature: TEMPERATURE,
         num_ctx: NUM_CTX,
+        keep_alive: KEEP_ALIVE,
+    }
+}
+
+/// Never two text models at once: drops the one the last session ran on when `model` differs.
+async fn only_loaded(model: &str) {
+    let previous = std::mem::replace(
+        &mut *LOADED
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        model.to_owned(),
+    );
+    if !previous.is_empty() && previous != model {
+        unload_one(&previous).await;
     }
 }
 
@@ -461,15 +485,16 @@ mod name_tests {
 #[cfg(test)]
 impl<'a> TextSession<'a> {
     /// A session for tests: the caller supplies the queue turn (no AppHandle needed).
-    pub fn for_test(turn: MutexGuard<'a, ()>, pool: SqlitePool) -> Self {
+    pub fn for_test(turn: Turn<'a>, pool: SqlitePool) -> Self {
         Self {
-            _turn: turn,
+            turn,
             pool,
             meeting_id: None,
             agent: None,
             model: model(),
             temperature: TEMPERATURE,
             num_ctx: NUM_CTX,
+            keep_alive: KEEP_ALIVE,
         }
     }
 }
@@ -478,6 +503,20 @@ impl TextSession<'_> {
     /// The model this session talks to.
     pub fn model(&self) -> &str {
         &self.model
+    }
+
+    /// A higher lane waits for the AI: a long run should `make_way` at its next checkpoint.
+    pub fn wanted(&self) -> bool {
+        self.turn.wanted()
+    }
+
+    /// At a checkpoint: lets waiting higher-lane jobs use the AI, then goes on with this model
+    /// (the jobs that went first may have loaded another one, D-048).
+    pub async fn make_way(&mut self) {
+        if self.turn.wanted() {
+            self.turn.make_way().await;
+            only_loaded(&self.model).await;
+        }
     }
 
     /// Tags the calls that follow with the agent making them (one session can serve several
@@ -584,7 +623,7 @@ impl TextSession<'_> {
             "messages": request.messages,
             "stream": true,
             "think": request.think,
-            "keep_alive": KEEP_ALIVE,
+            "keep_alive": self.keep_alive,
             "options": { "num_ctx": self.num_ctx, "num_predict": request.max_tokens, "temperature": self.temperature },
         });
         let response = client(Duration::from_secs(180))? // the first token can wait for the model to load

@@ -601,7 +601,7 @@ fn evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kernel::ai::queue::AiQueue;
+    use crate::kernel::ai::queue::{AiQueue, Lane, Task};
     use crate::kernel::ai::whisper::Language;
     use crate::kernel::hub::WorkspaceHub;
 
@@ -875,7 +875,10 @@ mod tests {
             };
             let (pool, meeting) = meeting_with(&hub, &doc).await;
             let queue = AiQueue::default();
-            let session = TextSession::for_test(queue.acquire().await, pool.clone());
+            let session = TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                pool.clone(),
+            );
             let me = owner("Tien Nguyen");
             let cancel = AtomicBool::new(false);
             let nowhere = Path::new("/nowhere");
@@ -992,7 +995,7 @@ mod tests {
 #[cfg(test)]
 mod live_tests {
     use super::*;
-    use crate::kernel::ai::queue::AiQueue;
+    use crate::kernel::ai::queue::{AiQueue, Lane, Task};
     use crate::kernel::ai::whisper::{Language, Segment};
     use crate::kernel::hub::WorkspaceHub;
 
@@ -1088,7 +1091,10 @@ mod live_tests {
                 organisation: "VIFC".into(),
             };
             let queue = AiQueue::default();
-            let mut session = TextSession::for_test(queue.acquire().await, pool.clone());
+            let mut session = TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                pool.clone(),
+            );
             session.for_agent("tasks");
             let cancel = AtomicBool::new(false);
             let started = std::time::Instant::now();

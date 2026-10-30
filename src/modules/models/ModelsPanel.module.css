@@ -68,3 +68,5 @@
   margin-top: var(--space-3);
 }
 .addField { flex: 1; }
+
+.hint { margin-top: var(--space-2); max-width: 76ch; }

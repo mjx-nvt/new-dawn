@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "new-dawn"
-version = "0.7.8"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "chrono",

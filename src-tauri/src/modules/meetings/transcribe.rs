@@ -16,9 +16,14 @@ use tokio::io::AsyncWriteExt;
 use super::{Meeting, MeetingStatus, NewMeeting, audio};
 use crate::error::AppError;
 use crate::events::{TranscriptionFinished, TranscriptionProgress};
+use crate::kernel::ai::queue::{JobKind, Lane, Task};
 use crate::kernel::ai::whisper::{self, Language, Progress, Segment, Stage, TranscribeJob};
 use crate::kernel::hub::WorkspaceHub;
 use crate::modules::vocabulary;
+
+/// A transcription's place, next to its recording (D-048): resumed after a quit, deleted once the
+/// transcript is saved.
+pub const CHECKPOINT: &str = "transcribing.json";
 
 /// Cancel flags of running jobs, by meeting id.
 #[derive(Default)]
@@ -222,6 +227,8 @@ async fn run(
             let _ = event.emit(&app);
         })
     };
+    // In the meeting's own folder, whatever layout its audio has (D-048).
+    let checkpoint = Some(super::job_file(app, slug, &meeting.id, CHECKPOINT).await?);
     super::set_status(&pool, &meeting.id, MeetingStatus::Transcribing).await?;
 
     let outcome: Result<()> = async {
@@ -243,6 +250,14 @@ async fn run(
                 &people,
                 &terms,
             )),
+            lane: Lane::Foreground,
+            task: Task::job(
+                JobKind::Transcription,
+                format!("Transcribing “{}”", meeting.title),
+                slug,
+                &meeting.id,
+            ),
+            checkpoint: checkpoint.clone(),
         };
         let source = audio_path.clone();
         let transcript = whisper::transcribe(
@@ -277,6 +292,7 @@ async fn run(
             transcript.duration_ms,
         )
         .await?;
+        forget(checkpoint.as_deref());
         let corrected = raw.iter().filter(|r| r.is_some()).count();
         if corrected > 0 {
             tracing::info!(
@@ -313,11 +329,27 @@ async fn run(
         } else {
             MeetingStatus::Failed
         };
+        // Cancelled: the owner stopped it, nothing to resume. An error keeps the place, so
+        // Transcribe again goes on from it.
+        if whisper::is_cancelled(err) {
+            forget(checkpoint.as_deref());
+        }
         if let Err(e) = super::set_status(&pool, &meeting.id, status).await {
             tracing::warn!("could not reset meeting status: {e:#}");
         }
     }
     outcome
+}
+
+/// Deletes a job's saved place (best effort: a stale one is checked before use anyway).
+pub(super) fn forget(checkpoint: Option<&Path>) {
+    if let Some(path) = checkpoint {
+        if let Err(err) = std::fs::remove_file(path) {
+            if err.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("could not delete {}: {err}", path.display());
+            }
+        }
+    }
 }
 
 /// Side file next to the audio: temp file, fsync, then rename (atomic and durable).

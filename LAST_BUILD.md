@@ -1,3 +1,28 @@
+# Last Build — AI work that makes way for you, survives a quit and goes easy while you work · release 0.8.0
+_2026-10-30_
+
+## What changed
+- **What you're waiting for goes first** (D-048). A transcription or a summary now pauses at its next step when you ask the AI for something quick (Corrections, Rewrite email, translating a slogan), then goes on.
+  - Measured on the 88-minute meeting: a request made mid-transcription started 1.6 seconds later instead of after the whole transcription (about 9 minutes).
+- **A quit loses nothing.** Transcriptions save their place about every minute, summaries after each part. Quit (or a crash) and reopen: the job goes on from there.
+  - Measured: a transcription stopped at stretch 22 of 242 went on at stretch 22; a summary stopped after its first part went on at part 2 of 4.
+  - Cancel still means stop: nothing is resumed after a cancel.
+- **Gentle while you work** (Settings → Models → While you work; Gentle is the default). While you're using the Mac, on battery or when it runs hot, Whisper uses half the processor at a lower priority, and the text model leaves memory a minute after a job instead of five. Full speed is one click away.
+- **See what the AI is doing.** While anything runs, a ✦ capsule beside Record names it ("Transcribing", "+1" waiting). Click it for the list, with progress and Cancel.
+- Wording: a job waiting its turn now says "Waiting for another AI job"; Cancel on a waiting job says "Stopping…" until its turn comes.
+- **A long summary no longer fails on one odd list.** Testing this release, part 2 of the 88-minute meeting came back twice with one list in the wrong shape, and the whole summary failed. Now the summary keeps everything else and leaves that list out.
+- Developer builds show workspace logos and play recordings again (their data folder wasn't allowed since 0.7.6).
+- Checks: 135 Rust tests pass (new: the lanes, a cancelled wait, the checkpoint's same-run rule, going easy, an odd list left out; and, with real Whisper, a batch that stops after one stretch and goes on). Clippy, tsc and the localhost check are clean. Seen in the running dev app, as listed above.
+- Review: the architecture review found no rule violations and one must-fix, a rare way for the queue to freeze after a cancelled wait; fixed and tested. Its 14 smaller points were taken too (see D-048).
+
+## Release
+- **v0.8.0** is published on GitHub. **Your installed New Dawn wasn't touched**: update it from Settings → About → Check for updates when you're ready.
+
+## Manual steps
+- None.
+
+---
+
 # Last Build — A Whisper model per job, cleaner transcripts · release 0.7.8
 _2026-10-30_
 

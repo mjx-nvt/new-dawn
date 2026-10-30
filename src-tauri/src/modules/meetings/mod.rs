@@ -22,8 +22,11 @@ use specta::Type;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
+use tauri::{AppHandle, Manager};
+
 use crate::error::AppError;
-use crate::kernel::ai::whisper::{Language, Segment};
+use crate::kernel::ai::whisper::{self, Language, Segment};
+use crate::kernel::hub::WorkspaceHub;
 
 /// A discussion among several people, or a presentation by one main presenter (D-038).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize, Type, sqlx::Type)]
@@ -525,11 +528,26 @@ pub async fn interrupted_recordings(pool: &SqlitePool) -> Result<Vec<(String, Op
     )
 }
 
-/// A job can't survive a quit or crash: settle meetings left `transcribing` at launch.
-pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
+/// A job that was running when the app quit, by meeting id.
+pub enum Interrupted {
+    Transcription(String),
+    Summary(String),
+}
+
+/// At launch, settles meetings a quit or crash left `transcribing` or `summarising` to what they
+/// hold (a summary, a transcript, or just the recording), and returns those jobs so the ones that
+/// saved a place can go on (`resume_interrupted`).
+pub async fn recover_interrupted(pool: &SqlitePool) -> Result<Vec<Interrupted>> {
+    let running: Vec<(String, MeetingStatus)> = sqlx::query_as(
+        "SELECT id, status FROM meeting WHERE status IN ('transcribing', 'summarising')",
+    )
+    .fetch_all(pool)
+    .await?;
     sqlx::query(
-        "UPDATE meeting SET status = CASE WHEN EXISTS (SELECT 1 FROM transcript_segment s WHERE s.meeting_id = meeting.id) \
-         THEN 'transcribed' ELSE 'failed' END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+        "UPDATE meeting SET status = CASE \
+         WHEN EXISTS (SELECT 1 FROM summary s WHERE s.meeting_id = meeting.id) THEN 'summarised' \
+         WHEN EXISTS (SELECT 1 FROM transcript_segment s WHERE s.meeting_id = meeting.id) THEN 'transcribed' \
+         ELSE 'recorded' END, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE status = 'transcribing'",
     )
     .execute(pool)
@@ -541,7 +559,62 @@ pub async fn recover_interrupted(pool: &SqlitePool) -> Result<()> {
     )
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(running
+        .into_iter()
+        .map(|(id, status)| match status {
+            MeetingStatus::Transcribing => Interrupted::Transcription(id),
+            _ => Interrupted::Summary(id),
+        })
+        .collect())
+}
+
+/// A file a meeting's job keeps beside its recording, in `recordings/<meeting id>/` of the
+/// workspace (created if the recording is gone): a checkpoint (D-048).
+pub async fn job_file(
+    app: &AppHandle,
+    slug: &str,
+    meeting_id: &str,
+    name: &str,
+) -> Result<std::path::PathBuf> {
+    let workspace = app.state::<WorkspaceHub>().workspace(slug).await?;
+    let folder = std::path::Path::new(&workspace.folder_path)
+        .join("recordings")
+        .join(meeting_id);
+    tokio::fs::create_dir_all(&folder).await?;
+    Ok(folder.join(name))
+}
+
+/// Starts again, from their saved place, the jobs a quit interrupted (D-048): only those that had
+/// saved one, and not after a third try (a recording that crashes the app mustn't loop).
+pub async fn resume_interrupted(app: &AppHandle, slug: &str, jobs: Vec<Interrupted>) {
+    const TRIES: u32 = 3;
+    for job in jobs {
+        let result = async {
+            match job {
+                Interrupted::Transcription(id) => {
+                    let path = job_file(app, slug, &id, transcribe::CHECKPOINT).await?;
+                    if whisper::Checkpoint::read(&path).is_some_and(|c| c.attempts < TRIES) {
+                        tracing::info!("resuming the transcription of {id}");
+                        transcribe::start(app, slug, &id).await?;
+                    }
+                }
+                Interrupted::Summary(id) => {
+                    let path = job_file(app, slug, &id, summarise::CHECKPOINT).await?;
+                    if let Some(saved) =
+                        summarise::Checkpoint::read(&path).filter(|c| c.attempts < TRIES)
+                    {
+                        tracing::info!("resuming the summary of {id}");
+                        summarise::start(app, slug, &id, saved.deep, saved.keep_edits).await?;
+                    }
+                }
+            }
+            anyhow::Ok(())
+        }
+        .await;
+        if let Err(err) = result {
+            tracing::warn!("could not resume an interrupted job in {slug}: {err:#}");
+        }
+    }
 }
 
 /// The lines in speaking order: a live discussion numbers them as they arrive, and the owner's

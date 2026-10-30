@@ -13,6 +13,7 @@ import {
   type ModelInfo,
   type SpeechJob,
 } from "../../kernel/bridge/models";
+import { useAiPace, useSetAiPace } from "../../kernel/bridge/activity";
 import type { AppError } from "../../kernel/bridge/unwrap";
 import MenuButton from "../../kernel/shell/MenuButton";
 import styles from "./ModelsPanel.module.css";
@@ -63,6 +64,12 @@ export default function ModelsPanel() {
             </div>
           </li>
         </ul>
+      </section>
+
+      <section className="section">
+        <h2 className="sectionTitle">While you work</h2>
+        <p className="sectionSubtitle">How transcriptions and summaries share the Mac with you</p>
+        <PaceChoice />
       </section>
 
       <section className="section">
@@ -129,6 +136,30 @@ function SpeechChoices() {
           );
         })}
       </div>
+    </>
+  );
+}
+
+const PACE_HINT = {
+  gentle:
+    "While you use the Mac, on battery or when it runs hot: half the processor threads at a lower priority, and the text model leaves memory a minute after a job. Jobs take a little longer.",
+  full: "Every core at full priority, whatever else you're doing.",
+} as const;
+
+function PaceChoice() {
+  const { data: pace } = useAiPace();
+  const save = useSetAiPace();
+  return (
+    <>
+      <div className="segmented" role="group" aria-label="While you work">
+        <button type="button" aria-pressed={pace === "gentle"} onClick={() => save.mutate("gentle")}>
+          Gentle
+        </button>
+        <button type="button" aria-pressed={pace === "full"} onClick={() => save.mutate("full")}>
+          Full speed
+        </button>
+      </div>
+      {pace && <p className={`fieldHint ${styles.hint}`}>{PACE_HINT[pace]}</p>}
     </>
   );
 }

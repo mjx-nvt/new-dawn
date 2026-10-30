@@ -16,6 +16,7 @@ use super::MeetingStatus;
 use super::summarise::{self, SummaryDoc, SummaryView};
 use crate::error::AppError;
 use crate::kernel::ai::ollama::{self, Message, Request};
+use crate::kernel::ai::queue::{Lane, Task};
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::profile;
 use crate::modules::agents::{self, Agent};
@@ -280,7 +281,16 @@ pub async fn apply(
         .unwrap_or_default();
     let cancel = AtomicBool::new(false);
     let model = agents::model_for(&pool, Agent::Corrections).await;
-    let mut session = ollama::session(app, pool.clone(), Some(meeting_id), model).await?;
+    let task = Task::meeting("Applying corrections", slug, meeting_id);
+    let mut session = ollama::session(
+        app,
+        pool.clone(),
+        Some(meeting_id),
+        model,
+        Lane::Interactive,
+        task,
+    )
+    .await?;
     session.for_agent("corrections");
     let answer = session
         .complete(request(&guide, text, &summary_text), &cancel, |_| {})
@@ -565,7 +575,7 @@ mod tests {
     #[test]
     #[ignore]
     fn eval_corrections() {
-        use crate::kernel::ai::queue::AiQueue;
+        use crate::kernel::ai::queue::{AiQueue, Lane, Task};
         use crate::modules::meetings::eval;
         let model = eval::use_model();
         let saved: serde_json::Value = serde_json::from_str(
@@ -581,8 +591,10 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let setup = eval::setup(None).await;
             let queue = AiQueue::default();
-            let mut session =
-                ollama::TextSession::for_test(queue.acquire().await, setup.pool.clone());
+            let mut session = ollama::TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                setup.pool.clone(),
+            );
             session.for_agent("corrections");
             let guide = Agent::Corrections.default_guide();
             let mut runs = Vec::new();

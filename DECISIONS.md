@@ -2,6 +2,32 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-048 — AI work in lanes, with checkpoints: what you wait for goes first, a quit loses nothing, heavy work goes easy while you work
+_2026-10-30_
+
+**Context** (plan v3, layer 3): one AI job at a time was a plain mutex held for a whole job: a Corrections click waited behind a 20-minute summary; a quit lost the transcription or summary in progress; nothing eased off while the owner used the Mac; nothing showed what the AI was doing.
+
+**Decision — lanes** (`kernel/ai/queue.rs`): still one job at a time, but the AI queue orders waiters by lane, then arrival: **Interactive** (the owner waits: Corrections, Rewrite email, the slogan's translation) → **Foreground** (transcription and summary, choosing or removing a text model) → **Background** (catch-up work; its first user, and the gate on battery, heat and the owner's absence, come with the model check in 0.8.2). A long job holds its turn between checkpoints; at each one, if a higher lane waits, it **makes way** and comes back at the front of its lane. A dropped wait never keeps the turn (tested). Live keeps its exclusive hold (D-041).
+
+**Decision — checkpoints instead of a job table**: the plan proposed a `job` table; derived state does the same with no migration.
+- Transcription runs in batches of 8 speech stretches (about a minute of Whisper). After each, its place (model, language, prompt hash, the stretches the VAD found, lines so far) goes to `recordings/<id>/transcribing.json`; a waiting higher lane stops a batch after its current stretch. The file is deleted once the transcript is saved, or when the owner cancels; an error keeps it, so Transcribe again goes on from it.
+- The summary saves each part to `recordings/<id>/summarising.json` (keyed by a hash of the prompt, transcript and notes) and makes way between parts, before the merge and between the agents that follow (names, email, tasks). The file is deleted once the summary is saved; the agents after it aren't resumed (best effort, as before).
+- At launch, a meeting left transcribing or summarising with a saved place resumes from it (`meetings::resume_interrupted`), at most three tries per place, so a recording that crashes the app can't loop.
+
+**Decision — going easy** (`kernel/ai/resources.rs`, Settings → Models → While you work, default **Gentle**): while the owner works (input in the last 2 minutes), on battery or when the Mac runs hot (thermal state serious), Whisper runs on half the threads on a thread of its own at utility priority (macOS moves it to the efficiency cores when the owner's apps need the performance ones), and the text model leaves memory a minute after a job instead of five. Ollama's `num_thread` is deliberately left alone: changing it makes Ollama reload the model. The GPU can't be throttled; Metal bursts stay.
+
+**Decision — the AI activity list**: a toolbar capsule (✦ and what runs, "+N" waiting) appears while anything uses the AI; its popover lists the running job and the waiting ones in order, with the transcription or summary progress bar and Cancel. Polled every 2 s (`ai_activity`).
+
+**Measured** (dev build, 88-min Vietnamese meeting, turbo): a slogan translation asked mid-transcription paused Whisper 1.6 s later, ran in 9.3 s (loading the 9B model included) and Whisper went on 4 s after: the request no longer waits ~9 minutes. The app killed at stretch 22 of 242 went on at stretch 22 after relaunch (about a minute to decode the audio again); killed after the summary's first part, it went on at part 2 of 4.
+
+**Review fixes taken** (architecture review): a woken-but-dropped wait closes its receiver before checking it (a wake in between went to nobody and froze the queue); `make_way` re-queues and hands on in one locked step, so nothing of its own lane slips in and the turn comes straight back if the higher-lane waiter gave up; the transcription saves a stub place (the try counted) before it waits or decodes, so a waiting job resumes too and a recording that crashes decoding can't loop; a meeting's places live in `recordings/<meeting id>/` whatever its audio layout; a finished transcription doesn't make way; a failed checkpoint write only warns; the summary's place is keyed by its model too; a meeting left transcribing goes back to summarised, transcribed or recorded by what it holds; Cancel on a waiting job says "Stopping…" until its turn comes.
+
+**Also — a summary answer of the wrong shape**: seen in the dev check, part 2 of the 88-min meeting came back twice with a list shaped wrongly and failed the summary. Now the answer keeps every field that reads and leaves out the one that doesn't (as if nothing was said for it), as long as its sections read; otherwise the model is asked again as before. The log records the answer's structure (field names and types, never its words) so the next slip can be read.
+
+**Means for future work**: the model check (0.8.2), speaker matching (0.8.4–0.8.5) and embeddings (0.8.7) run in the Background lane; new long jobs save a place the same way.
+
+---
+
 ## D-047 — A Whisper model per job; looped lines and channel sign-offs cleaned; screen checks without clicks
 _2026-10-30_
 

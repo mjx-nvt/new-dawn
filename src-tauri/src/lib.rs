@@ -20,6 +20,7 @@ mod kernel {
         pub mod models;
         pub mod ollama;
         pub mod queue;
+        pub mod resources;
         pub mod translate;
         pub mod whisper;
     }
@@ -107,6 +108,9 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::models::set_whisper_idle_unload,
             commands::models::get_speech_choices,
             commands::models::set_speech_model,
+            commands::models::ai_activity,
+            commands::models::get_ai_pace,
+            commands::models::set_ai_pace,
             commands::meetings::list_meeting_types,
             commands::meetings::search_meetings,
             commands::summary::get_summary,
@@ -333,11 +337,18 @@ pub fn run() {
             }
 
             let root = kernel::storage::data_dir(app.handle())?;
+            // tauri.conf.json's `$APPDATA` scope is the installed app's folder; a debug build
+            // keeps its own (D-044), so its recordings and logos are allowed here.
+            #[cfg(debug_assertions)]
+            app.asset_protocol_scope()
+                .allow_directory(root.join("workspaces"), true)?;
             // ponytail: opens + migrates every active workspace before the window paints; fine for a
             // handful of tenants, move to a background task with a "hub ready" state if startup slows.
             let hub = tauri::async_runtime::block_on(async {
                 let hub = WorkspaceHub::open(root).await?;
                 hub.open_all_active().await?;
+                // Jobs a quit interrupted, resumed once the app's state is in place (D-048).
+                let mut interrupted = Vec::new();
                 for workspace in hub.list().await?.iter().filter(|w| !w.archived) {
                     // One damaged workspace must not stop the app from starting.
                     let recovered = async {
@@ -346,11 +357,12 @@ pub fn run() {
                         modules::meetings::recover_interrupted(&pool).await
                     }
                     .await;
-                    if let Err(err) = recovered {
-                        tracing::warn!(
+                    match recovered {
+                        Ok(jobs) => interrupted.push((workspace.slug.clone(), jobs)),
+                        Err(err) => tracing::warn!(
                             "recovery skipped for workspace {}: {err:#}",
                             workspace.slug
-                        );
+                        ),
                     }
                 }
                 if let Some(model) = hub.app_setting(kernel::ai::ollama::MODEL_SETTING).await? {
@@ -359,9 +371,9 @@ pub fn run() {
                 let idle = hub
                     .app_setting(kernel::ai::whisper::IDLE_UNLOAD_SETTING)
                     .await?;
-                anyhow::Ok((hub, idle.and_then(|v| v.parse().ok())))
+                anyhow::Ok((hub, idle.and_then(|v| v.parse().ok()), interrupted))
             })?;
-            let (hub, idle_unload_secs) = hub;
+            let (hub, idle_unload_secs, interrupted) = hub;
             app.manage(hub);
             app.manage(kernel::ai::models::ModelStore::new(
                 kernel::storage::data_dir(app.handle())?.join("models"),
@@ -376,6 +388,12 @@ pub fn run() {
             app.manage(modules::meetings::summarise::SummaryJobs::default());
             kernel::backup::spawn_scheduler(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                for (slug, jobs) in interrupted {
+                    modules::meetings::resume_interrupted(&handle, &slug, jobs).await;
+                }
+            });
             #[cfg(debug_assertions)]
             if let Err(err) = kernel::windows::dev_open(app.handle()) {
                 tracing::warn!("NEWDAWN_DEV_OPEN ignored: {err:#}");
@@ -387,7 +405,10 @@ pub fn run() {
                     // Not while an AI job holds the queue: a live session keeps Whisper loaded
                     // through its silences (D-041).
                     let queue = handle.state::<kernel::ai::queue::AiQueue>();
-                    if let Some(_turn) = queue.inner().try_acquire() {
+                    if let Some(_turn) = queue.inner().try_acquire(
+                        kernel::ai::queue::Lane::Background,
+                        kernel::ai::queue::Task::new("Freeing memory"),
+                    ) {
                         handle
                             .state::<kernel::ai::whisper::WhisperEngine>()
                             .unload_if_idle();

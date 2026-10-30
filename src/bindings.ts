@@ -21,6 +21,11 @@ export const commands = {
 	getSpeechChoices: () => typedError<SpeechChoice_Serialize[], AppError>(__TAURI_INVOKE("get_speech_choices")),
 	/**  The Whisper model for meetings or Live (None = automatic). */
 	setSpeechModel: (job: SpeechJob, model: string | null) => typedError<null, AppError>(__TAURI_INVOKE("set_speech_model", { job, model })),
+	/**  What the AI is doing and what waits for it, in the order it will run (D-048). */
+	aiActivity: () => typedError<Activity_Serialize[], AppError>(__TAURI_INVOKE("ai_activity")),
+	/**  Gentle (the default) or full speed while you work. */
+	getAiPace: () => typedError<Pace, AppError>(__TAURI_INVOKE("get_ai_pace")),
+	setAiPace: (pace: Pace) => typedError<null, AppError>(__TAURI_INVOKE("set_ai_pace", { pace })),
 	listMeetingTypes: (slug: string) => typedError<MeetingTypeSummary[], AppError>(__TAURI_INVOKE("list_meeting_types", { slug })),
 	/**  Title, transcript and summary search in one workspace (FTS5). */
 	searchMeetings: (slug: string, query: string) => typedError<MeetingHit_Serialize[], AppError>(__TAURI_INVOKE("search_meetings", { slug, query })),
@@ -246,9 +251,11 @@ export const events = {
 export type ActionItem = ActionItem_Serialize | ActionItem_Deserialize;
 
 export type ActionItem_Deserialize = {
-	owner: string,
-	item: string,
-	due: string,
+	/**  "Unassigned" when the model left it out, as the prompt asks for nobody's tasks. */
+	owner?: string,
+	/**  An item the model sent without it is dropped (`shape`). */
+	item?: string,
+	due?: string,
 	/**  Ticked off in the to-do list (D-038). */
 	done?: boolean,
 	/**  Its task in Tasks (0.7.3); kept while the item stays the same (`review::carry_links`). */
@@ -256,13 +263,32 @@ export type ActionItem_Deserialize = {
 };
 
 export type ActionItem_Serialize = {
+	/**  "Unassigned" when the model left it out, as the prompt asks for nobody's tasks. */
 	owner: string,
+	/**  An item the model sent without it is dropped (`shape`). */
 	item: string,
 	due: string,
 	/**  Ticked off in the to-do list (D-038). */
 	done: boolean,
 	/**  Its task in Tasks (0.7.3); kept while the item stays the same (`review::carry_links`). */
 	task_id?: string,
+};
+
+/**  One entry of the AI activity list. */
+export type Activity = Activity_Serialize | Activity_Deserialize;
+
+/**  One entry of the AI activity list. */
+export type Activity_Deserialize = {
+	lane: Lane,
+	task: Task_Deserialize,
+	running: boolean,
+};
+
+/**  One entry of the AI activity list. */
+export type Activity_Serialize = {
+	lane: Lane,
+	task: Task_Serialize,
+	running: boolean,
 };
 
 export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live";
@@ -640,6 +666,18 @@ export type InstalledModel = {
 	size_mb: number,
 };
 
+/**  A meeting's long job: the activity list shows its progress and can stop it. */
+export type JobKind = "transcription" | "summary";
+
+/**  Priority order: a lower lane waits for every higher one. */
+export type Lane = 
+/**  The owner is waiting for it (Corrections, Rewrite email, a slogan's translation). */
+"interactive" | 
+/**  The meeting just recorded, or a run the owner started (transcription, summary). */
+"foreground" | 
+/**  Catch-up work that waits for an idle, cool, charged Mac. */
+"background";
+
 /**  A live line's language when the session translates both ways. */
 export type Lang = "vi" | "en";
 
@@ -1000,6 +1038,16 @@ export type OpenIssue_Serialize = {
 export type OpenSettingsTab = {
 	tab: SettingsTab,
 };
+
+/**  When the Mac is shared with the owner (Settings → AI on this Mac → While you work). */
+export type Pace = 
+/**  Heavy jobs use every core even while the owner works. */
+"full" | 
+/**
+ *  While the owner works, on battery or when the Mac runs hot: half the CPU threads, utility
+ *  priority, the text model unloaded sooner.
+ */
+"gentle";
 
 export type PermissionState = "granted" | "denied" | "not_determined" | "restricted";
 
@@ -1400,6 +1448,9 @@ export type SystemAudio =
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
 
+/**  What holds or waits for a turn, for the AI activity list. */
+export type Task = Task_Serialize | Task_Deserialize;
+
 /**  The list in Reminders' order ("Highest first"). */
 export type TaskList = TaskList_Serialize | TaskList_Deserialize;
 
@@ -1501,6 +1552,24 @@ export type TaskView_Serialize = {
 	reason: string,
 	/**  Reminders' levels: 0 none, 1 low (!), 2 medium (!!), 3 high (!!!). */
 	priority: number,
+};
+
+/**  What holds or waits for a turn, for the AI activity list. */
+export type Task_Deserialize = {
+	/**  "Transcribing “Weekly sync”", "Applying corrections"… */
+	label: string,
+	workspace_slug?: string | null,
+	meeting_id?: string | null,
+	kind?: JobKind | null,
+};
+
+/**  What holds or waits for a turn, for the AI activity list. */
+export type Task_Serialize = {
+	/**  "Transcribing “Weekly sync”", "Applying corrections"… */
+	label: string,
+	workspace_slug: string | null,
+	meeting_id: string | null,
+	kind: JobKind | null,
 };
 
 export type TemplateCheck = TemplateCheck_Serialize | TemplateCheck_Deserialize;

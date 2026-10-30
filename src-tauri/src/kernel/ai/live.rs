@@ -36,7 +36,7 @@ use crate::kernel::ai::days;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
 use crate::kernel::ai::models::{BUNDLED_VAD, SpeechJob};
 use crate::kernel::ai::ollama::{self, Message, OllamaStatus, Request, TextSession};
-use crate::kernel::ai::queue::AiQueue;
+use crate::kernel::ai::queue::{AiQueue, Lane, Task, Turn};
 use crate::kernel::ai::whisper::{
     self, Heard, Language, LiveDecoder, SAMPLE_RATE, SpeechModel, WhisperEngine,
 };
@@ -358,7 +358,11 @@ pub async fn start(
         let (app, status, cancel) = (app.clone(), status.clone(), cancel.clone());
         tauri::async_runtime::spawn(async move {
             // Taken here, so the turn lives as long as the session.
-            let Some(turn) = app.state::<AiQueue>().inner().try_acquire() else {
+            let Some(turn) = app
+                .state::<AiQueue>()
+                .inner()
+                .try_acquire(Lane::Interactive, Task::new("Live session"))
+            else {
                 let _ = ready_tx.send(false);
                 return Ok(false);
             };
@@ -413,7 +417,7 @@ fn busy(job: &str) -> AppError {
 #[allow(clippy::too_many_arguments)]
 async fn session(
     app: &AppHandle,
-    turn: tokio::sync::MutexGuard<'_, ()>,
+    turn: Turn<'_>,
     meeting: &LiveMeeting,
     speech: SpeechModel<'_>,
     vad: &Path,
@@ -463,11 +467,11 @@ async fn session(
 /// The session's text model on the queue turn: the Live agent's own, else the fast tier, else
 /// the app's. Without one, the turn comes back with the reason (no translation).
 async fn translator<'a>(
-    turn: tokio::sync::MutexGuard<'a, ()>,
+    turn: Turn<'a>,
     pool: &SqlitePool,
     meeting_id: Option<&str>,
     agent_model: Option<String>,
-) -> std::result::Result<TextSession<'a>, (tokio::sync::MutexGuard<'a, ()>, String)> {
+) -> std::result::Result<TextSession<'a>, (Turn<'a>, String)> {
     match choose_model(&ollama::status().await, agent_model) {
         Ok(model) => {
             // Loading takes seconds when cold: do it while the first sentence is being spoken.
@@ -2157,7 +2161,10 @@ mod tests {
                 Agent::Live.default_guide(),
             );
             let queue = crate::kernel::ai::queue::AiQueue::default();
-            let mut text = TextSession::for_test(queue.acquire().await, setup.pool.clone());
+            let mut text = TextSession::for_test(
+                queue.acquire(Lane::Foreground, Task::new("test")).await,
+                setup.pool.clone(),
+            );
             text.for_agent(Agent::Live.id())
                 .set_temperature(0.2)
                 .set_num_ctx(LIVE_CTX);
@@ -2358,7 +2365,9 @@ mod tests {
             };
             meetings::create(&pool, new).await.unwrap();
             let queue = AiQueue::default();
-            let turn = queue.try_acquire().unwrap();
+            let turn = queue
+                .try_acquire(Lane::Interactive, Task::new("test"))
+                .unwrap();
             let translator = translator(turn, &pool, Some("live"), None).await;
             let prompts = Prompts::new(&setup, Some("Tiến"), &[], &[], Agent::Live.default_guide());
 

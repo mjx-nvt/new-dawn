@@ -1,6 +1,7 @@
 import { useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import RecordPill from "../../modules/recorder/RecordPill";
+import AiActivity from "./AiActivity";
 import { BackIcon, ForwardIcon } from "./icons";
 import styles from "./Toolbar.module.css";
 import { useHistoryNav } from "./useHistoryNav";
@@ -84,6 +85,7 @@ export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHi
       </form>
 
       <div className={styles.trail}>
+        <AiActivity />
         <RecordPill onStart={onStartRecording} />
       </div>
     </header>

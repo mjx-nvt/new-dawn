@@ -70,7 +70,7 @@ export function TranscriptionBar({ progress, title }: { progress: TranscriptionP
 }
 
 const SUMMARY_LABEL: Record<SummaryProgress["stage"], string> = {
-  queued: "Waiting for the previous AI job",
+  queued: "Waiting for another AI job",
   writing: "Writing the summary",
   merging: "Merging the parts",
   naming: "Checking the names",

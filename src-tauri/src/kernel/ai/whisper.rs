@@ -2,7 +2,7 @@
 //! and dropped after an idle period; one `WhisperState` per job (per utterance in a live session,
 //! `live.rs`); whisper.cpp's built-in Silero VAD.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -21,7 +21,8 @@ use whisper_rs::{
 use crate::error::AppError;
 use crate::kernel::ai::log::{self as ai_log, AiLogEntry};
 use crate::kernel::ai::models::{BUNDLED_VAD, SpeechJob};
-use crate::kernel::ai::queue::AiQueue;
+use crate::kernel::ai::queue::{AiQueue, Lane, Task};
+use crate::kernel::ai::resources;
 
 pub const SAMPLE_RATE: usize = 16_000;
 /// The model is dropped after this long without a job; adjustable in Settings → Models.
@@ -29,12 +30,13 @@ pub const DEFAULT_IDLE_UNLOAD_SECS: u64 = 120;
 /// Registry setting key for the idle period (seconds).
 pub const IDLE_UNLOAD_SETTING: &str = "whisper_idle_unload_secs";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type, sqlx::Type)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(rename_all = "snake_case")]
 pub enum Language {
     En,
     Vi,
+    #[default]
     Auto,
 }
 
@@ -68,6 +70,71 @@ pub struct TranscribeJob<'a> {
     pub cancel: Arc<AtomicBool>,
     /// Names and terms that bias Whisper's spelling (the workspace vocabulary, D-036).
     pub prompt: Option<String>,
+    /// Its lane, and what the AI activity list says (D-048).
+    pub lane: Lane,
+    pub task: Task,
+    /// Where the job saves its place after every batch; a run that finds a matching one goes on
+    /// from there. The caller deletes it once the transcript is saved (D-048).
+    pub checkpoint: Option<PathBuf>,
+}
+
+/// Stretches of speech per batch: the job saves its place, and makes way for a higher lane, after
+/// each (about a minute of Whisper on an M1 Pro).
+const BATCH: usize = 8;
+
+/// A transcription's place, saved after every batch so a quit or a turn given away loses at
+/// most one batch (D-048). Written first as a stub (the try counted, nothing done yet) before the
+/// job waits for its turn, so a job still waiting or decoding resumes too.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Checkpoint {
+    model: String,
+    language: Language,
+    /// The prompt's hash: new names or terms start over.
+    prompt: String,
+    /// Speech stretches the VAD found; another count starts over.
+    stretches: usize,
+    /// Stretches written so far, and their lines.
+    done: usize,
+    segments: Vec<Segment>,
+    /// Runs that started from this file; launches stop resuming after the third, so a recording
+    /// that crashes Whisper can't loop.
+    pub attempts: u32,
+}
+
+impl Checkpoint {
+    pub fn read(path: &Path) -> Option<Self> {
+        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+    }
+
+    fn write(&self, path: &Path) -> Result<()> {
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(self)?)?;
+        std::fs::rename(&tmp, path).context("saving the transcription's place")
+    }
+
+    /// Saves the place if the job has one; a failure costs only the resume, not the job.
+    fn save(&self, path: Option<&Path>) {
+        if let Some(path) = path {
+            if let Err(err) = self.write(path) {
+                tracing::warn!("{err:#}");
+            }
+        }
+    }
+
+    /// The same run: model, language, prompt and the speech found all match.
+    fn continues(&self, other: &Self) -> bool {
+        (&self.model, self.language, &self.prompt, self.stretches)
+            == (&other.model, other.language, &other.prompt, other.stretches)
+    }
+}
+
+fn hash(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub struct Transcript {
@@ -76,8 +143,9 @@ pub struct Transcript {
     pub duration_ms: u32,
 }
 
-/// The speech gateway (CLAUDE.md rule 2): waits for its turn in the AI queue, runs `prepare`
-/// (audio → 16 kHz mono) and Whisper off the async runtime, and writes one `ai_log` row.
+/// The speech gateway (CLAUDE.md rule 2): waits for its turn in the job's lane, runs `prepare`
+/// (audio → 16 kHz mono) and the VAD off the async runtime, then Whisper in batches. After each
+/// batch it saves its place and, if a higher lane waits, makes way (D-048). One `ai_log` row.
 pub async fn transcribe(
     app: &AppHandle,
     pool: &SqlitePool,
@@ -86,8 +154,23 @@ pub async fn transcribe(
     progress: Progress,
 ) -> Result<Transcript> {
     progress(Stage::Queued, 0);
+    // This try counts before anything can wait or fail (a recording that crashes the app is
+    // resumed at most three times); a saved place stays to be checked once the audio is read.
+    let saved = job.checkpoint.as_deref().and_then(Checkpoint::read);
+    let attempts = saved.as_ref().map_or(0, |c| c.attempts) + 1;
+    match &saved {
+        Some(place) => Checkpoint {
+            attempts,
+            ..place.clone()
+        },
+        None => Checkpoint {
+            attempts,
+            ..Checkpoint::default()
+        },
+    }
+    .save(job.checkpoint.as_deref());
     let queue = app.state::<AiQueue>();
-    let _turn = queue.acquire().await;
+    let mut turn = queue.acquire(job.lane, job.task.clone()).await;
     if job.cancel.load(Ordering::Relaxed) {
         bail!(AppError::new("cancelled", "Transcription cancelled"));
     }
@@ -97,38 +180,98 @@ pub async fn transcribe(
     let vad_path = app.path().resolve(BUNDLED_VAD, BaseDirectory::Resource)?;
     let started = Instant::now();
 
-    let (app_for_job, cancel, language) = (app.clone(), job.cancel.clone(), job.language);
-    let prompt = job.prompt.clone().filter(|p| !p.trim().is_empty());
-    let result = tokio::task::spawn_blocking(move || -> Result<Transcript> {
-        progress(Stage::Decoding, 5);
-        let samples = prepare()?;
-        if cancel.load(Ordering::Relaxed) {
-            bail!(AppError::new("cancelled", "Transcription cancelled"));
-        }
-        progress(Stage::DetectingSpeech, 15);
-        let engine = app_for_job.state::<WhisperEngine>();
-        let speech_model = SpeechModel {
-            id: model.id,
-            path: &model_path,
+    let result: Result<Transcript> = async {
+        let (samples, speech) = {
+            let (cancel, progress) = (job.cancel.clone(), progress.clone());
+            tokio::task::spawn_blocking(move || -> Result<_> {
+                progress(Stage::Decoding, 5);
+                let samples = prepare()?;
+                if cancel.load(Ordering::Relaxed) {
+                    bail!(AppError::new("cancelled", "Transcription cancelled"));
+                }
+                progress(Stage::DetectingSpeech, 15);
+                let speech = detect_speech(&vad_path, &samples)?;
+                Ok((Arc::new(samples), Arc::new(speech)))
+            })
+            .await??
         };
-        let segments = engine.transcribe(
-            speech_model,
-            &vad_path,
-            &samples,
-            language,
-            prompt.as_deref(),
-            &cancel,
-            |done| progress(Stage::Transcribing, 20 + (done * 75.0) as u32),
-        )?;
+        let prompt = job.prompt.clone().filter(|p| !p.trim().is_empty());
+        let fresh = Checkpoint {
+            model: model.id.to_owned(),
+            language: job.language,
+            prompt: hash(prompt.as_deref().unwrap_or_default()),
+            stretches: speech.len(),
+            // Another run: its tries count from this one.
+            attempts: 1,
+            ..Checkpoint::default()
+        };
+        let mut place = match saved {
+            Some(saved) if saved.continues(&fresh) => Checkpoint { attempts, ..saved },
+            _ => fresh,
+        };
+        if place.done > 0 {
+            tracing::info!(
+                "transcription of {} goes on at stretch {} of {}",
+                job.meeting_id,
+                place.done,
+                place.stretches
+            );
+        }
+        place.save(job.checkpoint.as_deref());
+        let total = speech.len();
+        let percent = move |done: usize| 20 + (done as f32 / total.max(1) as f32 * 75.0) as u32;
+        while place.done < total {
+            // Gentle while the owner works, on battery or hot: half the threads, utility priority (D-048).
+            let gentle = resources::go_easy(app).await;
+            let (from, to) = (place.done, (place.done + BATCH).min(total));
+            let (app, samples, speech, prompt) =
+                (app.clone(), samples.clone(), speech.clone(), prompt.clone());
+            let (cancel, report, lane, language) =
+                (job.cancel.clone(), progress.clone(), job.lane, job.language);
+            let model_path = model_path.clone();
+            let (lines, written) = resources::blocking(gentle, move || {
+                let engine = app.state::<WhisperEngine>();
+                let queue = app.state::<AiQueue>();
+                engine.transcribe_stretches(
+                    SpeechModel {
+                        id: model.id,
+                        path: &model_path,
+                    },
+                    &samples,
+                    &speech[from..to],
+                    language,
+                    prompt.as_deref(),
+                    if gentle { threads() / 2 } else { threads() },
+                    &cancel,
+                    || queue.wanted_above(lane),
+                    |n| report(Stage::Transcribing, percent(from + n)),
+                )
+            })
+            .await??;
+            place.segments.extend(lines);
+            place.done += written;
+            place.save(job.checkpoint.as_deref());
+            if job.cancel.load(Ordering::Relaxed) {
+                bail!(AppError::new("cancelled", "Transcription cancelled"));
+            }
+            if place.done < total && turn.wanted() {
+                progress(Stage::Queued, percent(place.done));
+                turn.make_way().await;
+                if job.cancel.load(Ordering::Relaxed) {
+                    bail!(AppError::new("cancelled", "Transcription cancelled"));
+                }
+                // The job that went first may have loaded Qwen: never two models at once.
+                super::ollama::unload().await;
+            }
+        }
         Ok(Transcript {
             model: model.id,
-            segments,
+            segments: drop_loops(place.segments),
             duration_ms: (samples.len() * 1000 / SAMPLE_RATE) as u32,
         })
-    })
-    .await
-    .map_err(anyhow::Error::from)
-    .and_then(|r| r);
+    }
+    .await;
+    drop(turn);
 
     let (status, error) = match &result {
         Ok(_) => ("ok", None),
@@ -172,7 +315,7 @@ pub fn is_cancelled(err: &anyhow::Error) -> bool {
         .is_some_and(|e| e.code == "cancelled")
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Segment {
     pub start_ms: u32,
     pub end_ms: u32,
@@ -206,8 +349,8 @@ fn candidates(vi: f32, en: f32) -> Vec<Language> {
 
 /// How likely `samples` are Vietnamese and English, by Whisper's language detection (one encoder
 /// pass over the first 30 s).
-fn vi_en_odds(state: &mut WhisperState, samples: &[f32]) -> Result<(f32, f32)> {
-    let threads = threads() as usize;
+fn vi_en_odds(state: &mut WhisperState, samples: &[f32], threads: i32) -> Result<(f32, f32)> {
+    let threads = threads as usize;
     state
         .pcm_to_mel(samples, threads)
         .context("reading the speech")?;
@@ -391,14 +534,14 @@ impl WhisperEngine {
             .ctx
             .create_state()
             .context("creating a Whisper state")?;
-        let odds = vi_en_odds(&mut state, samples)?;
+        let odds = vi_en_odds(&mut state, samples, threads())?;
         loaded.last_used = Instant::now();
         Ok(odds)
     }
 
-    /// VAD → Whisper on each speech segment → language-safe cleanup. Blocking. Features call the
-    /// `transcribe()` gateway above instead, which adds the queue and `ai_log`.
-    /// `progress` gets 0.0–1.0; `cancel` is checked between and inside segments.
+    /// VAD → Whisper on each speech segment → language-safe cleanup, a whole recording at once.
+    /// Blocking; the gateway runs `transcribe_stretches` in batches instead. `progress` gets 0.0–1.0.
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(in crate::kernel::ai) fn transcribe(
         &self,
@@ -410,9 +553,40 @@ impl WhisperEngine {
         cancel: &Arc<AtomicBool>,
         mut progress: impl FnMut(f32),
     ) -> Result<Vec<Segment>> {
-        let prompt = prompt.map(|p| p.replace('\0', " "));
-        let threads = threads();
         let speech = detect_speech(vad_model, samples)?;
+        let total = speech.len().max(1) as f32;
+        let (lines, _) = self.transcribe_stretches(
+            model,
+            samples,
+            &speech,
+            language,
+            prompt,
+            threads(),
+            cancel,
+            || false,
+            |n| progress(n as f32 / total),
+        )?;
+        Ok(drop_loops(lines))
+    }
+
+    /// Whisper on `stretches` of `samples` (sample ranges from the VAD), in order, until they're
+    /// all written or `stop` says to pause after one. Returns their lines and how many stretches
+    /// were written; `progress` gets that count after each. `cancel` is checked between and inside
+    /// stretches. Blocking.
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::kernel::ai) fn transcribe_stretches(
+        &self,
+        model: SpeechModel<'_>,
+        samples: &[f32],
+        stretches: &[(usize, usize)],
+        language: Language,
+        prompt: Option<&str>,
+        threads: i32,
+        cancel: &Arc<AtomicBool>,
+        stop: impl Fn() -> bool,
+        mut progress: impl FnMut(usize),
+    ) -> Result<(Vec<Segment>, usize)> {
+        let prompt = prompt.map(|p| p.replace('\0', " "));
 
         let mut guard = self.with_model(model)?;
         let loaded = guard.as_mut().expect("model loaded above");
@@ -502,8 +676,8 @@ impl WhisperEngine {
             Ok((sure, lines))
         };
 
-        let mut segments = Vec::new();
-        for (index, &(start, end)) in speech.iter().enumerate() {
+        let (mut segments, mut written) = (Vec::new(), 0);
+        for &(start, end) in stretches {
             if cancel.load(Ordering::Relaxed) {
                 bail!(AppError::new("cancelled", "Transcription cancelled"));
             }
@@ -512,7 +686,7 @@ impl WhisperEngine {
             // Vietnamese translation, and once as Malay.
             let tries = match language {
                 Language::Auto => {
-                    let (vi, en) = vi_en_odds(&mut state, &samples[start..end])?;
+                    let (vi, en) = vi_en_odds(&mut state, &samples[start..end], threads)?;
                     candidates(vi, en)
                 }
                 fixed => vec![fixed],
@@ -525,11 +699,15 @@ impl WhisperEngine {
                 }
             }
             segments.extend(best.map(|(_, lines)| lines).unwrap_or_default());
-            progress((index + 1) as f32 / speech.len().max(1) as f32);
+            written += 1;
+            progress(written);
+            if written < stretches.len() && stop() {
+                break;
+            }
         }
 
         loaded.last_used = Instant::now();
-        Ok(drop_loops(segments))
+        Ok((segments, written))
     }
 }
 
@@ -1060,6 +1238,50 @@ mod tests {
             "timestamps should be offset past the 3 s pause"
         );
 
+        // A higher lane waiting: the batch stops after its first stretch, and the rest goes on
+        // from there (D-048).
+        let speech = super::detect_speech(&vad, &samples).unwrap();
+        assert!(speech.len() >= 2, "the pause splits the speech: {speech:?}");
+        let go = Arc::new(AtomicBool::new(false));
+        let (first, written) = engine
+            .transcribe_stretches(
+                model(),
+                &samples,
+                &speech,
+                Language::En,
+                None,
+                4,
+                &go,
+                || true,
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(written, 1);
+        let (rest, more) = engine
+            .transcribe_stretches(
+                model(),
+                &samples,
+                &speech[written..],
+                Language::En,
+                None,
+                4,
+                &go,
+                || false,
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(written + more, speech.len());
+        let resumed = first
+            .iter()
+            .chain(&rest)
+            .map(|s| s.text.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(
+            resumed.contains("acme") && resumed.contains("friday"),
+            "{resumed}"
+        );
+
         // Cancel mid-job: the abort callback must stop Whisper and surface code "cancelled".
         let flag = Arc::new(AtomicBool::new(false));
         let setter = flag.clone();
@@ -1179,6 +1401,36 @@ mod tests {
         );
         let sales = "Lượt đăng ký kênh tăng 15% sau chiến dịch.";
         assert_eq!(clean_text(sales).as_deref(), Some(sales));
+    }
+
+    #[test]
+    fn a_checkpoint_continues_only_the_same_run() {
+        use super::{Checkpoint, hash};
+        let path = std::env::temp_dir().join(format!("newdawn-ckpt-{}.json", uuid::Uuid::now_v7()));
+        let place = |prompt: &str, stretches| Checkpoint {
+            model: "large-v3".into(),
+            language: Language::Auto,
+            prompt: hash(prompt),
+            stretches,
+            done: 0,
+            segments: Vec::new(),
+            attempts: 0,
+        };
+        let mut saved = place("People: Ryan", 40);
+        saved.done = 16;
+        saved.write(&path).unwrap();
+        let read = Checkpoint::read(&path).unwrap();
+        assert_eq!(read.done, 16);
+        assert!(read.continues(&place("People: Ryan", 40)));
+        assert!(
+            !read.continues(&place("People: Ryan, Tom", 40)),
+            "new names start over"
+        );
+        assert!(
+            !read.continues(&place("People: Ryan", 41)),
+            "other speech starts over"
+        );
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]
