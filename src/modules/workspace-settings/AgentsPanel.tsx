@@ -7,7 +7,7 @@ import { formatWhen } from "../meetings/format";
 import styles from "./AgentsPanel.module.css";
 
 /** The agents whose work you correct (the others leave nothing to record). */
-const LEARNS: AgentGuide["agent"][] = ["summary", "naming", "email", "tasks"];
+const LEARNS: AgentGuide["agent"][] = ["summary", "naming", "email", "tasks", "projects"];
 
 /** What the agent learns from you (D-049): the feedback ledger's count, and for the summary, the
  *  examples it gets. */
@@ -32,6 +32,8 @@ function verdict(agent: AgentGuide["agent"], n: Judged): string {
       return `${model}: of ${n.judged} names it doubted, you changed ${n.changed} and kept ${stood} as heard`;
     case "tasks":
       return `${model}: ${stood} of ${n.judged} tasks it added kept as written (${n.changed} reworded, ${n.dropped} deleted)`;
+    case "projects":
+      return `${model}: ${stood} of ${n.judged} proposed updates applied`;
     default:
       return "";
   }

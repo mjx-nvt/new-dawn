@@ -1,3 +1,54 @@
+# Last Build — Projects that keep themselves up to date · release 0.9.0
+_2026-10-30_
+
+## What changed
+- **Projects** (sidebar, D-054). Add the projects you follow in a workspace: a name, a phase, the next milestone and its date. Each project has its own page:
+  - **Updates waiting for you**
+  - **Where it stands**
+  - **Risks** and **Decisions**: add or remove items yourself
+  - **Meetings**
+  - **History**
+
+  Every section shows, even before it has anything in it. Status is one click (Active, On hold, Done), and ⋯ → Edit… changes the rest.
+- **The Projects agent proposes; you apply.** After each summary, in the background (when your Mac is free), New Dawn reads the summary against your open projects. It links the meeting to the projects it touched and proposes what changed: a milestone and its date, a phase, a status, a new risk, a decision or a note.
+  - Each proposal quotes the sentence of the summary it rests on and links to the meeting. Apply puts the change into the project and its history; Dismiss sets it aside.
+  - The sidebar shows how many updates are waiting.
+- A proposal must hold up before you see it. New Dawn drops:
+  - a project that doesn't exist;
+  - a field it doesn't know;
+  - a date that isn't a real date;
+  - a quote that isn't really in the summary;
+  - the same change twice.
+
+  A moved milestone still comes through as a new proposal.
+- **Find project updates** in a meeting's ⋯ menu runs the agent at once for that meeting.
+- Deleting a meeting removes the proposals that quote it; what you applied stays in the project.
+- The Projects agent appears in Workspace → Agents with its guide, its model, and how many of its proposals you applied.
+- Checks: 152 Rust tests pass. New ones cover:
+  - only proposals that hold up are kept;
+  - statuses are read kindly ("paused" is On hold).
+
+  Clippy, tsc and the localhost check are clean.
+- Seen in the dev app, on "Block B defects repair":
+  - Find project updates on the 88-minute defects meeting took 39 seconds. It linked the meeting and proposed a decision ("INCONS pays for repairs if defects are confirmed…") quoting the summary.
+  - Apply put it into Decisions and History, and the sidebar count cleared.
+  - Running it again didn't propose the decision a second time.
+- Reviews:
+  - The migration review asked that deleting a meeting keep the updates you already decided. That was done before the migration ever ran.
+  - The architecture review found no rule violations and three must-fixes, all fixed:
+    - Delete project happened in one click and now asks first;
+    - a milestone proposal without a date could erase your date;
+    - the Projects agent's number didn't show.
+  - Its 11 smaller points were taken too (see D-054).
+
+## Release
+- **v0.9.0** is published on GitHub. **Your installed New Dawn wasn't touched.** Update it from Settings → About → Check for updates when you're ready; opening a workspace adds the new tables.
+
+## Manual steps
+1. Projects → New project… for each project you follow (the agent reads only open projects). From the next summary on, updates appear on their pages; for an earlier meeting, use ⋯ → Find project updates.
+
+---
+
 # Last Build — Search your meetings by meaning · release 0.8.5
 _2026-10-30_
 

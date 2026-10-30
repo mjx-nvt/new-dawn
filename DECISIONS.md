@@ -2,6 +2,23 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-054 — Experts propose, the owner applies: Projects first
+_2026-10-30_
+
+**Context** (plan v3 §5): meetings now carry who said what, the owner's corrections and memory across meetings; what they don't yet do is keep anything up to date outside the meeting. The first expert keeps the owner's projects current.
+
+**Decision — one shape for every expert**: a guide the owner can edit (Workspace → Agents, with its model and numbers), a typed view of the workspace it may read, and **proposals only** — it never writes to the owner's data; a card shows each proposed change with its evidence, the owner applies or dismisses, and both go to the ledger (D-049). It runs in the background lane after each summary (waits for a free Mac, D-050), and on request.
+
+**Decision — projects** (migration 0016: `project`, `project_meeting`, `project_update`): the owner adds the projects they follow (name, status active / on hold / done, phase, next milestone and its date, risks, decisions, notes). After a summary, the **Projects agent** reads the open projects and the meeting's summary and answers which projects the meeting touched and what changed for them — a milestone (and date), a phase, a status, a new risk, a decision, a note — each with one sentence of the summary as evidence. The app keeps only what holds up: a project that exists, a field it knows, a real date, a status it knows, and evidence that is really in the summary (compared letters and digits only); the meeting is linked to every project it touched; the same change isn't proposed twice. The model writes a note per project before its answer instead of thinking at length (as D-052 found). **Apply** writes the change into the project in one transaction and keeps it as the project's history; **Dismiss** sets it aside. Deleting a meeting deletes the proposals that quote it (the applied values stay: they are the owner's decision); deleting a project deletes its proposals and links.
+
+**Where the owner sees it**: **Projects** in the sidebar (with the number of updates waiting) → the list → a project's page: Updates waiting for you (each with its evidence, the meeting it came from and the AI marker), Where it stands, Risks, Decisions, Meetings, History — every section shown even when empty. A meeting's ⋯ menu has **Find project updates** (runs now). The Projects agent appears in Workspace → Agents with its guide, model and "applied of proposed" per model.
+
+**Review fixes taken** (migration and architecture reviews): deleting a meeting keeps the decided updates (unlinked, without the quote — a trigger), and only the waiting ones go; the duplicate check works field by field (a list field once, whatever was decided, except an applied item the owner removed; a single-value field only against its current value, a waiting proposal or the same one dismissed from this meeting — a milestone without a date counts as the same milestone, a status as a status), and the prompt lists the decisions too; two open projects can't share a name (a finished one may), and a name needs letters or digits; Find project updates is the owner's own job (Foreground lane), the background run doesn't read the same summary twice, and a re-run summary drops the waiting proposals it no longer says; the owner's edits are one statement, so an Apply landing at the same time isn't overwritten; dates are stored padded; Delete project asks first; the page's controls wait while a save runs, the Edit sheet shows its error, and the project list (the sidebar's count) refreshes every minute; the Projects agent's number shows in Workspace → Agents.
+
+**Means for future work**: CRM (0.9.1) and Email (0.9.2) take the same shape — their own tables, their own agent, proposals with evidence; the Cockpit (0.9.3) reads projects at risk across workspaces. Emails will propose project updates too (`project_update.meeting_id` is nullable for that).
+
+---
+
 ## D-053 — Search by meaning: bge-m3 through Ollama, vectors in the workspace, compared in Rust
 _2026-10-30_
 

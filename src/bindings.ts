@@ -164,6 +164,21 @@ export const commands = {
 	dismissLesson: (slug: string, id: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("dismiss_lesson", { slug, id })),
 	/**  Stops using a line approved from "What I learned"; it isn't proposed again. */
 	forgetLearned: (slug: string, agent: Agent, line: string) => typedError<AgentGuide_Serialize[], AppError>(__TAURI_INVOKE("forget_learned", { slug, agent, line })),
+	/**  The workspace's projects: active first, then on hold, then done. */
+	listProjects: (slug: string) => typedError<Project_Serialize[], AppError>(__TAURI_INVOKE("list_projects", { slug })),
+	/**  A project's page: the project, the updates waiting, its history and meetings. */
+	getProject: (slug: string, id: string) => typedError<ProjectDossier_Serialize, AppError>(__TAURI_INVOKE("get_project", { slug, id })),
+	createProject: (slug: string, project: NewProject_Deserialize) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("create_project", { slug, project })),
+	updateProject: (slug: string, id: string, patch: ProjectPatch_Deserialize) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("update_project", { slug, id, patch })),
+	deleteProject: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_project", { slug, id })),
+	/**  Apply: the proposed change goes into the project. */
+	applyProjectUpdate: (slug: string, id: string) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("apply_project_update", { slug, id })),
+	dismissProjectUpdate: (slug: string, id: string) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("dismiss_project_update", { slug, id })),
+	/**
+	 *  "Find project updates": reads a meeting's summary against the projects now. Returns how many
+	 *  updates it proposed.
+	 */
+	findProjectUpdates: (slug: string, meetingId: string) => typedError<number, AppError>(__TAURI_INVOKE("find_project_updates", { slug, meetingId })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -323,7 +338,7 @@ export type Activity_Serialize = {
 	waiting_for: string | null,
 };
 
-export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live";
+export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live" | "projects";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -782,6 +797,12 @@ export type Lesson = {
 	created_at: string,
 };
 
+export type LinkedMeeting = {
+	id: string,
+	title: string,
+	held_on: string,
+};
+
 /**  Which way a live session translates (0.7.5). */
 export type LiveDirection = 
 /**  Tiếng Việt → English. */
@@ -1153,6 +1174,22 @@ export type NamingReview = {
 	ai_checked: boolean,
 };
 
+export type NewProject = NewProject_Serialize | NewProject_Deserialize;
+
+export type NewProject_Deserialize = {
+	name: string,
+	phase: string,
+	next_milestone: string,
+	milestone_due?: string | null,
+};
+
+export type NewProject_Serialize = {
+	name: string,
+	phase: string,
+	next_milestone: string,
+	milestone_due: string | null,
+};
+
 /**  The Qwen download ended: `error` is None on success. */
 export type OllamaPullFinished = OllamaPullFinished_Serialize | OllamaPullFinished_Deserialize;
 
@@ -1302,6 +1339,129 @@ export type ProfilePatch_Serialize = {
 	name: string | null,
 	everyone_attends: boolean | null,
 	summary_language: SummaryLang | null,
+};
+
+export type Project = Project_Serialize | Project_Deserialize;
+
+/**  A project's page: the project, what waits for the owner, what was applied, its meetings. */
+export type ProjectDossier = ProjectDossier_Serialize | ProjectDossier_Deserialize;
+
+/**  A project's page: the project, what waits for the owner, what was applied, its meetings. */
+export type ProjectDossier_Deserialize = {
+	project: Project_Deserialize,
+	waiting: ProjectUpdate_Deserialize[],
+	history: ProjectUpdate_Deserialize[],
+	meetings: LinkedMeeting[],
+};
+
+/**  A project's page: the project, what waits for the owner, what was applied, its meetings. */
+export type ProjectDossier_Serialize = {
+	project: Project_Serialize,
+	waiting: ProjectUpdate_Serialize[],
+	history: ProjectUpdate_Serialize[],
+	meetings: LinkedMeeting[],
+};
+
+/**  The owner's edits; a field left out stays as it is ("" clears a date). */
+export type ProjectPatch = ProjectPatch_Serialize | ProjectPatch_Deserialize;
+
+/**  The owner's edits; a field left out stays as it is ("" clears a date). */
+export type ProjectPatch_Deserialize = {
+	name?: string | null,
+	status?: ProjectStatus | null,
+	phase?: string | null,
+	next_milestone?: string | null,
+	milestone_due?: string | null,
+	risks?: string[] | null,
+	decisions?: string[] | null,
+	notes?: string | null,
+};
+
+/**  The owner's edits; a field left out stays as it is ("" clears a date). */
+export type ProjectPatch_Serialize = {
+	name: string | null,
+	status: ProjectStatus | null,
+	phase: string | null,
+	next_milestone: string | null,
+	milestone_due: string | null,
+	risks: string[] | null,
+	decisions: string[] | null,
+	notes: string | null,
+};
+
+export type ProjectStatus = "active" | "on_hold" | "done";
+
+/**  A change proposed from a meeting (or applied: the history). */
+export type ProjectUpdate = ProjectUpdate_Serialize | ProjectUpdate_Deserialize;
+
+/**  A change proposed from a meeting (or applied: the history). */
+export type ProjectUpdate_Deserialize = {
+	id: string,
+	project_id: string,
+	meeting_id?: string | null,
+	meeting_title?: string | null,
+	field: UpdateField,
+	value: string,
+	due?: string | null,
+	/**  The sentence of the meeting's summary it rests on. */
+	evidence: string,
+	status: UpdateStatus,
+	created_at: string,
+	updated_at: string,
+};
+
+/**  A change proposed from a meeting (or applied: the history). */
+export type ProjectUpdate_Serialize = {
+	id: string,
+	project_id: string,
+	meeting_id: string | null,
+	meeting_title: string | null,
+	field: UpdateField,
+	value: string,
+	due: string | null,
+	/**  The sentence of the meeting's summary it rests on. */
+	evidence: string,
+	status: UpdateStatus,
+	created_at: string,
+	updated_at: string,
+};
+
+export type Project_Deserialize = {
+	id: string,
+	name: string,
+	status: ProjectStatus,
+	phase: string,
+	next_milestone: string,
+	/**  YYYY-MM-DD. */
+	milestone_due?: string | null,
+	risks: string[],
+	decisions: string[],
+	notes: string,
+	/**  Proposed updates waiting for the owner. */
+	waiting: number,
+	/**  Meetings that touched it. */
+	meetings: number,
+	created_at: string,
+	updated_at: string,
+};
+
+export type Project_Serialize = {
+	id: string,
+	name: string,
+	status: ProjectStatus,
+	phase: string,
+	next_milestone: string,
+	/**  YYYY-MM-DD. */
+	milestone_due: string | null,
+	risks: string[],
+	decisions: string[],
+	notes: string,
+	/**  Proposed updates waiting for the owner. */
+	waiting: number,
+	/**  Meetings that touched it. */
+	meetings: number,
+	created_at: string,
+	updated_at: string,
 };
 
 /**
@@ -1955,6 +2115,13 @@ export type TranslatedSection = {
 	title: string,
 	markdown: string,
 };
+
+/**  What a proposed update changes. */
+export type UpdateField = 
+/**  The next milestone (and its date). */
+"milestone" | "phase" | "status" | "risk" | "decision" | "note";
+
+export type UpdateStatus = "proposed" | "applied" | "dismissed";
 
 export type Waveform = {
 	/**  One peak (max |sample|, 0–255) per equal slice of the recording. */

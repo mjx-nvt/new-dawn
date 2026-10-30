@@ -68,6 +68,13 @@ export const CheckIcon = () => (
   </Icon>
 );
 
+export const ProjectsIcon = () => (
+  <Icon>
+    <path d="M1.5 4.5a1 1 0 0 1 1-1h3.6l1.4 1.5h6a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" />
+    <path d="M1.5 7h13" />
+  </Icon>
+);
+
 export const WorkspaceIcon = () => (
   <Icon>
     <path d="M2.5 14V3.5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1V14M10.5 7h2a1 1 0 0 1 1 1v6M2 14h12M5 5.5h2M5 8.5h2M5 11.5h2" />

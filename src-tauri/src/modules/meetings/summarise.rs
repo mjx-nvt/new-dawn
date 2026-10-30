@@ -1384,6 +1384,10 @@ pub async fn start(
             };
             crate::kernel::notify::show(&app, heading, &body);
         }
+        // The Projects expert reads the new summary in the background (D-054).
+        if result.is_ok() {
+            crate::modules::projects::follow(&app, &slug, &meeting_id);
+        }
         let error = result.err().map(AppError::from);
         let _ = SummaryFinished {
             workspace_slug: slug,

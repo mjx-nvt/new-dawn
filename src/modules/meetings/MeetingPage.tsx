@@ -14,6 +14,7 @@ import {
   useSetMeetingFormat,
 } from "../../kernel/bridge/meetings";
 import { useSetMeetingReference } from "../../kernel/bridge/activity";
+import { useFindProjectUpdates } from "../../kernel/bridge/projects";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SparkleIcon } from "../../kernel/shell/icons";
@@ -54,6 +55,7 @@ export default function MeetingPage() {
   const [deleting, setDeleting] = useState(false);
   const [confirmRetranscribe, setConfirmRetranscribe] = useState(false);
   const setReference = useSetMeetingReference(workspace?.slug);
+  const findUpdates = useFindProjectUpdates(workspace?.slug);
 
   if (meeting.error) {
     return (
@@ -153,9 +155,14 @@ export default function MeetingPage() {
                   disabled: busy || retranscribe.isPending,
                 },
                 {
+                  label: findUpdates.isPending ? "Finding project updates…" : "Find project updates",
+                  onSelect: () => findUpdates.mutate(meetingId),
+                  disabled: m.status !== "summarised" || findUpdates.isPending,
+                  separator: true,
+                },
+                {
                   label: m.reference ? "Stop using as a reference" : "Use as a reference",
                   onSelect: () => setReference.mutate({ meetingId, on: !m.reference }),
-                  separator: true,
                 },
                 { label: "Delete…", onSelect: () => setDeleting(true), danger: true, disabled: busy, separator: true },
               ]}
@@ -163,6 +170,26 @@ export default function MeetingPage() {
           </div>
         )}
       </header>
+
+      {(findUpdates.isPending || findUpdates.data != null || findUpdates.error) && (
+        <div className={`card ${styles.notice}`} role="status">
+          <p className="fieldHint aiMark">
+            <SparkleIcon />{" "}
+            {findUpdates.isPending
+              ? "Reading this summary against your projects…"
+              : findUpdates.error
+                ? findUpdates.error.message
+                : findUpdates.data
+                  ? `${findUpdates.data} project update${findUpdates.data === 1 ? "" : "s"} waiting for you — `
+                  : "No project updates in this meeting (or no open projects)."}
+            {!findUpdates.isPending && !!findUpdates.data && (
+              <Link to="/projects" search={{}}>
+                Projects
+              </Link>
+            )}
+          </p>
+        </div>
+      )}
 
       {confirmRetranscribe && workspace && (
         <div className={`card ${styles.notice}`} role="alertdialog" aria-labelledby="retranscribe-title">

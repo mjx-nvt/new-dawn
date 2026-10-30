@@ -56,6 +56,7 @@ mod modules {
     pub mod memory;
     pub mod model_check;
     pub mod people;
+    pub mod projects;
     pub mod tasks;
     pub mod vocabulary;
 }
@@ -79,6 +80,7 @@ mod commands {
     pub mod onboarding;
     pub mod people;
     pub mod profile;
+    pub mod projects;
     pub mod recorder;
     pub mod storage;
     pub mod summary;
@@ -180,6 +182,14 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::agents::approve_lesson,
             commands::agents::dismiss_lesson,
             commands::agents::forget_learned,
+            commands::projects::list_projects,
+            commands::projects::get_project,
+            commands::projects::create_project,
+            commands::projects::update_project,
+            commands::projects::delete_project,
+            commands::projects::apply_project_update,
+            commands::projects::dismiss_project_update,
+            commands::projects::find_project_updates,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

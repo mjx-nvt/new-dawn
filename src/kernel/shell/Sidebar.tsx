@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { openSettings } from "../bridge/settings";
 import { useOpenTaskCount } from "../bridge/tasks";
 import { useCurrentWorkspace } from "../bridge/workspaces";
-import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, SettingsIcon, TasksIcon, WorkspaceIcon } from "./icons";
+import { useProjects } from "../bridge/projects";
+import { CodeIcon, CollapseIcon, LiveIcon, MeetingsIcon, ProjectsIcon, SettingsIcon, TasksIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -28,6 +29,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
   const tip = (text: string) => (iconsOnly ? text : undefined);
   const { data: workspace } = useCurrentWorkspace();
   const { data: due = 0 } = useOpenTaskCount(workspace?.slug); // due today or overdue
+  const projects = useProjects(workspace?.slug);
+  const waiting = (projects.data ?? []).reduce((n, p) => n + p.waiting, 0); // updates waiting for you
 
   return (
     <nav className={iconsOnly ? `${styles.sidebar} ${styles.rail}` : styles.sidebar} inert={hidden} aria-label="Sidebar">
@@ -51,6 +54,16 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
         >
           {label("Tasks", <TasksIcon />)}
           {due > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{due}</span>)}
+        </Link>
+        <Link
+          to="/projects"
+          className={styles.item}
+          activeProps={{ className: styles.active }}
+          title={tip(waiting ? `Projects · ${waiting} updates waiting` : "Projects")}
+          aria-label={waiting ? `Projects, ${waiting} updates waiting` : undefined}
+        >
+          {label("Projects", <ProjectsIcon />)}
+          {waiting > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{waiting}</span>)}
         </Link>
         <Link
           to="/workspace"

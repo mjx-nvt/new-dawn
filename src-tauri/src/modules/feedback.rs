@@ -21,6 +21,8 @@ pub enum Source {
     Naming,
     Email,
     Tasks,
+    /// The Projects expert (D-054).
+    Projects,
 }
 
 /// The owner's decision.
@@ -47,6 +49,9 @@ pub enum Kind {
     TaskDeleted,
     /// The email written again.
     EmailRewritten,
+    /// A project update the expert proposed: applied, or dismissed.
+    UpdateApplied,
+    UpdateDismissed,
 }
 
 pub struct Feedback<'a> {
@@ -138,6 +143,12 @@ pub async fn numbers(pool: &SqlitePool, agent: Agent) -> Result<Vec<Judged>> {
              FROM task t LEFT JOIN summary s ON s.meeting_id = t.meeting_id \
              WHERE t.origin = 'auto' AND t.created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-3 days') \
              GROUP BY 1 ORDER BY judged DESC"
+        }
+        // Its proposals the owner decided: applied stood, dismissed dropped.
+        Agent::Projects => {
+            "SELECT coalesce(model, '') AS model, count(*) AS judged, 0 AS changed, \
+             coalesce(sum(status = 'dismissed'), 0) AS dropped FROM project_update \
+             WHERE status IN ('applied', 'dismissed') GROUP BY 1 ORDER BY judged DESC"
         }
         _ => return Ok(Vec::new()),
     };
