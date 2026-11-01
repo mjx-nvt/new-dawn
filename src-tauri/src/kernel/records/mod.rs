@@ -8,6 +8,7 @@ pub mod search;
 pub mod standard;
 pub mod timeline;
 pub mod types;
+pub mod views;
 
 use anyhow::{anyhow, Result};
 use sqlx::SqlitePool;
@@ -150,6 +151,7 @@ pub async fn prepare(pool: &SqlitePool, owner_name: &str) -> Result<()> {
             continue;
         }
         let obj = object(pool, &meta.id).await?;
+        views::ensure_index(pool, &obj).await?;
         search::sync(pool, &obj).await?;
     }
     Ok(())

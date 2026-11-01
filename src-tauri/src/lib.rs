@@ -92,6 +92,7 @@ mod commands {
     pub mod profile;
     pub mod projects;
     pub mod switches;
+    pub mod views;
     pub mod recorder;
     pub mod records;
     pub mod storage;
@@ -229,6 +230,21 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::records::restore_record,
             commands::records::destroy_record,
             commands::records::search_records,
+            commands::views::list_views,
+            commands::views::get_view,
+            commands::views::view_query,
+            commands::views::create_view,
+            commands::views::update_view,
+            commands::views::delete_view,
+            commands::views::duplicate_view,
+            commands::views::reorder_views,
+            commands::views::save_view,
+            commands::views::set_view_fields,
+            commands::views::set_view_filters,
+            commands::views::set_view_sorts,
+            commands::views::set_view_groups,
+            commands::views::aggregate_records,
+            commands::views::group_counts,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-061 — Views: a saved way of looking at an object, with a working copy the owner saves or resets
+_2026-11-01_
+
+**Context** (plan v4 §3.2, 0.10.2): Twenty's lists are views — which fields in what order and width, with which aggregate; filters as rule groups; sorts; a group-by select field; compact; where a record opens; who sees it. Each object has an "All <X>" default. Changes are not saved until Update view.
+
+**Decision — views are rows of the engine's metadata** (migration 0022): `view` (type, key INDEX for the default, open-in, visibility, group field and group order, the kanban and calendar fields for 0.10.3), `view_field` (visible, position, width, footer aggregate), `view_filter_group` (And / Or / Not, nested) with `view_filter` rules (a field, a composite's part, the engine's operator, the value as JSON), `view_sort`, `view_group` (a grouped table's option order and hidden groups). The default view is made at open for every object; a new view copies its columns. `views::query_of` turns a view into the engine's query, so kanban and calendar pages reuse it.
+
+**Decision — the working copy**: the page keeps a working copy of the saved view (`useWorking`); every change in the bar, a header or the footer edits the copy and the table follows at once; **Update view** writes it back (fields, filters, sorts, groups, grouping, in that order), **Save as new view** makes a view and writes it there, **Reset** drops it. On the default view only Save as new view is offered, as in Twenty. Compact, Open record in and Visibility save at once (they are the view's, not the copy's).
+
+**Decision — aggregates are one SELECT**: the footer's and a group's numbers come from `query::aggregate` (count, count empty / not empty / unique, percent empty / not empty, sum, average, min, max) over the same WHERE the list uses; a grouped table runs one list per visible group plus `query::group_counts`. A currency aggregates its amount; the footer shows it in units.
+
+**Means for future work**: kanban and calendar (0.10.3) are view types on the same rows; favorites of views (0.10.7) use `favorite.view_id`; the record page's related-record widgets (0.10.4) are views too. Twenty's select-field group order and "visible groups" are kept exactly; the group list shows "No value" last.
+
+---
+
 ## D-060 — The record engine: Twenty's data model in SQLite, every object a real table
 _2026-11-01_
 

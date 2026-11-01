@@ -230,6 +230,26 @@ export const commands = {
 	destroyRecord: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("destroy_record", { slug, object, id })),
 	/**  Records of every object whose words match, best first (`/`). */
 	searchRecords: (slug: string, text: string, limit: number) => typedError<Hit[], AppError>(__TAURI_INVOKE("search_records", { slug, text, limit })),
+	/**  An object's views, the default "All <X>" first (made if missing). */
+	listViews: (slug: string, object: string) => typedError<ViewRow_Serialize[], AppError>(__TAURI_INVOKE("list_views", { slug, object })),
+	getView: (slug: string, id: string) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("get_view", { slug, id })),
+	/**  The engine's query for a saved view (its filters and sorts), for kanban and calendar pages. */
+	viewQuery: (slug: string, id: string) => typedError<Query_Serialize, AppError>(__TAURI_INVOKE("view_query", { slug, id })),
+	createView: (slug: string, object: string, name: string, icon: string, viewType: string) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("create_view", { slug, object, name, icon, viewType })),
+	updateView: (slug: string, id: string, patch: ViewPatch_Deserialize) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("update_view", { slug, id, patch })),
+	deleteView: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_view", { slug, id })),
+	duplicateView: (slug: string, id: string, name: string | null) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("duplicate_view", { slug, id, name })),
+	reorderViews: (slug: string, object: string, ids: string[]) => typedError<null, AppError>(__TAURI_INVOKE("reorder_views", { slug, object, ids })),
+	/**  Everything "Update view" writes — fields, filters, sorts, groups, grouping — in one transaction. */
+	saveView: (slug: string, id: string, input: SaveInput_Deserialize) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("save_view", { slug, id, input })),
+	setViewFields: (slug: string, id: string, fields: ViewFieldInput_Deserialize[]) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("set_view_fields", { slug, id, fields })),
+	setViewFilters: (slug: string, id: string, input: FiltersInput_Deserialize) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("set_view_filters", { slug, id, input })),
+	setViewSorts: (slug: string, id: string, sorts: SortInput_Deserialize[]) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("set_view_sorts", { slug, id, sorts })),
+	setViewGroups: (slug: string, id: string, groups: GroupValueInput[]) => typedError<ViewDef_Serialize, AppError>(__TAURI_INVOKE("set_view_groups", { slug, id, groups })),
+	/**  Aggregates over the records a query lists (a view's footer, a group's header). */
+	aggregateRecords: (slug: string, object: string, query: Query_Deserialize, ops: AggregateInput_Deserialize[]) => typedError<AggregateValue[], AppError>(__TAURI_INVOKE("aggregate_records", { slug, object, query, ops })),
+	/**  How many records a query lists per value of a select field (a grouped table's headers). */
+	groupCounts: (slug: string, object: string, query: Query_Deserialize, field: string) => typedError<GroupCount[], AppError>(__TAURI_INVOKE("group_counts", { slug, object, query, field })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -460,6 +480,38 @@ export type AgentRun_Serialize = {
 	prompt_tokens: number | null,
 	output_tokens: number | null,
 	created_at: string,
+};
+
+/**
+ *  One footer or group aggregate: a field (a composite's part), and the operation — COUNT,
+ *  COUNT_EMPTY, COUNT_NOT_EMPTY, COUNT_UNIQUE, PERCENT_EMPTY, PERCENT_NOT_EMPTY, SUM, AVG, MIN, MAX.
+ */
+export type AggregateInput = AggregateInput_Serialize | AggregateInput_Deserialize;
+
+/**
+ *  One footer or group aggregate: a field (a composite's part), and the operation — COUNT,
+ *  COUNT_EMPTY, COUNT_NOT_EMPTY, COUNT_UNIQUE, PERCENT_EMPTY, PERCENT_NOT_EMPTY, SUM, AVG, MIN, MAX.
+ */
+export type AggregateInput_Deserialize = {
+	field: string,
+	sub?: string | null,
+	op: string,
+};
+
+/**
+ *  One footer or group aggregate: a field (a composite's part), and the operation — COUNT,
+ *  COUNT_EMPTY, COUNT_NOT_EMPTY, COUNT_UNIQUE, PERCENT_EMPTY, PERCENT_NOT_EMPTY, SUM, AVG, MIN, MAX.
+ */
+export type AggregateInput_Serialize = {
+	field: string,
+	sub: string | null,
+	op: string,
+};
+
+export type AggregateValue = {
+	field: string,
+	op: string,
+	value: Json,
 };
 
 /**  How AI work shares the Mac (Settings → Models → While you work). */
@@ -1013,6 +1065,38 @@ export type Figure = {
 	candidate: string,
 };
 
+export type FilterInput = FilterInput_Serialize | FilterInput_Deserialize;
+
+export type FilterInput_Deserialize = {
+	field_id: string,
+	sub?: string,
+	operand: string,
+	value?: Json,
+	group_id?: string | null,
+	position: number | null,
+};
+
+export type FilterInput_Serialize = {
+	field_id: string,
+	sub: string,
+	operand: string,
+	value: Json,
+	group_id: string | null,
+	position: number | null,
+};
+
+export type FiltersInput = FiltersInput_Serialize | FiltersInput_Deserialize;
+
+export type FiltersInput_Deserialize = {
+	groups?: GroupInput_Deserialize[],
+	filters?: FilterInput_Deserialize[],
+};
+
+export type FiltersInput_Serialize = {
+	groups: GroupInput_Serialize[],
+	filters: FilterInput_Serialize[],
+};
+
 export type Fonts = Fonts_Serialize | Fonts_Deserialize;
 
 export type Fonts_Deserialize = {
@@ -1028,6 +1112,36 @@ export type Fonts_Serialize = {
 };
 
 export type GlassStatus = "liquid_glass" | "vibrancy" | "none";
+
+export type GroupCount = {
+	/**  The select option's value ('' = none). */
+	value: string,
+	count: number,
+};
+
+export type GroupInput = GroupInput_Serialize | GroupInput_Deserialize;
+
+export type GroupInput_Deserialize = {
+	/**  The UI's id for the group, so rules can point at it; replaced by a fresh one on save. */
+	id: string,
+	parent_id?: string | null,
+	logical: string,
+	position: number | null,
+};
+
+export type GroupInput_Serialize = {
+	/**  The UI's id for the group, so rules can point at it; replaced by a fresh one on save. */
+	id: string,
+	parent_id: string | null,
+	logical: string,
+	position: number | null,
+};
+
+export type GroupValueInput = {
+	field_value: string,
+	is_visible: boolean,
+	position: number | null,
+};
 
 export type Hit = {
 	object: string,
@@ -2044,6 +2158,29 @@ export type RelationOptions_Serialize = {
 	junction: boolean,
 };
 
+/**  Everything "Update view" writes, in one go. */
+export type SaveInput = SaveInput_Serialize | SaveInput_Deserialize;
+
+/**  Everything "Update view" writes, in one go. */
+export type SaveInput_Deserialize = {
+	fields?: ViewFieldInput_Deserialize[],
+	filters?: FiltersInput_Deserialize,
+	sorts?: SortInput_Deserialize[],
+	groups?: GroupValueInput[],
+	group_by_field_id?: string | null,
+	group_sort?: string | null,
+};
+
+/**  Everything "Update view" writes, in one go. */
+export type SaveInput_Serialize = {
+	fields: ViewFieldInput_Serialize[],
+	filters: FiltersInput_Serialize,
+	sorts: SortInput_Serialize[],
+	groups: GroupValueInput[],
+	group_by_field_id: string | null,
+	group_sort: string | null,
+};
+
 export type Section = Section_Serialize | Section_Deserialize;
 
 export type SectionKind = "overview" | "key_points" | "decisions" | "action_items" | "next_steps" | "open_questions" | "other";
@@ -2090,6 +2227,22 @@ export type Slogan_Serialize = {
 };
 
 export type Sort = Sort_Serialize | Sort_Deserialize;
+
+export type SortInput = SortInput_Serialize | SortInput_Deserialize;
+
+export type SortInput_Deserialize = {
+	field_id: string,
+	sub?: string,
+	direction: string,
+	position: number | null,
+};
+
+export type SortInput_Serialize = {
+	field_id: string,
+	sub: string,
+	direction: string,
+	position: number | null,
+};
 
 export type Sort_Deserialize = {
 	field: string,
@@ -2642,6 +2795,240 @@ export type UpdateField =
 "milestone" | "phase" | "status" | "risk" | "decision" | "note";
 
 export type UpdateStatus = "proposed" | "applied" | "dismissed";
+
+/**  A view with everything it saves. */
+export type ViewDef = ViewDef_Serialize | ViewDef_Deserialize;
+
+/**  A view with everything it saves. */
+export type ViewDef_Deserialize = {
+	view: ViewRow_Deserialize,
+	fields: ViewField_Deserialize[],
+	filter_groups: ViewFilterGroup_Deserialize[],
+	filters: ViewFilter_Deserialize[],
+	sorts: ViewSort[],
+	groups: ViewGroup[],
+};
+
+/**  A view with everything it saves. */
+export type ViewDef_Serialize = {
+	view: ViewRow_Serialize,
+	fields: ViewField_Serialize[],
+	filter_groups: ViewFilterGroup_Serialize[],
+	filters: ViewFilter_Serialize[],
+	sorts: ViewSort[],
+	groups: ViewGroup[],
+};
+
+export type ViewField = ViewField_Serialize | ViewField_Deserialize;
+
+export type ViewFieldInput = ViewFieldInput_Serialize | ViewFieldInput_Deserialize;
+
+export type ViewFieldInput_Deserialize = {
+	field_id: string,
+	is_visible: boolean,
+	position: number | null,
+	size: number,
+	aggregate_operation?: string | null,
+};
+
+export type ViewFieldInput_Serialize = {
+	field_id: string,
+	is_visible: boolean,
+	position: number | null,
+	size: number,
+	aggregate_operation: string | null,
+};
+
+export type ViewField_Deserialize = {
+	id: string,
+	view_id: string,
+	field_id: string,
+	is_visible: boolean,
+	position: number | null,
+	/**  The column's width in points. */
+	size: number,
+	/**
+	 *  COUNT · COUNT_EMPTY · COUNT_NOT_EMPTY · COUNT_UNIQUE · PERCENT_EMPTY · PERCENT_NOT_EMPTY
+	 *  · SUM · AVG · MIN · MAX, or none.
+	 */
+	aggregate_operation?: string | null,
+};
+
+export type ViewField_Serialize = {
+	id: string,
+	view_id: string,
+	field_id: string,
+	is_visible: boolean,
+	position: number | null,
+	/**  The column's width in points. */
+	size: number,
+	/**
+	 *  COUNT · COUNT_EMPTY · COUNT_NOT_EMPTY · COUNT_UNIQUE · PERCENT_EMPTY · PERCENT_NOT_EMPTY
+	 *  · SUM · AVG · MIN · MAX, or none.
+	 */
+	aggregate_operation: string | null,
+};
+
+export type ViewFilter = ViewFilter_Serialize | ViewFilter_Deserialize;
+
+export type ViewFilterGroup = ViewFilterGroup_Serialize | ViewFilterGroup_Deserialize;
+
+export type ViewFilterGroup_Deserialize = {
+	id: string,
+	view_id: string,
+	parent_id?: string | null,
+	/**  AND · OR · NOT */
+	logical: string,
+	position: number | null,
+};
+
+export type ViewFilterGroup_Serialize = {
+	id: string,
+	view_id: string,
+	parent_id: string | null,
+	/**  AND · OR · NOT */
+	logical: string,
+	position: number | null,
+};
+
+export type ViewFilter_Deserialize = {
+	id: string,
+	view_id: string,
+	field_id: string,
+	/**  A composite's part ('' = the whole field). */
+	sub: string,
+	/**  The engine's operator names (is, contains, isRelative…). */
+	operand: string,
+	value: Json,
+	/**  None = the view's own top-level AND. */
+	group_id?: string | null,
+	position: number | null,
+};
+
+export type ViewFilter_Serialize = {
+	id: string,
+	view_id: string,
+	field_id: string,
+	/**  A composite's part ('' = the whole field). */
+	sub: string,
+	/**  The engine's operator names (is, contains, isRelative…). */
+	operand: string,
+	value: Json,
+	/**  None = the view's own top-level AND. */
+	group_id: string | null,
+	position: number | null,
+};
+
+export type ViewGroup = {
+	id: string,
+	view_id: string,
+	/**  A select option's value ('' = no value). */
+	field_value: string,
+	is_visible: boolean,
+	position: number | null,
+};
+
+/**
+ *  What Edit, Options and the group menu change on a view. A missing field is left alone;
+ *  `group_by_field_id: Some(None)` clears the grouping.
+ */
+export type ViewPatch = ViewPatch_Serialize | ViewPatch_Deserialize;
+
+/**
+ *  What Edit, Options and the group menu change on a view. A missing field is left alone;
+ *  `group_by_field_id: Some(None)` clears the grouping.
+ */
+export type ViewPatch_Deserialize = {
+	name?: string | null,
+	icon?: string | null,
+	is_compact?: boolean | null,
+	open_record_in?: string | null,
+	visibility?: string | null,
+	group_by_field_id?: string | null,
+	group_sort?: string | null,
+	kanban_field_id?: string | null,
+	kanban_aggregate_operation?: string | null,
+	kanban_aggregate_field_id?: string | null,
+	calendar_field_id?: string | null,
+};
+
+/**
+ *  What Edit, Options and the group menu change on a view. A missing field is left alone;
+ *  `group_by_field_id: Some(None)` clears the grouping.
+ */
+export type ViewPatch_Serialize = {
+	name: string | null,
+	icon: string | null,
+	is_compact: boolean | null,
+	open_record_in: string | null,
+	visibility: string | null,
+	group_by_field_id: string | null,
+	group_sort: string | null,
+	kanban_field_id: string | null,
+	kanban_aggregate_operation: string | null,
+	kanban_aggregate_field_id: string | null,
+	calendar_field_id: string | null,
+};
+
+export type ViewRow = ViewRow_Serialize | ViewRow_Deserialize;
+
+export type ViewRow_Deserialize = {
+	id: string,
+	object_id: string,
+	name: string,
+	icon: string,
+	/**  TABLE · KANBAN · CALENDAR */
+	type: string,
+	/**  INDEX for the object's default view, else none. */
+	key?: string | null,
+	position: number | null,
+	is_compact: boolean,
+	/**  SIDE_PANEL · RECORD_PAGE */
+	open_record_in: string,
+	/**  WORKSPACE · UNLISTED (one owner: a flag) */
+	visibility: string,
+	group_by_field_id?: string | null,
+	/**  MANUAL · ASC · DESC */
+	group_sort: string,
+	kanban_field_id?: string | null,
+	kanban_aggregate_operation?: string | null,
+	kanban_aggregate_field_id?: string | null,
+	calendar_field_id?: string | null,
+};
+
+export type ViewRow_Serialize = {
+	id: string,
+	object_id: string,
+	name: string,
+	icon: string,
+	/**  TABLE · KANBAN · CALENDAR */
+	type: string,
+	/**  INDEX for the object's default view, else none. */
+	key: string | null,
+	position: number | null,
+	is_compact: boolean,
+	/**  SIDE_PANEL · RECORD_PAGE */
+	open_record_in: string,
+	/**  WORKSPACE · UNLISTED (one owner: a flag) */
+	visibility: string,
+	group_by_field_id: string | null,
+	/**  MANUAL · ASC · DESC */
+	group_sort: string,
+	kanban_field_id: string | null,
+	kanban_aggregate_operation: string | null,
+	kanban_aggregate_field_id: string | null,
+	calendar_field_id: string | null,
+};
+
+export type ViewSort = {
+	id: string,
+	view_id: string,
+	field_id: string,
+	sub: string,
+	/**  ASC · DESC */
+	direction: string,
+	position: number | null,
+};
 
 export type Waiting = {
 	/**  Project updates. */

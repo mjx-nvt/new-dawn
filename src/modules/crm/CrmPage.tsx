@@ -1,17 +1,21 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useObject, useObjects } from "../../kernel/bridge/records";
+import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
+import { useCreateView, useSaveView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import PeoplePage from "../people/PeoplePage";
 import styles from "./Crm.module.css";
-import RecordTable from "./RecordTable";
+import RecordTable, { groupsOf, type Column } from "./RecordTable";
+import { fromView, newRule, nextPosition, queryOf, same, useWorking, type Working } from "./views/useViewState";
+import ViewBar from "./views/ViewBar";
 
 const route = getRouteApi("/shell/crm");
 
-/** Twenty's objects as tabs — People, Companies, Opportunities, Tasks, Notes, each a record
- *  table (D-060) — and New Dawn's Commitments (D-055) beside them. The tab is URL state. */
+/** Twenty's objects as tabs — People, Companies, Opportunities, Tasks, Notes, each with its views
+ *  (D-060, D-061) — and New Dawn's Commitments (D-055) beside them. The tab and the view are
+ *  URL state. */
 export default function CrmPage() {
-  const { tab } = route.useSearch();
+  const { tab, view } = route.useSearch();
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug;
@@ -22,6 +26,7 @@ export default function CrmPage() {
   const [search, setSearch] = useState("");
   const [deleted, setDeleted] = useState(false);
   const show = (next: string) => void navigate({ to: "/crm", search: { tab: next }, replace: true });
+  const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id }, replace: true });
   const title = tab === "commitments" ? "Commitments" : (current?.label_plural ?? "CRM");
 
   return (
@@ -60,7 +65,7 @@ export default function CrmPage() {
         {tab === "commitments" ? (
           <PeoplePage embedded />
         ) : slug && object.data ? (
-          <RecordTable key={object.data.meta.id} slug={slug} object={object.data} search={search} deleted={deleted} />
+          <ObjectViews key={object.data.meta.id} slug={slug} object={object.data} viewId={view} search={search} deleted={deleted} onPickView={showView} />
         ) : (
           <div className={styles.tableWrap}>
             <div className={`${styles.slot} ghostCard`}>{objects.isError || object.isError ? <span className="ghostText">Couldn't be read — {(objects.error ?? object.error)?.message}</span> : null}</div>
@@ -68,5 +73,99 @@ export default function CrmPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** An object's view bar and table: the saved view, the working copy, and what saves it. */
+function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { slug: string; object: ObjectDef; viewId: string | undefined; search: string; deleted: boolean; onPickView: (id: string) => void }) {
+  const name = object.meta.name_singular;
+  const views = useViews(slug, name);
+  const list = views.data ?? [];
+  const chosen = list.find((v) => v.id === viewId) ?? list.find((v) => v.key === "INDEX") ?? list[0];
+  const def = useView(slug, chosen?.id);
+  const [working, setWorking, reset] = useWorking(def.data);
+  const saveView = useSaveView(slug, name);
+  const createView = useCreateView(slug, name);
+  const [saving, setSaving] = useState<Error | null>(null);
+
+  if (!def.data || !working) {
+    return (
+      <div className={styles.tableWrap}>
+        <div className={`${styles.slot} ghostCard`}>{views.isError || def.isError ? <span className="ghostText">Couldn't be read — {(views.error ?? def.error)?.message}</span> : null}</div>
+      </div>
+    );
+  }
+  const current: ViewDef = def.data;
+  const dirty = !same(working, fromView(current));
+  const fieldOf = (id: string) => object.fields.find((f) => f.id === id);
+  const columns: Column[] = working.fields.filter((f) => f.is_visible).flatMap((f) => {
+    const field = fieldOf(f.field_id);
+    return field ? [{ field, size: f.size, aggregate: f.aggregate_operation ?? null }] : [];
+  });
+  const groupField = working.groupBy ? fieldOf(working.groupBy) : undefined;
+  const query = queryOf(object, working, { search, deleted });
+
+  /** Writes the working copy into a view — fields, filters, sorts, groups, grouping — in one go:
+   *  a failure changes nothing, and the copy resyncs once, to the saved view. */
+  const persist = async (id: string, w: Working) => {
+    await saveView.mutateAsync({ id, input: { fields: w.fields, filters: w.filters, sorts: w.sorts, groups: w.groups, group_by_field_id: w.groupBy, group_sort: w.groupSort } });
+  };
+  const save = () => {
+    setSaving(null);
+    persist(current.view.id, working).catch((e: Error) => setSaving(e));
+  };
+  const saveAs = (viewName: string) => {
+    setSaving(null);
+    createView
+      .mutateAsync({ name: viewName })
+      .then(async (made) => {
+        await persist(made.view.id, working);
+        onPickView(made.view.id);
+      })
+      .catch((e: Error) => setSaving(e));
+  };
+  const change = (next: Working) => setWorking(next);
+  const sort = (field: FieldMeta, direction: "ASC" | "DESC") => {
+    const rest = working.sorts.filter((s) => s.field_id !== field.id);
+    change({ ...working, sorts: [...rest, { field_id: field.id, sub: "", direction, position: nextPosition(rest) }] });
+  };
+  const filter = (field: FieldMeta) => change({ ...working, filters: { ...working.filters, filters: [...working.filters.filters, newRule(field, null, nextPosition(working.filters.filters))] } });
+  const fieldsWith = (fn: (f: Working["fields"][number]) => Working["fields"][number]) => change({ ...working, fields: working.fields.map(fn) });
+
+  return (
+    <>
+      <ViewBar slug={slug} object={object} views={list} current={current} working={working} dirty={dirty} onPick={onPickView} onChange={change} onSave={save} onSaveAs={saveAs} onReset={reset} />
+      {saving && (
+        <p className="formError" role="alert">
+          {saving.message}
+        </p>
+      )}
+      <RecordTable
+        slug={slug}
+        object={object}
+        columns={columns}
+        query={query}
+        deleted={deleted}
+        compact={current.view.is_compact}
+        groupBy={groupField}
+        groups={groupField ? groupsOf(groupField, working.groups, working.groupSort) : undefined}
+        onResize={(id, size) => fieldsWith((f) => (f.field_id === id ? { ...f, size } : f))}
+        onReorder={(id, overId) => {
+          const rest = working.fields.filter((f) => f.field_id !== id);
+          const moving = working.fields.find((f) => f.field_id === id);
+          if (!moving) return;
+          rest.splice(
+            rest.findIndex((f) => f.field_id === overId),
+            0,
+            moving,
+          );
+          change({ ...working, fields: rest.map((f, i) => ({ ...f, position: i })) });
+        }}
+        onSort={sort}
+        onHide={(id) => fieldsWith((f) => (f.field_id === id ? { ...f, is_visible: false } : f))}
+        onFilter={filter}
+        onAggregate={(id, op) => fieldsWith((f) => (f.field_id === id ? { ...f, aggregate_operation: op } : f))}
+      />
+    </>
   );
 }

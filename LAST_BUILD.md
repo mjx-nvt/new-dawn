@@ -1,3 +1,25 @@
+# Last Build — Table views: filters, sorts, groups, saved views · release 0.10.2
+_2026-11-01_
+
+## What changed
+- **Views** (D-061). Every CRM object now has Twenty's view bar: the view dropdown on the left ("All People" by default; + Add view; drag to reorder; ⋮ Edit, Duplicate, Delete), **Filter**, **Sort** and **⋯ Options** on the right, and the active rules and sorts as chips underneath.
+  - **Filter**: pick a field, then the operator its type allows (text: contains, doesn't contain, empty, not empty; numbers and amounts: is, is not, ≥, ≤; dates: is, relative (past / next / this day · week · month · year), in past, in future, today, before, after or equal; selects: any of the options; relations: pick records; true/false) and a value. Rules in the bar combine with And; **Advanced filter** adds rule groups — And, Or, Not — nested up to three deep, shown as an "n advanced rules" chip.
+  - **Sort**: ascending or descending, several fields; also from a column's ⋮ menu.
+  - **Options**: Fields (show, hide, drag or ▲▼ to reorder), Group (a select field; A→Z, Z→A or manual order; hide groups), Compact view, Open record in (side panel · record page), Visibility (workspace · unlisted — not on the default view).
+  - **The table**: drag a column's border to resize, drag a header to reorder; a column's ⋮ offers sort, filter and hide; grouped tables show a collapsible header per group with its count and aggregates and an Add row per group (a new record takes the group's value); the **aggregate footer** — hover a column and choose Count, count empty / not empty / unique, percent empty / not empty, Sum, Average, Min, Max (amounts in units).
+  - **Unsaved changes**: everything above edits a working copy; the table follows at once; **Update view** saves it, **▾ Create view** or **Save as new view** (on the default view) makes a new one, **Reset** drops the changes.
+- Migration 0022 (views and their parts; a favorite can be a view), reviewed by the migration-safety agent — its two indexes added.
+- Checks: 162 Rust tests pass; clippy, tsc and the localhost check are clean. Seen in the dev app (dark, and the components of 0.10.1 in light): "Job title contains Manager" from the Filter menu narrowed People to three and showed its chip; Sort → Descending → Name added its chip and reordered the rows; **Save as new view** made "Managers", selected it, and its rule and sort are in the database (they survive a relaunch); Opportunities grouped by Stage showed New · Screening · Meeting (2, 150,000) · Proposal (1, 45,000) with an Add row per group, and the footer's Sum of Amount read 195,000.
+- Review: the architecture review found three must-fixes, all in: a rule just added (no value yet) no longer breaks the table — it is left out of the query until it has one (both the page and the engine's own view query skip it, and an empty rule group is skipped); **Update view** is now one transaction (a `save_view` command) instead of five writes, so a failure changes nothing and the working copy no longer resets mid-way; the column ⋮ menu is no longer clipped by its header. Taken too: the two table menus close on Escape or a click outside; the resize handle takes the keyboard (← →); Compact view now shortens the rows; Sort offers a full name's first or last name (and other composite parts); relation and amount rules query the same way from a saved view as from the bar; Sum and Average are only offered on numbers and amounts; an empty group names itself; a read error shows its reason; radii and a width moved to tokens and classes; a Rust test covers a nested rule group through save, duplicate and the engine's query (163 tests).
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+## Env / config
+- Migration 0022 (workspace).
+
+---
+
 # Last Build — The record engine: Twenty's data model, five standard objects, a first table · release 0.10.1
 _2026-11-01_
 

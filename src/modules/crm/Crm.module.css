@@ -301,3 +301,135 @@
     transition: background 120ms ease;
   }
 }
+
+/* Views (D-061): headers that resize and reorder, group rows, the aggregate footer. */
+.head {
+  position: relative;
+  overflow: visible !important;
+}
+
+.tableCompact td {
+  height: 28px;
+}
+
+.menuUp {
+  bottom: 100%;
+  top: auto;
+  left: 0;
+  right: auto;
+}
+
+.headInner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.headLabel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headMenu {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  padding: 0 4px;
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+  font: inherit;
+  opacity: 0;
+}
+
+.head:hover .headMenu,
+.headMenu:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.headDragging {
+  opacity: 0.4;
+}
+
+.resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.resize:hover {
+  background: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.groupRow td {
+  background: var(--surface-2);
+  height: 32px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.groupAggregate {
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-sm);
+}
+
+.collapse {
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-sm);
+  padding: 0;
+}
+
+.footer td {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface-2);
+  border-top: 0.5px solid var(--hair);
+  height: 32px;
+}
+
+.footerCell {
+  position: relative;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.footerButton {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footerGhost {
+  color: var(--ink-3);
+  opacity: 0;
+}
+
+.footerButton:hover .footerGhost,
+.footerButton:focus-visible .footerGhost {
+  opacity: 1;
+}

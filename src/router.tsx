@@ -122,7 +122,10 @@ const projectRoute = createRoute({
 const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/crm",
-  validateSearch: (search: Record<string, unknown>): { tab: string } => ({ tab: typeof search.tab === "string" && search.tab ? search.tab : "people" }),
+  validateSearch: (search: Record<string, unknown>): { tab: string; view?: string } => ({
+    tab: typeof search.tab === "string" && search.tab ? search.tab : "people",
+    ...(typeof search.view === "string" && search.view ? { view: search.view } : {}),
+  }),
   component: () => (
     <ModuleGate module="crm">
       <CrmPage />

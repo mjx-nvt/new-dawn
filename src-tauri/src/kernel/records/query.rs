@@ -900,3 +900,104 @@ pub async fn destroy(pool: &SqlitePool, object: &ObjectDef, id: &str) -> Result<
     timeline::forget(pool, object, id).await?;
     search::remove(pool, &object.meta.name_singular, id).await
 }
+
+// ---------- aggregates and groups (views, D-061) ----------
+
+/// One footer or group aggregate: a field (a composite's part), and the operation — COUNT,
+/// COUNT_EMPTY, COUNT_NOT_EMPTY, COUNT_UNIQUE, PERCENT_EMPTY, PERCENT_NOT_EMPTY, SUM, AVG, MIN, MAX.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct AggregateInput {
+    pub field: String,
+    #[serde(default)]
+    pub sub: Option<String>,
+    pub op: String,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct AggregateValue {
+    pub field: String,
+    pub op: String,
+    pub value: Json,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct GroupCount {
+    /// The select option's value ('' = none).
+    pub value: String,
+    pub count: u32,
+}
+
+fn is_numeric_op(op: &str) -> bool {
+    matches!(op, "SUM" | "AVG" | "MIN" | "MAX")
+}
+
+/// The column an aggregate reads: the named part, else a composite's number (a sum of amounts)
+/// or its first text part.
+fn aggregate_column(field: &FieldMeta, sub: Option<&str>, op: &str) -> Option<StoredColumn> {
+    let cols = columns(field);
+    match sub {
+        Some(sub) => cols.into_iter().find(|c| c.key == Some(sub)),
+        None if is_numeric_op(op) => cols.iter().find(|c| c.kind != ColumnKind::Text).cloned().or_else(|| cols.into_iter().next()),
+        None => cols.iter().find(|c| c.kind == ColumnKind::Text && !c.json).cloned().or_else(|| cols.into_iter().next()),
+    }
+}
+
+/// The aggregates over the records a query lists, in one SELECT.
+pub async fn aggregate(pool: &SqlitePool, object: &ObjectDef, query: &Query, ops: &[AggregateInput]) -> Result<Vec<AggregateValue>> {
+    let mut binds = Vec::new();
+    let where_ = where_sql(object, query, &mut binds)?;
+    let mut selects = vec!["count(*)".to_owned()];
+    for op in ops {
+        let field = object.field(&op.field).ok_or_else(|| invalid(format!("No field named {}", op.field)))?;
+        let c = aggregate_column(field, op.sub.as_deref(), &op.op).ok_or_else(|| invalid(format!("{} can't be aggregated", field.label)))?;
+        let col = format!("t.\"{}\"", c.name);
+        let empty = empty_sql(&c, &col);
+        selects.push(match op.op.as_str() {
+            "COUNT" => "count(*)".to_owned(),
+            "COUNT_EMPTY" => format!("sum(CASE WHEN {empty} THEN 1 ELSE 0 END)"),
+            "COUNT_NOT_EMPTY" => format!("sum(CASE WHEN {empty} THEN 0 ELSE 1 END)"),
+            "COUNT_UNIQUE" => format!("count(DISTINCT CASE WHEN {empty} THEN NULL ELSE {col} END)"),
+            "PERCENT_EMPTY" => format!("100.0 * sum(CASE WHEN {empty} THEN 1 ELSE 0 END) / max(count(*), 1)"),
+            "PERCENT_NOT_EMPTY" => format!("100.0 * sum(CASE WHEN {empty} THEN 0 ELSE 1 END) / max(count(*), 1)"),
+            "SUM" => format!("sum({col})"),
+            "AVG" => format!("avg({col})"),
+            "MIN" => format!("min({col})"),
+            "MAX" => format!("max({col})"),
+            other => return Err(invalid(format!("No aggregate named {other}"))),
+        });
+    }
+    let sql_text = format!("SELECT {} FROM {} t WHERE {where_}", selects.join(", "), object.meta.table_name);
+    let row = bind_all(sqlx::query(sql(sql_text)), &binds).fetch_one(pool).await.context("aggregating records")?;
+    let mut out = Vec::new();
+    for (i, op) in ops.iter().enumerate() {
+        let idx = i + 1;
+        let value = if let Ok(Some(n)) = row.try_get::<Option<f64>, _>(idx) {
+            Value::from(n)
+        } else if let Ok(Some(n)) = row.try_get::<Option<i64>, _>(idx) {
+            Value::from(n)
+        } else if let Ok(Some(s)) = row.try_get::<Option<String>, _>(idx) {
+            Value::String(s)
+        } else {
+            Value::Null
+        };
+        out.push(AggregateValue { field: op.field.clone(), op: op.op.clone(), value: Json(value) });
+    }
+    Ok(out)
+}
+
+/// How many records a query lists per value of a select field (a grouped table's headers).
+pub async fn group_counts(pool: &SqlitePool, object: &ObjectDef, query: &Query, field_name: &str) -> Result<Vec<GroupCount>> {
+    let field = object.field(field_name).ok_or_else(|| invalid(format!("No field named {field_name}")))?;
+    if field.r#type != FieldType::Select {
+        return Err(invalid(format!("{} isn't a select field", field.label)));
+    }
+    let Some(c) = columns(field).into_iter().next() else { return Ok(Vec::new()) };
+    let mut binds = Vec::new();
+    let where_ = where_sql(object, query, &mut binds)?;
+    let sql_text = format!("SELECT coalesce(t.\"{}\", '') AS v, count(*) AS n FROM {} t WHERE {where_} GROUP BY v", c.name, object.meta.table_name);
+    let rows = bind_all(sqlx::query(sql(sql_text)), &binds).fetch_all(pool).await.context("counting groups")?;
+    Ok(rows
+        .iter()
+        .map(|r| GroupCount { value: r.try_get::<String, _>("v").unwrap_or_default(), count: r.try_get::<i64, _>("n").unwrap_or(0).clamp(0, i64::from(u32::MAX)) as u32 })
+        .collect())
+}

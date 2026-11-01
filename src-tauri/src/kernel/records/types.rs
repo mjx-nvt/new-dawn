@@ -12,6 +12,12 @@ use specta::Type;
 #[specta(transparent)]
 pub struct Json(#[specta(type = specta_typescript::Unknown)] pub serde_json::Value);
 
+impl Default for Json {
+    fn default() -> Self {
+        Self(serde_json::Value::Null)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FieldType {

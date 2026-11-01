@@ -1,0 +1,300 @@
+/* The view bar and its menus (D-061): Twenty's view dropdown, Filter, Sort, Options. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.viewButton {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.anchor {
+  position: relative;
+}
+
+.panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  right: auto;
+  min-width: 280px;
+  max-width: 420px;
+  max-height: 70vh;
+  overflow: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.panelRight {
+  left: auto;
+  right: 0;
+}
+
+.panelTitle {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin: var(--space-1) 0 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.name {
+  flex: 1 1 auto;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.iconButton {
+  border: 0;
+  background: none;
+  padding: 0 4px;
+  height: 24px;
+  border-radius: var(--radius-chip);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--t-sm);
+}
+
+.iconButton:hover,
+.iconButton:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+
+.dragging {
+  opacity: 0.4;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius-chip);
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chipNeutral {
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.chipX {
+  border: 0;
+  background: none;
+  color: inherit;
+  padding: 0 4px;
+  cursor: pointer;
+  font: inherit;
+  opacity: 0.7;
+}
+
+.chipX:hover {
+  opacity: 1;
+}
+
+.rule {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.ruleLine {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.ruleLine .input {
+  min-width: 0;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+  min-height: 24px;
+}
+
+.group {
+  border-left: 2px solid var(--hair);
+  padding-left: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--radius-chip);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+
+.listItem:hover {
+  background: var(--surface-2);
+}
+
+.listButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.listButton:hover,
+.listButton:focus-visible {
+  background: var(--focus);
+  color: var(--on-focus);
+  outline: none;
+}
+
+.listButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hidden {
+  color: var(--ink-3);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.dirty {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-left: var(--space-2);
+}
+
+.nameInput {
+  width: 200px;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .panel {
+    background: var(--surface);
+  }
+}
+
+.panelWide {
+  min-width: 420px;
+  max-width: 560px;
+}
+
+.rowMenu {
+  top: 28px;
+  right: 0;
+}
+
+.current {
+  font-weight: 600;
+}
+
+.chipText {
+  padding: 0;
+  opacity: 1;
+}
+
+.narrow {
+  width: 72px;
+}
