@@ -15,6 +15,8 @@ _2026-11-01_
 
 **Means for future work**: kanban and calendar (0.10.3) are view types on the same rows; favorites of views (0.10.7) use `favorite.view_id`; the record page's related-record widgets (0.10.4) are views too. Twenty's select-field group order and "visible groups" are kept exactly; the group list shows "No value" last.
 
+**Added 0.10.3 — kanban and calendar on the same rows**: a KANBAN view's columns are the options of `kanban_field_id` (a select field; `view_group` keeps their order and hidden ones as a grouped table's), each column a list with "field is value", its head an aggregate of `kanban_aggregate_field_id` (a number, amount or rating) — Twenty's expected amount; a drop on another column updates the field through the engine (the timeline records it), a drop within a column sets `position` to the midpoint of its neighbours. A CALENDAR view lists the month's or week's records with two date rules on `calendar_field_id` and moves one by writing the field (a date-time keeps its time of day). "+ Add view" asks for the type and the field, as Twenty does; the engine refuses a column field that isn't a select, a calendar field that isn't a date, an aggregate field that isn't a number (a view made without its field shows what to pick in Options).
+
 ---
 
 ## D-060 — The record engine: Twenty's data model in SQLite, every object a real table

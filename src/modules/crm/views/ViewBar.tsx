@@ -196,6 +196,64 @@ function Anchor({ open, onClose, children }: { open: boolean; onClose: () => voi
   );
 }
 
+/** "+ Add view": a name, the type — Table, Kanban (a select field for its columns), Calendar (a
+ *  date field) — as Twenty asks. */
+function NewViewPrompt({ object, onDone, onCancel }: { object: ObjectDef; onDone: (name: string, type: string, fieldId: string | null) => void; onCancel: () => void }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"TABLE" | "KANBAN" | "CALENDAR">("TABLE");
+  const [fieldId, setFieldId] = useState("");
+  const selects = object.fields.filter((f) => f.is_active && f.type === "SELECT");
+  const dates = object.fields.filter((f) => f.is_active && (f.type === "DATE" || f.type === "DATE_TIME"));
+  const needs = type === "KANBAN" ? selects : type === "CALENDAR" ? dates : [];
+  const chosen = needs.some((f) => f.id === fieldId) ? fieldId : (needs[0]?.id ?? "");
+  const ok = !!name.trim() && (type === "TABLE" || !!chosen);
+  const done = () => ok && onDone(name.trim(), type, type === "TABLE" ? null : chosen);
+  return (
+    <div className={`glass ${styles.panel}`}>
+      <p className={styles.panelTitle}>New view</p>
+      <input
+        className={`input ${styles.nameInput}`}
+        autoFocus
+        aria-label="New view"
+        value={name}
+        placeholder="Name"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) done();
+          if (e.key === "Escape") onCancel();
+        }}
+      />
+      <div className="segmented" role="group" aria-label="View type">
+        {(["TABLE", "KANBAN", "CALENDAR"] as const).map((t) => (
+          <button key={t} type="button" aria-pressed={type === t} onClick={() => setType(t)}>
+            {t === "TABLE" ? "Table" : t === "KANBAN" ? "Kanban" : "Calendar"}
+          </button>
+        ))}
+      </div>
+      {type !== "TABLE" &&
+        (needs.length ? (
+          <select className="input" aria-label={type === "KANBAN" ? "Columns" : "Date field"} value={chosen} onChange={(e) => setFieldId(e.target.value)}>
+            {needs.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <p className="fieldHint">{type === "KANBAN" ? "A kanban needs a select field on this object." : "A calendar needs a date field on this object."}</p>
+        ))}
+      <div className={styles.actions}>
+        <button type="button" className="btn btnPrimary btnCompact" disabled={!ok} onClick={done}>
+          Create
+        </button>
+        <button type="button" className="btn btnGhost btnCompact" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NamePrompt({ label, initial = "", onDone, onCancel }: { label: string; initial?: string; onDone: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState(initial);
   return (
@@ -281,7 +339,22 @@ function ViewsMenu({ slug, object, views, currentId, onPick }: { slug: string; o
         )}
       </div>
       {adding ? (
-        <NamePrompt label="New view" onDone={(n) => (create.mutate({ name: n }, { onSuccess: (def) => onPick(def.view.id) }), setAdding(false))} onCancel={() => setAdding(false)} />
+        <NewViewPrompt
+          object={object}
+          onDone={(n, t, fieldId) => {
+            create.mutate(
+              { name: n, type: t },
+              {
+                onSuccess: (def) => {
+                  if (!fieldId) return onPick(def.view.id);
+                  update.mutate({ id: def.view.id, patch: t === "KANBAN" ? { kanban_field_id: fieldId } : { calendar_field_id: fieldId } }, { onSuccess: () => onPick(def.view.id) });
+                },
+              },
+            );
+            setAdding(false);
+          }}
+          onCancel={() => setAdding(false)}
+        />
       ) : (
         <button type="button" className="btn btnGhost btnCompact" onClick={() => setAdding(true)}>
           + Add view
@@ -343,13 +416,18 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
     );
     setFields(rest);
   };
-  const groupField = working.groupBy ? fieldOf(working.groupBy) : undefined;
+  const kanban = current.view.type === "KANBAN";
+  const calendar = current.view.type === "CALENDAR";
+  const groupField = kanban ? fieldOf(current.view.kanban_field_id ?? "") : working.groupBy ? fieldOf(working.groupBy) : undefined;
   const groupOptions = groupField ? selectOptions(groupField) : [];
   const groupsInOrder = [...groupOptions.map((o) => o.value), ""].map((value) => working.groups.find((g) => g.field_value === value) ?? { field_value: value, is_visible: true, position: working.groups.length + groupOptions.findIndex((o) => o.value === value) });
   const sortedGroups = working.groupSort === "MANUAL" ? [...groupsInOrder].sort((a, b) => a.position - b.position) : groupsInOrder;
   const setGroups = (groups: Working["groups"]) => onChange({ ...working, groups: groups.map((g, i) => ({ ...g, position: i })) });
   const labelOfGroup = (value: string) => groupOptions.find((o) => o.value === value)?.label ?? "No value";
   const selects = object.fields.filter((f) => f.is_active && f.type === "SELECT");
+  const dates = object.fields.filter((f) => f.is_active && (f.type === "DATE" || f.type === "DATE_TIME"));
+  const numbers = object.fields.filter((f) => f.is_active && ["NUMBER", "CURRENCY", "RATING"].includes(f.type));
+  const patchNow = (p: ViewPatch) => update.mutate({ id: current.view.id, patch: p });
 
   if (section === "fields") {
     return (
@@ -391,10 +469,18 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
           <button type="button" className={styles.iconButton} aria-label="Back" onClick={() => setSection(null)}>
             ‹
           </button>
-          <p className={styles.panelTitle}>Group</p>
+          <p className={styles.panelTitle}>{kanban ? "Columns" : "Group"}</p>
         </div>
-        <select className="input" aria-label="Group by" value={working.groupBy ?? ""} onChange={(e) => onChange({ ...working, groupBy: e.target.value || null, groups: [] })}>
-          <option value="">None</option>
+        <select
+          className="input"
+          aria-label={kanban ? "Columns" : "Group by"}
+          value={(kanban ? current.view.kanban_field_id : working.groupBy) ?? ""}
+          onChange={(e) => {
+            if (kanban) patchNow({ kanban_field_id: e.target.value || null });
+            onChange({ ...working, groupBy: kanban ? working.groupBy : e.target.value || null, groups: [] });
+          }}
+        >
+          {!kanban && <option value="">None</option>}
           {selects.map((f) => (
             <option key={f.id} value={f.id}>
               {f.label}
@@ -443,26 +529,61 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
       </div>
     );
   }
-  const patch = (p: ViewPatch) => update.mutate({ id: current.view.id, patch: p });
   return (
     <div className={`glass ${styles.panel} ${styles.panelRight}`}>
       <button type="button" className={styles.listButton} onClick={() => setSection("fields")}>
         Fields <span className={styles.muted}>· {working.fields.filter((f) => f.is_visible).length} shown</span>
       </button>
-      <button type="button" className={styles.listButton} onClick={() => setSection("group")}>
-        Group <span className={styles.muted}>· {groupField ? `by ${groupField.label}` : "none"}</span>
-      </button>
+      {!calendar && (
+        <button type="button" className={styles.listButton} onClick={() => setSection("group")}>
+          {kanban ? "Columns" : "Group"} <span className={styles.muted}>· {groupField ? `by ${groupField.label}` : "none"}</span>
+        </button>
+      )}
+      {kanban && (
+        <div className={styles.row}>
+          <span className={styles.name}>Aggregate</span>
+          <select className="input" aria-label="Aggregate" value={current.view.kanban_aggregate_operation ?? ""} onChange={(e) => patchNow({ kanban_aggregate_operation: e.target.value || null })}>
+            <option value="">None</option>
+            <option value="COUNT">Count</option>
+            <option value="SUM">Sum</option>
+            <option value="AVG">Average</option>
+            <option value="MIN">Min</option>
+            <option value="MAX">Max</option>
+          </select>
+          <select className="input" aria-label="Aggregate field" value={current.view.kanban_aggregate_field_id ?? ""} onChange={(e) => patchNow({ kanban_aggregate_field_id: e.target.value || null })}>
+            <option value="">Field…</option>
+            {numbers.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {calendar && (
+        <div className={styles.row}>
+          <span className={styles.name}>Date field</span>
+          <select className="input" aria-label="Date field" value={current.view.calendar_field_id ?? ""} onChange={(e) => patchNow({ calendar_field_id: e.target.value || null })}>
+            <option value="">Pick…</option>
+            {dates.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className={styles.row}>
         <span className={styles.name}>Compact view</span>
-        <OnOff label="Compact view" value={current.view.is_compact} disabled={update.isPending} onChange={(v) => patch({ is_compact: v })} />
+        <OnOff label="Compact view" value={current.view.is_compact} disabled={update.isPending} onChange={(v) => patchNow({ is_compact: v })} />
       </div>
       <div className={styles.row}>
         <span className={styles.name}>Open record in</span>
         <div className="segmented" role="group" aria-label="Open record in">
-          <button type="button" aria-pressed={current.view.open_record_in === "SIDE_PANEL"} onClick={() => patch({ open_record_in: "SIDE_PANEL" })}>
+          <button type="button" aria-pressed={current.view.open_record_in === "SIDE_PANEL"} onClick={() => patchNow({ open_record_in: "SIDE_PANEL" })}>
             Side panel
           </button>
-          <button type="button" aria-pressed={current.view.open_record_in === "RECORD_PAGE"} onClick={() => patch({ open_record_in: "RECORD_PAGE" })}>
+          <button type="button" aria-pressed={current.view.open_record_in === "RECORD_PAGE"} onClick={() => patchNow({ open_record_in: "RECORD_PAGE" })}>
             Record page
           </button>
         </div>
@@ -470,10 +591,10 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
       <div className={styles.row}>
         <span className={styles.name}>Visibility</span>
         <div className="segmented" role="group" aria-label="Visibility">
-          <button type="button" aria-pressed={current.view.visibility === "WORKSPACE"} disabled={current.view.key === "INDEX"} onClick={() => patch({ visibility: "WORKSPACE" })}>
+          <button type="button" aria-pressed={current.view.visibility === "WORKSPACE"} disabled={current.view.key === "INDEX"} onClick={() => patchNow({ visibility: "WORKSPACE" })}>
             Workspace
           </button>
-          <button type="button" aria-pressed={current.view.visibility === "UNLISTED"} disabled={current.view.key === "INDEX"} onClick={() => patch({ visibility: "UNLISTED" })}>
+          <button type="button" aria-pressed={current.view.visibility === "UNLISTED"} disabled={current.view.key === "INDEX"} onClick={() => patchNow({ visibility: "UNLISTED" })}>
             Unlisted
           </button>
         </div>

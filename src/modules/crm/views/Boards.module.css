@@ -1,0 +1,244 @@
+/* Kanban and calendar views (0.10.3): Twenty's board and calendar on the Majoris tokens. */
+
+.board {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding: var(--space-5) 0 var(--space-4);
+  min-height: 320px;
+}
+
+.column {
+  flex: 0 0 280px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  min-height: 120px;
+}
+
+.columnOver {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus) 60%, transparent);
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.columnCount {
+  color: var(--ink-3);
+}
+
+.columnTotal {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+  cursor: grab;
+  font: inherit;
+  color: var(--ink);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-raised);
+}
+
+.cardDragging {
+  opacity: 0.4;
+}
+
+.cardTitle {
+  font-weight: 500;
+  font-size: var(--t-md);
+}
+
+.cardField {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-1);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  min-width: 0;
+}
+
+.cardLabel {
+  color: var(--ink-3);
+  flex: 0 0 auto;
+}
+
+.cardValue {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addCard {
+  width: 100%;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.addCard:focus {
+  background: var(--surface);
+}
+
+.ghostCard {
+  min-height: 44px;
+  border-radius: var(--radius-control);
+}
+
+/* Calendar */
+.calendarBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.calendarTitle {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 180px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: var(--surface);
+  margin-top: var(--space-3);
+}
+
+.weekday {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--t-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.day {
+  position: relative;
+  min-height: 112px;
+  padding: var(--space-2);
+  border-right: 0.5px solid var(--hair);
+  border-bottom: 0.5px solid var(--hair);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.day:nth-child(7n) {
+  border-right: 0;
+}
+
+.dayWeek {
+  min-height: 420px;
+}
+
+.dayOver {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--focus) 60%, transparent);
+}
+
+.dayHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.otherMonth .dayHead {
+  color: var(--ink-3);
+}
+
+.today {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+}
+
+.addDay {
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: inherit;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-chip);
+  opacity: 0;
+}
+
+.day:hover .addDay,
+.addDay:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.event {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+  padding: 2px var(--space-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  cursor: grab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eventTime {
+  font-weight: 400;
+  opacity: 0.8;
+  margin-right: var(--space-1);
+}
+
+.addEvent {
+  width: 100%;
+  height: 26px;
+  font-size: var(--t-sm);
+}
+
+.more {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}

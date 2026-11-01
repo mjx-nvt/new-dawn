@@ -353,8 +353,13 @@ pub async fn duplicate(pool: &SqlitePool, id: &str, name: Option<&str>) -> Resul
     get(pool, &new_id).await
 }
 
+/// A field that is there, even as `null` (`Some(None)`); left out, serde's default (`None`).
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    Option::deserialize(d).map(Some)
+}
+
 /// What Edit, Options and the group menu change on a view. A missing field is left alone;
-/// `group_by_field_id: Some(None)` clears the grouping.
+/// a field sent as `null` clears it (the grouping, the kanban's columns…).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
 pub struct ViewPatch {
     #[serde(default)]
@@ -367,17 +372,22 @@ pub struct ViewPatch {
     pub open_record_in: Option<String>,
     #[serde(default)]
     pub visibility: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
+    #[specta(type = Option<String>)]
     pub group_by_field_id: Option<Option<String>>,
     #[serde(default)]
     pub group_sort: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
+    #[specta(type = Option<String>)]
     pub kanban_field_id: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
+    #[specta(type = Option<String>)]
     pub kanban_aggregate_operation: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
+    #[specta(type = Option<String>)]
     pub kanban_aggregate_field_id: Option<Option<String>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present")]
+    #[specta(type = Option<String>)]
     pub calendar_field_id: Option<Option<String>>,
 }
 
@@ -411,12 +421,27 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: ViewPatch) -> Result<Vie
             return Err(invalid(format!("No aggregate named {op}")));
         }
     }
-    if let Some(Some(field_id)) = &patch.group_by_field_id {
+    type Want<'a> = (&'a Option<Option<String>>, &'a [FieldType], &'a str);
+    let wants: Vec<Want> = vec![
+        (&patch.group_by_field_id, &[FieldType::Select], "A table groups by a select field"),
+        (&patch.kanban_field_id, &[FieldType::Select], "A kanban's columns are a select field"),
+        (&patch.calendar_field_id, &[FieldType::Date, FieldType::DateTime], "A calendar places records by a date field"),
+        (&patch.kanban_aggregate_field_id, &[FieldType::Number, FieldType::Currency, FieldType::Rating], "A column's aggregate is of a number"),
+    ];
+    if wants.iter().any(|(p, _, _)| matches!(p, Some(Some(_)))) {
         let object = super::object(pool, &current.object_id).await?;
-        match object.fields.iter().find(|f| &f.id == field_id) {
-            Some(f) if f.r#type == FieldType::Select => {}
-            _ => return Err(invalid("A table groups by a select field")),
+        for (p, types, message) in wants {
+            if let Some(Some(field_id)) = p {
+                match object.fields.iter().find(|f| &f.id == field_id) {
+                    Some(f) if types.contains(&f.r#type) => {}
+                    _ => return Err(invalid(message)),
+                }
+            }
         }
+    }
+    // New columns: the old field's group order and hidden groups don't apply to them.
+    if matches!(&patch.kanban_field_id, Some(f) if f.as_deref() != current.kanban_field_id.as_deref()) {
+        sqlx::query("DELETE FROM view_group WHERE view_id = ?").bind(id).execute(pool).await?;
     }
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "UPDATE view SET name = coalesce(?1, name), icon = coalesce(?2, icon), is_compact = coalesce(?3, is_compact), \

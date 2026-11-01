@@ -1,3 +1,19 @@
+# Last Build — Kanban and calendar views · release 0.10.3
+_2026-11-01_
+
+## What changed
+- **Kanban views** (D-061, Twenty's board). **+ Add view** now asks for the type — Table, Kanban, Calendar — and, for a kanban, the select field whose options are the columns (Opportunities by Stage, Tasks by Status…). A column shows its chip, its count and, when set, an aggregate of a numeric field (⋯ Options → Aggregate: Count, Sum, Average, Min, Max of Amount — Twenty's expected amount). Cards show the view's visible fields (Compact view hides them); drag a card to another column to change its field (the timeline records it), or within a column to reorder it; "+ New" at a column's foot adds a record in that column. ⋯ Options → Columns picks the field, their order and hidden ones, as a table's groups.
+- **Calendar views**: records placed by a date or date-time field (Tasks by Due date, Opportunities by Close date), by month (Monday to Sunday) or week; ‹ › and Today; drag an event to another day to move it (a date-time keeps its time); "+" on a day adds a record on that day. ⋯ Options → Date field changes the field.
+- Filters, sorts, search and Deleted records apply to all three view types; **Save as new view** keeps the type and its settings.
+- No migration: the view rows of 0.10.2 already carry the type and the fields.
+- Checks: 163 Rust tests pass; clippy, tsc and the localhost check are clean. Seen in the dev app (dark): "+ Add view" → "Pipeline", Kanban, Stage made the board — New · Screening · Meeting (2 · 150,000) · Proposal with the cards' fields, after ⋯ Options → Aggregate: Sum of Amount; dragging "HD Bank API pilot" from Meeting to Proposal changed its stage (the timeline holds the diff) and placed it last in the column; "+ Add view" → "By due date", Calendar on Tasks showed November with the two tasks on their days and today marked.
+- Review: the architecture review found three must-fixes, all in: choosing "None" for an aggregate, a column field or a date field now clears it (a `null` in the patch was ignored); a calendar on a date-time field asks for the Mac's midnights as instants, so early-morning events no longer slip off the first day; drops no longer let the browser paste a card's link into an input. Taken too: a card dropped on itself or an event dropped on its own day writes nothing; with a sort on, cards keep the sort's order (no manual reorder, as Twenty); changing a kanban's column field forgets the old field's group order; an aggregate without a field is only Count; cards hide empty fields; two ghost cards in an empty column; drop targets use the system accent ring; spacing on tokens; cards take the keyboard; invalid ARIA roles dropped; the unused `columns` prop of the calendar removed.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+---
+
 # Last Build — Table views: filters, sorts, groups, saved views · release 0.10.2
 _2026-11-01_
 

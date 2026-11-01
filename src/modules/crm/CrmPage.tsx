@@ -1,11 +1,13 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
-import { useCreateView, useSaveView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
+import { useCreateView, useSaveView, useUpdateView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import PeoplePage from "../people/PeoplePage";
 import styles from "./Crm.module.css";
 import RecordTable, { groupsOf, type Column } from "./RecordTable";
+import CalendarView from "./views/CalendarView";
+import KanbanBoard from "./views/KanbanBoard";
 import { fromView, newRule, nextPosition, queryOf, same, useWorking, type Working } from "./views/useViewState";
 import ViewBar from "./views/ViewBar";
 
@@ -86,6 +88,7 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
   const [working, setWorking, reset] = useWorking(def.data);
   const saveView = useSaveView(slug, name);
   const createView = useCreateView(slug, name);
+  const updateView = useUpdateView(slug, name);
   const [saving, setSaving] = useState<Error | null>(null);
 
   if (!def.data || !working) {
@@ -117,8 +120,20 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
   const saveAs = (viewName: string) => {
     setSaving(null);
     createView
-      .mutateAsync({ name: viewName })
+      .mutateAsync({ name: viewName, type: current.view.type })
       .then(async (made) => {
+        if (current.view.type !== "TABLE") {
+          await updateView.mutateAsync({
+            id: made.view.id,
+            patch: {
+              kanban_field_id: current.view.kanban_field_id ?? null,
+              kanban_aggregate_operation: current.view.kanban_aggregate_operation ?? null,
+              kanban_aggregate_field_id: current.view.kanban_aggregate_field_id ?? null,
+              calendar_field_id: current.view.calendar_field_id ?? null,
+              is_compact: current.view.is_compact,
+            },
+          });
+        }
         await persist(made.view.id, working);
         onPickView(made.view.id);
       })
@@ -131,6 +146,11 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
   };
   const filter = (field: FieldMeta) => change({ ...working, filters: { ...working.filters, filters: [...working.filters.filters, newRule(field, null, nextPosition(working.filters.filters))] } });
   const fieldsWith = (fn: (f: Working["fields"][number]) => Working["fields"][number]) => change({ ...working, fields: working.fields.map(fn) });
+  const kanbanField = current.view.type === "KANBAN" ? fieldOf(current.view.kanban_field_id ?? "") : undefined;
+  const calendarField = current.view.type === "CALENDAR" ? fieldOf(current.view.calendar_field_id ?? "") : undefined;
+  const aggregateField = fieldOf(current.view.kanban_aggregate_field_id ?? "");
+  const aggregateOp = current.view.kanban_aggregate_operation;
+  const aggregate = aggregateOp ? { field: aggregateField ?? (aggregateOp === "COUNT" ? columns[0]?.field : undefined), op: aggregateOp } : null;
 
   return (
     <>
@@ -140,6 +160,27 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
           {saving.message}
         </p>
       )}
+      {current.view.type === "KANBAN" ? (
+        kanbanField ? (
+          <KanbanBoard slug={slug} object={object} field={kanbanField} columns={columns} query={query} deleted={deleted} compact={current.view.is_compact} groups={groupsOf(kanbanField, working.groups, working.groupSort)} aggregate={aggregate && aggregate.field ? { field: aggregate.field, op: aggregate.op } : null} />
+        ) : (
+          <div className={styles.tableWrap}>
+            <div className={`${styles.slot} ghostCard`}>
+              <span className="ghostText">Pick the select field for the columns in ⋯ Options → Columns.</span>
+            </div>
+          </div>
+        )
+      ) : current.view.type === "CALENDAR" ? (
+        calendarField ? (
+          <CalendarView slug={slug} object={object} field={calendarField} query={query} deleted={deleted} />
+        ) : (
+          <div className={styles.tableWrap}>
+            <div className={`${styles.slot} ghostCard`}>
+              <span className="ghostText">Pick the date field in ⋯ Options → Date field.</span>
+            </div>
+          </div>
+        )
+      ) : (
       <RecordTable
         slug={slug}
         object={object}
@@ -166,6 +207,7 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
         onFilter={filter}
         onAggregate={(id, op) => fieldsWith((f) => (f.field_id === id ? { ...f, aggregate_operation: op } : f))}
       />
+      )}
     </>
   );
 }

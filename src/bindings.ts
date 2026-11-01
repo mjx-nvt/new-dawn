@@ -2930,13 +2930,13 @@ export type ViewGroup = {
 
 /**
  *  What Edit, Options and the group menu change on a view. A missing field is left alone;
- *  `group_by_field_id: Some(None)` clears the grouping.
+ *  a field sent as `null` clears it (the grouping, the kanban's columns…).
  */
 export type ViewPatch = ViewPatch_Serialize | ViewPatch_Deserialize;
 
 /**
  *  What Edit, Options and the group menu change on a view. A missing field is left alone;
- *  `group_by_field_id: Some(None)` clears the grouping.
+ *  a field sent as `null` clears it (the grouping, the kanban's columns…).
  */
 export type ViewPatch_Deserialize = {
 	name?: string | null,
@@ -2954,7 +2954,7 @@ export type ViewPatch_Deserialize = {
 
 /**
  *  What Edit, Options and the group menu change on a view. A missing field is left alone;
- *  `group_by_field_id: Some(None)` clears the grouping.
+ *  a field sent as `null` clears it (the grouping, the kanban's columns…).
  */
 export type ViewPatch_Serialize = {
 	name: string | null,
