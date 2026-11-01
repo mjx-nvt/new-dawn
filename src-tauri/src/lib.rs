@@ -58,6 +58,7 @@ mod modules {
     pub mod eml;
     pub mod feedback;
     pub mod inbox;
+    pub mod mailbox;
     pub mod lessons;
     pub mod meetings;
     pub mod memory;
@@ -87,6 +88,7 @@ mod commands {
     pub mod files;
     pub mod glass;
     pub mod inbox;
+    pub mod mailbox;
     pub mod layouts;
     pub mod meetings;
     pub mod minutes;
@@ -223,6 +225,16 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::inbox::forget_email,
             commands::inbox::add_email_task,
             commands::inbox::dismiss_email_task,
+            commands::mailbox::list_email_threads,
+            commands::mailbox::list_email_messages,
+            commands::mailbox::mail_settings,
+            commands::mailbox::set_mail_settings,
+            commands::mailbox::list_blocklist,
+            commands::mailbox::block_handle,
+            commands::mailbox::unblock_handle,
+            commands::mailbox::add_person_from_email,
+            commands::mailbox::calendar_events,
+            commands::mailbox::mail_running,
             commands::cockpit::cockpit_today,
             commands::switches::get_modules,
             commands::switches::set_modules,

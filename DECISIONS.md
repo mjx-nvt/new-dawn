@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-066 — Emails and calendar from local sources: Apple Mail answers for a record's addresses, meetings are the calendar
+_2026-11-02_
+
+**Context** (plan v4 §3.5, 0.10.9): Twenty connects a mailbox and a calendar and shows, on people, companies and opportunities, the threads whose participants match the record's addresses (a company: anyone at its domain) and the meetings matched by attendees — with a visibility level, contact auto-creation and a blocklist under Settings → Accounts. New Dawn has no sync: Mail on this Mac and the meetings already here.
+
+**Decision — Mail is asked, never synced** (`modules/mailbox.rs`, D-056's way): when a record's Emails tab opens, one AppleScript asks Mail for the inbox messages from the record's addresses (the newest hundred each) and the newest sent messages to any of them; Mail must be running (never launched by New Dawn) and allowed under Automation; the addresses travel as the script's arguments, never inside it; what is read follows the visibility setting (who and when · the subject too · the first words as well). Mail is asked for each property of a whole list in one event — never one event a message — bounded by a year back, the newest hundred an address kept; the inbox rows carry no recipients (that would be an event a message), the sent rows do. The answer is kept — `message_thread` by subject (Re:, Fwd: and their kin stripped) and the other side's domains, a message without a subject a thread of its own; `message` by Message-ID; `message_participant` by address — and shown from there until the next read, ten minutes later or on Refresh. A message opens in Mail by its `message:` URL; Send email is a `mailto:` draft. A received time is Mail's local time (no zone), ordered among its kind only.
+
+**Decision — the links are the addresses** (nothing points at a record): a thread belongs to a record through its participants' addresses — a person's emails, a company's people's emails and its `@domain`, an opportunity's company's — so deleting a record never touches the cache and a new address finds its threads at the next read. A participant links to the person with that address, else to the company owning the domain. People the CRM doesn't know are listed under the threads per Contact auto-creation (nobody · anyone · only those written to), never the owner's own addresses, never a blocked one; Add person makes the record (its company by the domain); Block adds the address or the domain to the blocklist and empties the cache, so what they sent is gone at the next read. The owner's own addresses are Mail's accounts', read with the threads. These settings sit in the Settings window's **Accounts** pane (Twenty's place) although they are the current workspace's — the pane says so.
+
+**Decision — the calendar is the meetings**: a record's Calendar tab lists the summarised meetings whose attendees include the person (a company: any of its people; an opportunity: its company's) — upcoming then past — with the attendees linked to their records and a Recording chip when the audio is kept; it is `crm::calendar`, the dossier's matching, no table of its own (the plan's `calendar_event_target` is not needed).
+
+**Means for future work**: the CRM agent (0.10.15) reads the same threads for a record's briefing; workflows (0.10.11) get a "Send email" step that opens the draft; the local API (0.10.14) serves the threads read-only; Plane's inbox (0.11.2) is a different inbox (notifications), not this one.
+
+---
+
 ## D-065 — Import and export: Twenty's spreadsheet import through the engine's own checks, a view's CSV as exactly its columns
 _2026-11-02_
 

@@ -206,6 +206,19 @@ export const commands = {
 	addEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("add_email_task", { slug, id })),
 	/**  Dismisses an email's proposed task. */
 	dismissEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("dismiss_email_task", { slug, id })),
+	/**  The record's threads from the cache, read from Mail again when `refresh` or when stale. */
+	listEmailThreads: (slug: string, object: string, id: string, refresh: boolean) => typedError<EmailThreads_Serialize, AppError>(__TAURI_INVOKE("list_email_threads", { slug, object, id, refresh })),
+	listEmailMessages: (slug: string, threadId: string) => typedError<EmailMessage[], AppError>(__TAURI_INVOKE("list_email_messages", { slug, threadId })),
+	mailSettings: (slug: string) => typedError<MailSettings, AppError>(__TAURI_INVOKE("mail_settings", { slug })),
+	setMailSettings: (slug: string, settings: MailSettings) => typedError<null, AppError>(__TAURI_INVOKE("set_mail_settings", { slug, settings })),
+	listBlocklist: (slug: string) => typedError<Blocked[], AppError>(__TAURI_INVOKE("list_blocklist", { slug })),
+	blockHandle: (slug: string, handle: string) => typedError<Blocked, AppError>(__TAURI_INVOKE("block_handle", { slug, handle })),
+	unblockHandle: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("unblock_handle", { slug, id })),
+	/**  A person the CRM didn't know, from a thread's participant. */
+	addPersonFromEmail: (slug: string, handle: string, name: string) => typedError<Json, AppError>(__TAURI_INVOKE("add_person_from_email", { slug, handle, name })),
+	calendarEvents: (slug: string, object: string, id: string) => typedError<CalendarEvent_Serialize[], AppError>(__TAURI_INVOKE("calendar_events", { slug, object, id })),
+	/**  Whether Mail is running (the Accounts pane's status). */
+	mailRunning: () => typedError<boolean, AppError>(__TAURI_INVOKE("mail_running")),
 	/**  What needs the owner today, across every open workspace (D-057). */
 	cockpitToday: () => typedError<Today_Serialize, AppError>(__TAURI_INVOKE("cockpit_today")),
 	/**  Which modules the workspace has on — Projects, CRM (D-059). */
@@ -688,6 +701,12 @@ export type BackupStatus_Serialize = {
 	last_error: string | null,
 };
 
+export type Blocked = {
+	id: string,
+	handle: string,
+	created_at: string,
+};
+
 /**  A workspace's brand pack changed (colours, logo, reset): every window re-applies it. */
 export type BrandChanged = {
 	slug: string,
@@ -814,6 +833,29 @@ export type Button_Serialize = {
 	primary: string,
 	/**  soft | outline | ghost */
 	secondary: string,
+};
+
+/**  A meeting as a record's calendar shows it (D-066). */
+export type CalendarEvent = CalendarEvent_Serialize | CalendarEvent_Deserialize;
+
+/**  A meeting as a record's calendar shows it (D-066). */
+export type CalendarEvent_Deserialize = {
+	meeting_id: string,
+	title: string,
+	held_on: string,
+	duration_s?: number | null,
+	attendees: EventAttendee_Deserialize[],
+	has_recording: boolean,
+};
+
+/**  A meeting as a record's calendar shows it (D-066). */
+export type CalendarEvent_Serialize = {
+	meeting_id: string,
+	title: string,
+	held_on: string,
+	duration_s: number | null,
+	attendees: EventAttendee_Serialize[],
+	has_recording: boolean,
 };
 
 export type CellError = CellError_Serialize | CellError_Deserialize;
@@ -1040,6 +1082,17 @@ export type EmailItem_Serialize = {
 	proposed: EmailTask_Serialize[],
 };
 
+export type EmailMessage = {
+	id: string,
+	message_id: string,
+	subject: string,
+	sender_handle: string,
+	sender_name: string,
+	received_at: string,
+	direction: string,
+	snippet: string,
+};
+
 export type EmailSource = "mail" | "eml";
 
 /**  A task the agent proposed from an email: the owner adds it to Tasks or dismisses it (D-054). */
@@ -1067,6 +1120,68 @@ export type EmailTask_Serialize = {
 	evidence: string,
 	status: ProposalStatus,
 	task_id: string | null,
+};
+
+export type EmailThread = EmailThread_Serialize | EmailThread_Deserialize;
+
+export type EmailThread_Deserialize = {
+	id: string,
+	subject: string,
+	last_message_at: string,
+	count: number,
+	participants: Participant_Deserialize[],
+	snippet: string,
+	/**  The newest message's Message-ID — what Open in Mail opens. */
+	latest_message_id: string,
+};
+
+export type EmailThread_Serialize = {
+	id: string,
+	subject: string,
+	last_message_at: string,
+	count: number,
+	participants: Participant_Serialize[],
+	snippet: string,
+	/**  The newest message's Message-ID — what Open in Mail opens. */
+	latest_message_id: string,
+};
+
+export type EmailThreads = EmailThreads_Serialize | EmailThreads_Deserialize;
+
+export type EmailThreads_Deserialize = {
+	threads: EmailThread_Deserialize[],
+	/**  People on these threads the CRM doesn't know, per Contact auto-creation. */
+	unknown: Participant_Deserialize[],
+	refreshed_at?: string | null,
+	mail_state: MailState,
+	/**  A word for the owner when Mail couldn't be asked. */
+	note: string,
+};
+
+export type EmailThreads_Serialize = {
+	threads: EmailThread_Serialize[],
+	/**  People on these threads the CRM doesn't know, per Contact auto-creation. */
+	unknown: Participant_Serialize[],
+	refreshed_at: string | null,
+	mail_state: MailState,
+	/**  A word for the owner when Mail couldn't be asked. */
+	note: string,
+};
+
+export type EventAttendee = EventAttendee_Serialize | EventAttendee_Deserialize;
+
+export type EventAttendee_Deserialize = {
+	name: string,
+	/**  The person the name matches in the people memory, when one does. */
+	person_id?: string | null,
+	attending: boolean,
+};
+
+export type EventAttendee_Serialize = {
+	name: string,
+	/**  The person the name matches in the people memory, when one does. */
+	person_id: string | null,
+	attending: boolean,
 };
 
 export type ExportOptions = ExportOptions_Serialize | ExportOptions_Deserialize;
@@ -1594,6 +1709,17 @@ export type LiveStatus_Serialize = {
 	 */
 	overheard: number,
 };
+
+/**  Twenty's mailbox settings, for this workspace. */
+export type MailSettings = {
+	/**  deactivated · sent_received · sent_only — whom the Emails widget proposes as people. */
+	auto_create: string,
+	/**  metadata · subject · everything — what is read of a message. */
+	visibility: string,
+};
+
+/**  How Mail answered. */
+export type MailState = "ok" | "not_running" | "no_permission" | "failed";
 
 export type MatchChoice = {
 	value: string,
@@ -2157,6 +2283,20 @@ export type Pair_Serialize = {
 	pick: Pick | null,
 };
 
+export type Participant = Participant_Serialize | Participant_Deserialize;
+
+export type Participant_Deserialize = {
+	handle: string,
+	name: string,
+	record?: RecordRef | null,
+};
+
+export type Participant_Serialize = {
+	handle: string,
+	name: string,
+	record: RecordRef | null,
+};
+
 export type PermissionState = "granted" | "denied" | "not_determined" | "restricted";
 
 export type Person = {
@@ -2499,6 +2639,13 @@ export type Recent = {
 	visited_at: string,
 };
 
+export type RecordRef = {
+	/**  The object's plural name (the route) and the record. */
+	object: string,
+	id: string,
+	label: string,
+};
+
 /**  10 Hz meter while recording: RMS 0–1 for the mic ("you") and the call ("them"). */
 export type RecorderLevel = {
 	you: number | null,
@@ -2682,7 +2829,7 @@ export type SelectOption = {
 	position: number | null,
 };
 
-export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";
+export type SettingsTab = "general" | "accounts" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";
 
 export type Slogan = Slogan_Serialize | Slogan_Deserialize;
 

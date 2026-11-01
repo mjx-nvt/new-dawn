@@ -179,6 +179,12 @@ pub fn defaults(object: &ObjectDef) -> Vec<TabInput> {
         tabs.push(tab("Notes", next + 1.0, false, vec![widget("NOTES", "Notes", 0, 0, 12, 8, json!({}))]));
         next += 2.0;
     }
+    // Twenty keeps emails and the calendar on people, companies and opportunities (D-066).
+    if matches!(name, "person" | "company" | "opportunity") {
+        tabs.push(tab("Emails", next, false, vec![widget("EMAILS", "Emails", 0, 0, 12, 8, json!({}))]));
+        tabs.push(tab("Calendar", next + 1.0, false, vec![widget("CALENDAR", "Calendar", 0, 0, 12, 8, json!({}))]));
+        next += 2.0;
+    }
     tabs.push(tab("Files", next, false, vec![widget("FILES", "Files", 0, 0, 12, 8, json!({}))]));
     tabs
 }
@@ -383,7 +389,7 @@ mod tests {
             let company = super::super::object(&pool, "company").await.unwrap();
             let made = record_layout(&pool, &company).await.unwrap();
             let titles: Vec<&str> = made.tabs.iter().map(|t| t.tab.title.as_str()).collect();
-            assert_eq!(titles, ["Overview", "People", "Opportunities", "Tasks", "Notes", "Files"]);
+            assert_eq!(titles, ["Overview", "People", "Opportunities", "Tasks", "Notes", "Emails", "Calendar", "Files"]);
             assert!(made.tabs[0].tab.is_default);
             assert_eq!(made.tabs[1].widgets[0].config.0["field"], "people");
             assert!(made.layout.id.is_empty(), "the defaults aren't saved until the owner edits");
@@ -410,7 +416,7 @@ mod tests {
 
             let back = reset(&pool, &company).await.unwrap();
             assert!(back.layout.id.is_empty(), "the defaults again");
-            assert_eq!(back.tabs.len(), 6);
+            assert_eq!(back.tabs.len(), 8, "Overview, People, Opportunities, Tasks, Notes, Emails, Calendar, Files");
             assert_eq!(back.tabs[0].tab.title, "Overview");
             hub.close_all().await;
         });

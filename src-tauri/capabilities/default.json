@@ -16,6 +16,10 @@
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "$APPDATA/workspaces/*/files/**" }]
     },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "message:*" }, { "url": "mailto:*" }]
+    },
     "updater:default",
     "process:allow-restart"
   ]

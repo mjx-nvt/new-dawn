@@ -5,6 +5,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { usePerson, type CommitmentStatus } from "../../../kernel/bridge/crm";
 import { isImage, openAttachment, pickFiles, revealAttachment, saveAttachmentAs, useAddAttachments, useDeleteAttachment } from "../../../kernel/bridge/files";
 import { useAddLinked, useAttachments, useLinked, useTimeline, type LinkedKind, type TimelineEvent, type Widget } from "../../../kernel/bridge/layouts";
+import { draftEmail, openInMail, useAddPersonFromEmail, useBlockHandle, useCalendarEvents, useEmailMessages, useEmailThreads, useRefreshEmailThreads, type EmailThread } from "../../../kernel/bridge/mailbox";
 import { asRecord, hasColumns, recordId, recordLabel, tableFields, useObject, useUpdateRecord, type FieldMeta, type ObjectDef, type Query, type RecordJson } from "../../../kernel/bridge/records";
 import Editor from "../../../kernel/editor/Editor";
 import { richExcerpt } from "../../../kernel/editor/plain";
@@ -34,8 +35,8 @@ export const WIDGET_TYPES: { type: string; label: string; since?: string }[] = [
   { type: "COMMITMENTS", label: "Commitments" },
   { type: "MEETINGS", label: "Meetings" },
   { type: "CHART", label: "Chart", since: "the dashboards release" },
-  { type: "EMAILS", label: "Emails", since: "the emails release" },
-  { type: "CALENDAR", label: "Calendar", since: "the emails release" },
+  { type: "EMAILS", label: "Emails" },
+  { type: "CALENDAR", label: "Calendar" },
   { type: "IFRAME", label: "iFrame", since: "the dashboards release" },
 ];
 
@@ -133,6 +134,10 @@ export function WidgetBody({ ctx, widget }: { ctx: WidgetContext; widget: Widget
       return <CommitmentsWidget ctx={ctx} />;
     case "MEETINGS":
       return <MeetingsWidget ctx={ctx} />;
+    case "EMAILS":
+      return <EmailsWidget ctx={ctx} />;
+    case "CALENDAR":
+      return <CalendarWidget ctx={ctx} />;
     default:
       return <Ghost text={`${typeLabel(widget.type)} widgets arrive with ${WIDGET_TYPES.find((t) => t.type === widget.type)?.since ?? "a later release"}`} />;
   }
@@ -464,6 +469,192 @@ function CommitmentsWidget({ ctx }: { ctx: WidgetContext }) {
 }
 
 /** The summarised meetings that name a person. */
+const MAIL_OBJECTS = ["person", "company", "opportunity"];
+
+/** Twenty's Emails tab (D-066): the record's threads from Apple Mail, newest first — a thread
+ *  opens to its messages, each opens in Mail; people the CRM doesn't know yet are proposed. */
+function EmailsWidget({ ctx }: { ctx: WidgetContext }) {
+  const { slug, object, record } = ctx;
+  const kind = object.meta.name_singular;
+  const id = recordId(record);
+  const applies = MAIL_OBJECTS.includes(kind);
+  const threads = useEmailThreads(applies ? slug : undefined, kind, id);
+  const refresh = useRefreshEmailThreads(slug, kind, id);
+  const addPerson = useAddPersonFromEmail(slug);
+  const block = useBlockHandle(slug);
+  const [open, setOpen] = useState<string | null>(null);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  if (!applies) return <Ghost text="Emails are kept on people, companies and opportunities" />;
+  const emails = asRecord(record.emails);
+  const address = kind === "person" && typeof emails.primaryEmail === "string" && emails.primaryEmail ? emails.primaryEmail : null;
+  const data = threads.data;
+  const fail = (e: Error) => setTrouble(e.message);
+  return (
+    <div className={styles.stack}>
+      <div className={styles.mailHead}>
+        {data?.refreshed_at && <span className={styles.itemMeta}>Read from Mail {formatWhen(data.refreshed_at)}</span>}
+        <button type="button" className="btn btnGhost btnCompact" disabled={refresh.isPending || threads.isFetching} aria-busy={refresh.isPending || threads.isFetching} onClick={() => refresh.mutate(undefined, { onError: fail })}>
+          Refresh
+        </button>
+        {address && (
+          <button type="button" className="btn btnSecondary btnCompact" onClick={() => draftEmail(address).catch(fail)}>
+            Send email
+          </button>
+        )}
+      </div>
+      {trouble && (
+        <p className="formError" role="alert">
+          {trouble}
+        </p>
+      )}
+      {threads.error && (
+        <p className="formError" role="alert">
+          {threads.error.message}
+        </p>
+      )}
+      {data && data.mail_state !== "ok" && <p className="fieldHint">{data.note}</p>}
+      {!data ? (
+        <Ghost text={threads.isPending ? "Reading from Mail…" : "Not yet captured"} />
+      ) : data.threads.length === 0 ? (
+        <Ghost text={data.mail_state === "ok" ? data.note || "Not yet captured — the threads with this record's addresses show here" : "Not yet captured"} />
+      ) : (
+        <ul className={styles.list} role="list">
+          {data.threads.map((t) => (
+            <li key={t.id} className={styles.mailThread}>
+              <div className={styles.mailRow}>
+                <button type="button" className={styles.itemButton} aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>
+                  <span className={styles.mailSubject}>{t.subject || "(no subject)"}</span>
+                </button>
+                <span className={styles.itemMeta}>
+                  {formatWhen(t.last_message_at)} · {t.count === 1 ? "1 message" : `${t.count} messages`}
+                </span>
+                <button type="button" className="btn btnGhost btnCompact" disabled={!t.latest_message_id} onClick={() => openInMail(t.latest_message_id).catch(fail)}>
+                  Open in Mail
+                </button>
+              </div>
+              <span className={styles.itemMeta}>
+                <People thread={t} />
+              </span>
+              {t.snippet && <span className={styles.mailSnippet}>{t.snippet}</span>}
+              {open === t.id && <ThreadMessages slug={slug} threadId={t.id} onTrouble={fail} />}
+            </li>
+          ))}
+        </ul>
+      )}
+      {data && data.unknown.length > 0 && (
+        <>
+          <p className={styles.subTitle}>Not in the CRM</p>
+          <ul className={styles.list} role="list">
+            {data.unknown.map((u) => (
+              <li key={u.handle} className={styles.item}>
+                <span className={styles.itemExcerpt}>{u.name ? `${u.name} · ${u.handle}` : u.handle}</span>
+                <span className={styles.mailActions}>
+                  <button type="button" className="btn btnSecondary btnCompact" disabled={addPerson.isPending} onClick={() => addPerson.mutate({ handle: u.handle, name: u.name }, { onError: fail })}>
+                    Add person
+                  </button>
+                  <button type="button" className="btn btnGhost btnCompact" disabled={block.isPending} onClick={() => block.mutate(u.handle, { onError: fail })}>
+                    Block
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A thread's people: a name links to its record (a person, else the company of its domain). */
+function People({ thread }: { thread: EmailThread }) {
+  return (
+    <>
+      {thread.participants.map((p, i) => (
+        <Fragment key={p.handle}>
+          {i > 0 && ", "}
+          {p.record ? (
+            <Link to="/crm/$object/$recordId" params={{ object: p.record.object, recordId: p.record.id }} className={styles.inlineLink}>
+              {p.name || p.handle}
+            </Link>
+          ) : (
+            p.name || p.handle
+          )}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function ThreadMessages({ slug, threadId, onTrouble }: { slug: string; threadId: string; onTrouble: (e: Error) => void }) {
+  const messages = useEmailMessages(slug, threadId);
+  const list = messages.data ?? [];
+  return (
+    <ul className={styles.mailMessages} role="list">
+      {list.map((m) => (
+        <li key={m.id} className={styles.mailRow}>
+          <span className={styles.itemExcerpt}>
+            <span className={styles.mailSubject}>{m.sender_name || m.sender_handle}</span> · {formatWhen(m.received_at)} · {m.direction === "out" ? "Sent" : "Received"}
+            {m.snippet && <span className={styles.mailSnippet}> — {m.snippet}</span>}
+          </span>
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => openInMail(m.message_id).catch(onTrouble)}>
+            Open in Mail
+          </button>
+        </li>
+      ))}
+      {list.length === 0 && (
+        <li>
+          <span className="ghostText">{messages.isPending ? "Reading…" : "No messages kept"}</span>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+/** Twenty's Calendar tab (D-066): the record's meetings as its events — a person's, a
+ *  company's people's, an opportunity's company's — newest first, with their attendees and
+ *  whether the recording is kept. */
+function CalendarWidget({ ctx }: { ctx: WidgetContext }) {
+  const { slug, object, record } = ctx;
+  const kind = object.meta.name_singular;
+  const applies = MAIL_OBJECTS.includes(kind);
+  const events = useCalendarEvents(applies ? slug : undefined, kind, recordId(record));
+  if (!applies) return <Ghost text="The calendar is kept on people, companies and opportunities" />;
+  const list = events.data ?? [];
+  if (!list.length) return <Ghost text={events.isPending ? "Reading…" : "Not yet captured — the summarised meetings with these people show here"} />;
+  return (
+    <ul className={styles.list} role="list">
+      {list.map((e) => (
+        <li key={e.meeting_id} className={styles.mailThread}>
+          <div className={styles.mailRow}>
+            <Link to="/meetings/$meetingId" params={{ meetingId: e.meeting_id }} search={{ tab: "summary" }} className={styles.itemLink}>
+              {e.title}
+            </Link>
+            <span className={styles.itemMeta}>
+              {formatWhen(e.held_on)}
+              {e.duration_s ? ` · ${Math.max(1, Math.round(e.duration_s / 60))} min` : ""}
+            </span>
+            {e.has_recording && <span className="chip">Recording</span>}
+          </div>
+          <span className={styles.itemMeta}>
+            {e.attendees.map((a, i) => (
+              <Fragment key={`${a.name}-${i}`}>
+                {i > 0 && ", "}
+                {a.person_id ? (
+                  <Link to="/crm/$object/$recordId" params={{ object: "people", recordId: a.person_id }} className={styles.inlineLink}>
+                    {a.name}
+                  </Link>
+                ) : (
+                  a.name
+                )}
+              </Fragment>
+            ))}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function MeetingsWidget({ ctx }: { ctx: WidgetContext }) {
   const { slug, object, record } = ctx;
   const person = object.meta.name_singular === "person";

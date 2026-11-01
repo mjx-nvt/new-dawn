@@ -3,6 +3,7 @@ import { useOpenSettingsTab, useWorkspacesSync } from "../../kernel/bridge/event
 import type { SettingsTab } from "../../kernel/bridge/settings";
 import ModelsPanel from "../models/ModelsPanel";
 import AboutTab from "./AboutTab";
+import AccountsPanel from "./AccountsPanel";
 import BackupPanel from "./BackupPanel";
 import ConvertersPanel from "./ConvertersPanel";
 import GeneralTab from "./GeneralTab";
@@ -16,6 +17,7 @@ const route = getRouteApi("/settings");
  *  Workspace page in the main window. */
 export const SETTINGS_TABS: { id: SettingsTab; label: string; group: string }[] = [
   { id: "general", label: "General", group: "App" },
+  { id: "accounts", label: "Accounts", group: "App" },
   { id: "workspaces", label: "Workspaces", group: "App" },
   { id: "backup", label: "Backup", group: "App" },
   { id: "storage", label: "Storage", group: "App" },
@@ -28,6 +30,8 @@ function Pane({ tab }: { tab: SettingsTab }) {
   switch (tab) {
     case "general":
       return <GeneralTab />;
+    case "accounts":
+      return <AccountsPanel />;
     case "workspaces":
       return <WorkspacesPanel />;
     case "backup":

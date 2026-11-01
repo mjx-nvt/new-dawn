@@ -443,3 +443,46 @@
     opacity: 1;
   }
 }
+
+/* Emails and Calendar widgets (D-066) */
+.mailHead {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.mailThread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-bottom: 0.5px solid var(--hair);
+  font-size: var(--t-md);
+}
+.mailRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.mailSubject {
+  font-weight: 500;
+  color: var(--ink);
+}
+.mailSnippet {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+.mailMessages {
+  list-style: none;
+  margin: var(--space-2) 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+}
+.mailActions {
+  display: inline-flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}

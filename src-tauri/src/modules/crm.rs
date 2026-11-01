@@ -345,6 +345,66 @@ async fn attendance(
     Ok(met)
 }
 
+/// A meeting as a record's calendar shows it (D-066).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct CalendarEvent {
+    pub meeting_id: String,
+    pub title: String,
+    pub held_on: String,
+    pub duration_s: Option<u32>,
+    pub attendees: Vec<EventAttendee>,
+    pub has_recording: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct EventAttendee {
+    pub name: String,
+    /// The person the name matches in the people memory, when one does.
+    pub person_id: Option<String>,
+    pub attending: bool,
+}
+
+/// A record's calendar (D-066): the summarised meetings whose attendees include any of these
+/// people, newest first, each with its attendees and whether its recording is kept.
+pub async fn calendar(pool: &SqlitePool, person_ids: &[String]) -> Result<Vec<CalendarEvent>> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: String,
+        title: String,
+        held_on: String,
+        duration_ms: Option<i64>,
+        audio_path: Option<String>,
+        attendees: Option<String>,
+    }
+    let known = people::list(pool).await?;
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT m.id, m.title, m.held_on, m.duration_ms, m.audio_path, json_extract(s.sections_json, '$.attendees') AS attendees \
+         FROM summary s JOIN meeting m ON m.id = s.meeting_id ORDER BY m.held_on DESC",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::new();
+    for Row { id: meeting_id, title, held_on, duration_ms, audio_path: audio, attendees } in rows {
+        let Some(attendees) = attendees.and_then(|a| serde_json::from_str::<Vec<Attendee>>(&a).ok()) else { continue };
+        let attendees: Vec<EventAttendee> = attendees
+            .iter()
+            .map(|a| EventAttendee { name: a.name.clone(), person_id: match_person(&known, &a.name).map(|p| p.id.clone()), attending: a.attending })
+            .collect();
+        if !attendees.iter().any(|a| a.person_id.as_deref().is_some_and(|id| person_ids.iter().any(|p| p == id))) {
+            continue;
+        }
+        out.push(CalendarEvent {
+            meeting_id,
+            title,
+            held_on,
+            duration_s: duration_ms.map(|d| (d.max(0) / 1000) as u32),
+            attendees,
+            has_recording: audio.is_some_and(|p| !p.is_empty()),
+        });
+    }
+    Ok(out)
+}
+
 /// The People list: everyone in the people memory but the owner, with when the owner last met them
 /// and their commitments open or waiting.
 pub async fn people(hub: &WorkspaceHub, slug: &str) -> Result<Vec<PersonCard>> {

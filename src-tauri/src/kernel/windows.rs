@@ -13,6 +13,7 @@ const SETTINGS_LABEL: &str = "settings";
 #[serde(rename_all = "snake_case")]
 pub enum SettingsTab {
     General,
+    Accounts,
     Workspaces,
     Models,
     Converters,
@@ -25,6 +26,7 @@ impl SettingsTab {
     fn as_str(self) -> &'static str {
         match self {
             Self::General => "general",
+            Self::Accounts => "accounts",
             Self::Workspaces => "workspaces",
             Self::Backup => "backup",
             Self::Storage => "storage",
