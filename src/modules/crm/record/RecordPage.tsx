@@ -1,6 +1,7 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNeighbours, useRecordLayout } from "../../../kernel/bridge/layouts";
+import { noteVisit, useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { asRecord, recordLabel, useDeleteRecord, useDestroyRecord, useObject, useRecord, useRestoreRecord, useUpdateRecord } from "../../../kernel/bridge/records";
 import { useCurrentWorkspace } from "../../../kernel/bridge/workspaces";
 import DangerButton from "../../../kernel/shell/DangerButton";
@@ -33,6 +34,19 @@ export default function RecordPage() {
   const destroy = useDestroyRecord(slug, name);
   const [renaming, setRenaming] = useState(false);
   const [editingLayout, setEditingLayout] = useState(false);
+  // ★ pins the record in the sidebar; opening the page makes it a recent (D-064).
+  const favorites = useFavorites(slug);
+  const addFavorite = useAddFavorite(slug);
+  const removeFavorite = useRemoveFavorite(slug);
+  const pin = favorites.data?.items.find((f) => f.record_id === id);
+  useEffect(() => {
+    if (slug && name) void noteVisit(slug, name, id).catch(() => undefined);
+  }, [slug, name, id]);
+  useEffect(() => {
+    const on = () => setEditingLayout(true);
+    window.addEventListener("newdawn:edit-layout", on);
+    return () => window.removeEventListener("newdawn:edit-layout", on);
+  }, []);
   const data = record.data ? asRecord(record.data) : null;
   const deleted = !!data && isDeleted(data);
   const label = def && data ? recordLabel(def, data) : "";
@@ -82,6 +96,17 @@ export default function RecordPage() {
           </button>
           <button type="button" className="btn btnSecondary btnCompact" aria-label="Next record" disabled={!neighbours.data?.next} onClick={() => go(neighbours.data?.next)}>
             ›
+          </button>
+          <button
+            type="button"
+            className="btn btnSecondary btnCompact"
+            aria-label={pin ? "Remove from favorites" : "Add to favorites"}
+            aria-pressed={!!pin}
+            title={pin ? "Remove from favorites" : "Add to favorites"}
+            disabled={!ctx || deleted || addFavorite.isPending || removeFavorite.isPending}
+            onClick={() => (pin ? removeFavorite.mutate(pin.id) : name && addFavorite.mutate({ object: name, record_id: id, view_id: null }))}
+          >
+            {pin ? "★" : "☆"}
           </button>
           <MenuButton
             label="More"

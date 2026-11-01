@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useBrandSync } from "../bridge/brand";
 import { openSettings } from "../bridge/settings";
 import { useUpdateCheckAtLaunch } from "../bridge/updater";
@@ -11,11 +11,13 @@ import RecorderBanner from "../../modules/recorder/RecorderBanner";
 import StartRecordingDialog from "../../modules/recorder/StartRecordingDialog";
 import { useStopAndOpen } from "../../modules/recorder/useStopAndOpen";
 import styles from "./AppLayout.module.css";
+import CommandMenu from "./CommandMenu";
 import ContentRoot from "./ContentRoot";
 import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
 import { useHistoryNav } from "./useHistoryNav";
 import { useMediaQuery } from "./useMediaQuery";
+import { useShortcuts } from "./useShortcuts";
 import { useWorkspaceShortcuts } from "./useWorkspaceShortcuts";
 
 /** A text field has focus (menu shortcuts that leave the page wait). */
@@ -61,6 +63,12 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { data: recorder } = useRecorderStatus();
   const { stop } = useStopAndOpen();
+  // ⌘K: the command menu; `/`: the same menu, in the records (D-064).
+  const [menu, setMenu] = useState<null | "all" | "search">(null);
+  const openMenu = useCallback(() => setMenu("all"), []);
+  const openSearch = useCallback(() => setMenu("search"), []);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  useShortcuts({ onCommandMenu: openMenu, onSearch: openSearch });
 
   function toggleIcons() {
     const next = iconsOnly ? "expanded" : "icons";
@@ -152,6 +160,7 @@ export default function AppLayout() {
         </ContentRoot>
       </div>
       {startOpen && <StartRecordingDialog onClose={() => setStartOpen(false)} />}
+      <CommandMenu open={menu !== null} mode={menu ?? "all"} onClose={closeMenu} onToggleSidebar={toggleIcons} />
     </div>
   );
 }

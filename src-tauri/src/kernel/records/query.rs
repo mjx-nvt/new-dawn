@@ -898,6 +898,7 @@ pub async fn destroy(pool: &SqlitePool, object: &ObjectDef, id: &str) -> Result<
     }
     sqlx::query(sql(format!("DELETE FROM {} WHERE id = ?", object.meta.table_name))).bind(id).execute(pool).await?;
     timeline::forget(pool, object, id).await?;
+    super::navigation::forget_visits(pool, &object.meta.name_singular, Some(id)).await?;
     search::remove(pool, &object.meta.name_singular, id).await
 }
 

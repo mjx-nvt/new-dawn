@@ -642,6 +642,7 @@ pub async fn delete_object(pool: &SqlitePool, id: &str) -> Result<()> {
     }
     sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE IF EXISTS {}", current.meta.table_name))).execute(pool).await?;
     sqlx::query("DELETE FROM search_index WHERE object = ?").bind(&current.meta.name_singular).execute(pool).await?;
+    super::navigation::forget_visits(pool, &current.meta.name_singular, None).await?;
     sqlx::query("DELETE FROM object_meta WHERE id = ?").bind(&current.meta.id).execute(pool).await?;
     Ok(())
 }

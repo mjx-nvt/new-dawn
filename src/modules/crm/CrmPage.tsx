@@ -1,5 +1,5 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
 import { useCreateView, useSaveView, useUpdateView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
@@ -28,6 +28,12 @@ export default function CrmPage() {
   const object = useObject(slug, current?.name_singular);
   const [search, setSearch] = useState("");
   const [deleted, setDeleted] = useState(false);
+  // ⌘K → "Deleted records" (D-064).
+  useEffect(() => {
+    const on = () => setDeleted(true);
+    window.addEventListener("newdawn:show-deleted", on);
+    return () => window.removeEventListener("newdawn:show-deleted", on);
+  }, []);
   const show = (next: string) => void navigate({ to: "/crm", search: { tab: next }, replace: true });
   const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id }, replace: true });
   const title = tab === "commitments" ? "Commitments" : (current?.label_plural ?? "CRM");

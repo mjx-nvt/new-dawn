@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-064 — Navigation: favorites and the Workspace section as rows, one ⌘K for the whole app, Twenty's keys
+_2026-11-02_
+
+**Context** (plan v4 §3.4 rows 76–78, 0.10.7): Twenty's sidebar has Favorites (records, views; folders; personal; dragged to reorder) and a Workspace section listing the objects (reordered in a customise mode, hidden ones shown again from the data model), and a command menu (⌘K) that jumps to any record, view or action, creates records and lists the keyboard shortcuts. Plane's Power K (0.11.9) is the same idea.
+
+**Decision — the sidebar's CRM section is data** (migration 0024): `favorite_folder` and `favorite.folder_id`; `navigation_item` (one row per record object: position, hidden, folder — made at first read for objects without one, so a custom object appears at the end); `recent_visit` (object, record, when — the last hundred, written by the record page; a record deleted for good or an object dropped forgets its visits). `kernel/records/navigation.rs` resolves what the sidebar shows (a pinned record's label through the object's label field, a pinned view's name) and leaves out what is gone. One member, so favorites are the workspace's. The section lives inside New Dawn's sidebar, under the app's own items; the icon rail shows none of it.
+
+**Decision — one ⌘K, built from the metadata**: `CommandMenu` lists Recents, the records that match (`search_records`, with labels), "Create a …" for every record object (then the name, then the page), Go to (the app's pages, every object, every view by name), and the page's actions (edit the record page layout, deleted records of the object, the sidebar, copy the link, the shortcuts) — the page actions reach their page as window events (`newdawn:edit-layout`, `newdawn:show-deleted`), so the menu knows no page's state. ⌘↩ runs the first result. The toolbar's field stays the meetings search; ⌘K is the menu.
+
+**Decision — Twenty's keys where macOS leaves them**: ⌘K, `/` (record search), `g` then `p c o n t` for the objects and `m d` for Meetings and Today (a one-second chord, never while typing or while a sheet is open), ⌘↩, Esc — beside the app's ⌘[ ⌘] ⌃⌘S ⌥⌘S ⌘, — listed in the menu's Keyboard shortcuts.
+
+**Means for future work**: workflows and dashboards (0.10.10–0.10.12) add their sidebar entries and ⌘K actions ("run a manual workflow"); import / export (0.10.8) join the actions; Plane's Power K (0.11.9) adds its sections to the same menu; favorites of pages and projects use `favorite`'s columns for them.
+
+---
+
 ## D-063 — Rich text and files: one TipTap editor, documents as JSON, files in the workspace folder as attachment records
 _2026-11-01_
 

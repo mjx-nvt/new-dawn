@@ -6,6 +6,7 @@ import { useCurrentWorkspace } from "../bridge/workspaces";
 import { useWaitingCommitments } from "../bridge/crm";
 import { ALL_MODULES, useModules } from "../bridge/modules";
 import { useProjects } from "../bridge/projects";
+import CrmNav from "./CrmNav";
 import { CodeIcon, CollapseIcon, LiveIcon, MailIcon, MeetingsIcon, PeopleIcon, ProjectsIcon, SettingsIcon, TasksIcon, TodayIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
@@ -102,6 +103,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
           {label("Workspace", <WorkspaceIcon />)}
         </Link>
       </div>
+
+      {modules.crm && <CrmNav slug={workspace?.slug} iconsOnly={iconsOnly} />}
 
       {import.meta.env.DEV && (
         <div className={styles.section}>

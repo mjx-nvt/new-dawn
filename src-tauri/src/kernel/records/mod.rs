@@ -7,6 +7,7 @@ pub mod ddl;
 pub mod files;
 pub mod layouts;
 pub mod linked;
+pub mod navigation;
 pub mod rich;
 pub mod query;
 pub mod search;

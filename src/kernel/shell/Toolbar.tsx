@@ -23,20 +23,7 @@ export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHi
     if (urlQuery !== null) setQuery(urlQuery);
   }, [urlQuery]);
 
-  // ⌘K focuses search from anywhere in the window.
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const plain = !event.shiftKey && !event.altKey && !event.ctrlKey && !event.isComposing;
-      if (event.metaKey && plain && event.key.toLowerCase() === "k" && !document.querySelector("dialog[open]")) {
-        event.preventDefault();
-        search.current?.focus();
-        search.current?.select();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
+  // ⌘K is the command menu (D-064); this field is the meetings search.
   return (
     <header className={sidebarHidden ? `${styles.toolbar} ${styles.clearLights}` : styles.toolbar} data-tauri-drag-region="deep">
       <div className={styles.lead}>
@@ -77,7 +64,7 @@ export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHi
           type="search"
           value={query}
           placeholder="Search meetings"
-          title="Search meetings (⌘K)"
+          title="Search meetings"
           aria-label="Search meetings"
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}

@@ -1,0 +1,92 @@
+/* ⌘K (D-064): a glass sheet at the top of the window — one input, sections of rows. */
+
+.menu {
+  width: min(640px, calc(100vw - 2 * var(--space-5)));
+  margin: 12vh auto auto;
+  padding: var(--space-3);
+}
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+}
+.input {
+  all: unset;
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  font-size: var(--t-lg);
+  font-weight: 500;
+  color: var(--ink);
+}
+.input::placeholder { color: var(--ink-3); }
+.kbd {
+  padding: 2px 6px;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-chip);
+  background: var(--surface-2);
+  font-family: var(--font);
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.list {
+  max-height: 52vh;
+  overflow: auto;
+  padding-top: var(--space-2);
+}
+.section {
+  margin: var(--space-2) var(--space-2) var(--space-1);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.row {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: var(--t-md);
+  color: var(--ink);
+}
+.rowSelected {
+  background: var(--focus);
+  color: var(--on-focus);
+}
+.rowLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowHint {
+  font-size: var(--t-sm);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.keys {
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.keyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+.keyWhat { flex: 1; }

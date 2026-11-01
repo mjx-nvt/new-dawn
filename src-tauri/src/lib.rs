@@ -90,6 +90,7 @@ mod commands {
     pub mod meetings;
     pub mod minutes;
     pub mod models;
+    pub mod navigation;
     pub mod onboarding;
     pub mod people;
     pub mod profile;
@@ -269,6 +270,18 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::files::save_attachment,
             commands::files::attachment_path,
             commands::files::delete_attachment,
+            commands::navigation::list_favorites,
+            commands::navigation::add_favorite,
+            commands::navigation::remove_favorite,
+            commands::navigation::move_favorite,
+            commands::navigation::create_favorite_folder,
+            commands::navigation::rename_favorite_folder,
+            commands::navigation::delete_favorite_folder,
+            commands::navigation::list_navigation,
+            commands::navigation::set_navigation,
+            commands::navigation::list_all_views,
+            commands::navigation::note_visit,
+            commands::navigation::list_recents,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

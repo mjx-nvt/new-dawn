@@ -281,6 +281,21 @@ export const commands = {
 	/**  The attachment's file on disk (for Open and Reveal in Finder). */
 	attachmentPath: (slug: string, id: string) => typedError<string, AppError>(__TAURI_INVOKE("attachment_path", { slug, id })),
 	deleteAttachment: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_attachment", { slug, id })),
+	listFavorites: (slug: string) => typedError<Favorites_Serialize, AppError>(__TAURI_INVOKE("list_favorites", { slug })),
+	/**  Pins a record or a view; returns the favorite's id. */
+	addFavorite: (slug: string, target: FavoriteTarget_Deserialize) => typedError<string, AppError>(__TAURI_INVOKE("add_favorite", { slug, target })),
+	removeFavorite: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_favorite", { slug, id })),
+	moveFavorite: (slug: string, id: string, folderId: string | null, position: number | null) => typedError<null, AppError>(__TAURI_INVOKE("move_favorite", { slug, id, folderId, position })),
+	createFavoriteFolder: (slug: string, name: string) => typedError<FavoriteFolder, AppError>(__TAURI_INVOKE("create_favorite_folder", { slug, name })),
+	renameFavoriteFolder: (slug: string, id: string, name: string) => typedError<null, AppError>(__TAURI_INVOKE("rename_favorite_folder", { slug, id, name })),
+	deleteFavoriteFolder: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_favorite_folder", { slug, id })),
+	/**  The Workspace section: every record object's place, hidden ones included. */
+	listNavigation: (slug: string) => typedError<NavItem[], AppError>(__TAURI_INVOKE("list_navigation", { slug })),
+	setNavigation: (slug: string, items: NavItemInput_Deserialize[]) => typedError<null, AppError>(__TAURI_INVOKE("set_navigation", { slug, items })),
+	/**  Every view of every record object, for ⌘K. */
+	listAllViews: (slug: string) => typedError<ViewEntry[], AppError>(__TAURI_INVOKE("list_all_views", { slug })),
+	noteVisit: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("note_visit", { slug, object, id })),
+	listRecents: (slug: string, limit: number) => typedError<Recent[], AppError>(__TAURI_INVOKE("list_recents", { slug, limit })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -1022,6 +1037,70 @@ export type ExportOptions_Serialize = {
 	file_name: string | null,
 };
 
+/**  A pinned record or view, with what the sidebar shows for it. */
+export type Favorite = Favorite_Serialize | Favorite_Deserialize;
+
+export type FavoriteFolder = {
+	id: string,
+	name: string,
+	position: number | null,
+};
+
+/**  What to pin: a record (its object by singular / plural name or id) or a view. */
+export type FavoriteTarget = FavoriteTarget_Serialize | FavoriteTarget_Deserialize;
+
+/**  What to pin: a record (its object by singular / plural name or id) or a view. */
+export type FavoriteTarget_Deserialize = {
+	object?: string | null,
+	record_id?: string | null,
+	view_id?: string | null,
+};
+
+/**  What to pin: a record (its object by singular / plural name or id) or a view. */
+export type FavoriteTarget_Serialize = {
+	object: string | null,
+	record_id: string | null,
+	view_id: string | null,
+};
+
+/**  A pinned record or view, with what the sidebar shows for it. */
+export type Favorite_Deserialize = {
+	id: string,
+	folder_id?: string | null,
+	position: number | null,
+	/**  The object's plural name (the route), and its label. */
+	object: string,
+	object_label: string,
+	record_id?: string | null,
+	view_id?: string | null,
+	label: string,
+};
+
+/**  A pinned record or view, with what the sidebar shows for it. */
+export type Favorite_Serialize = {
+	id: string,
+	folder_id: string | null,
+	position: number | null,
+	/**  The object's plural name (the route), and its label. */
+	object: string,
+	object_label: string,
+	record_id: string | null,
+	view_id: string | null,
+	label: string,
+};
+
+export type Favorites = Favorites_Serialize | Favorites_Deserialize;
+
+export type Favorites_Deserialize = {
+	folders: FavoriteFolder[],
+	items: Favorite_Deserialize[],
+};
+
+export type Favorites_Serialize = {
+	folders: FavoriteFolder[],
+	items: Favorite_Serialize[],
+};
+
 export type FieldInput = FieldInput_Serialize | FieldInput_Deserialize;
 
 export type FieldInput_Deserialize = {
@@ -1717,6 +1796,33 @@ export type NamingReview = {
 	ai_checked: boolean,
 };
 
+export type NavItem = {
+	object_id: string,
+	/**  The object's plural name (the route). */
+	object: string,
+	label: string,
+	icon: string,
+	position: number | null,
+	is_hidden: boolean,
+	folder: string,
+};
+
+export type NavItemInput = NavItemInput_Serialize | NavItemInput_Deserialize;
+
+export type NavItemInput_Deserialize = {
+	object_id: string,
+	position: number | null,
+	is_hidden: boolean,
+	folder?: string,
+};
+
+export type NavItemInput_Serialize = {
+	object_id: string,
+	position: number | null,
+	is_hidden: boolean,
+	folder: string,
+};
+
 /**  The record before and after this one in the object's default order (position, then made). */
 export type Neighbours = Neighbours_Serialize | Neighbours_Deserialize;
 
@@ -2258,6 +2364,14 @@ export type Radius_Serialize = {
 	chip: number,
 	control: number,
 	modal: number,
+};
+
+export type Recent = {
+	object: string,
+	object_label: string,
+	record_id: string,
+	label: string,
+	visited_at: string,
 };
 
 /**  10 Hz meter while recording: RMS 0–1 for the mic ("you") and the call ("them"). */
@@ -3058,6 +3172,15 @@ export type ViewDef_Serialize = {
 	filters: ViewFilter_Serialize[],
 	sorts: ViewSort[],
 	groups: ViewGroup[],
+};
+
+export type ViewEntry = {
+	id: string,
+	name: string,
+	type: string,
+	/**  The object's plural name and label. */
+	object: string,
+	object_label: string,
 };
 
 export type ViewField = ViewField_Serialize | ViewField_Deserialize;

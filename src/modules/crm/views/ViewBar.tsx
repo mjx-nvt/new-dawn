@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { selectOptions, type FieldMeta, type ObjectDef } from "../../../kernel/bridge/records";
 import { useCreateView, useDeleteView, useDuplicateView, useReorderViews, useUpdateView, type ViewDef, type ViewPatch, type ViewRow } from "../../../kernel/bridge/views";
 import OnOff from "../../workspace-settings/OnOff";
@@ -291,6 +292,11 @@ function ViewsMenu({ slug, object, views, currentId, onPick }: { slug: string; o
   const remove = useDeleteView(slug, name);
   const duplicate = useDuplicateView(slug, name);
   const reorder = useReorderViews(slug, name);
+  // A view pinned in the sidebar's Favorites (D-064): the favorite's id by view.
+  const favorites = useFavorites(slug);
+  const addFavorite = useAddFavorite(slug);
+  const removeFavorite = useRemoveFavorite(slug);
+  const pins = new Map((favorites.data?.items ?? []).flatMap((f) => (f.view_id ? [[f.view_id, f.id] as const] : [])));
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
@@ -326,6 +332,19 @@ function ViewsMenu({ slug, object, views, currentId, onPick }: { slug: string; o
                   </button>
                   <button type="button" role="menuitem" className="menuItem" onClick={() => (duplicate.mutate({ id: v.id }), setMenu(null))}>
                     Duplicate
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="menuItem"
+                    onClick={() => {
+                      const pinned = pins.get(v.id);
+                      if (pinned) removeFavorite.mutate(pinned);
+                      else addFavorite.mutate({ object: null, record_id: null, view_id: v.id });
+                      setMenu(null);
+                    }}
+                  >
+                    {pins.has(v.id) ? "Remove from favorites" : "Add to favorites"}
                   </button>
                   {v.key !== "INDEX" && (
                     <button type="button" role="menuitem" className="menuItem menuItemDanger" onClick={() => (remove.mutate(v.id), setMenu(null), v.id === currentId && onPick(views[0]?.id ?? v.id))}>
