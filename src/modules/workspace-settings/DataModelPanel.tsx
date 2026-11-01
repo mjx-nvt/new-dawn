@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ICONS, useCreateObject } from "../../kernel/bridge/datamodel";
 import { useObjects, type ObjectMeta } from "../../kernel/bridge/records";
+import { revealFile, useTransferJobs } from "../../kernel/bridge/transfer";
 import styles from "./DataModel.module.css";
 import DataModelObject from "./DataModelObject";
 import OnOff from "./OnOff";
@@ -11,8 +12,12 @@ export default function DataModelPanel({ slug, objectName, onOpen, onBack }: { s
   const objects = useObjects(slug);
   const [filter, setFilter] = useState<"active" | "inactive" | "all">("active");
   const [adding, setAdding] = useState(false);
+  const jobs = useTransferJobs(slug);
+  const [trouble, setTrouble] = useState<string | null>(null);
   if (objectName) return <DataModelObject slug={slug} objectName={objectName} onBack={onBack} />;
   const shown = (objects.data ?? []).filter((o) => !o.is_system && (filter === "all" || (filter === "active") === o.is_active));
+  const labelOf = (singular: string) => (objects.data ?? []).find((o) => o.name_singular === singular)?.label_plural ?? singular;
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
   return (
     <section className="section">
       <div className={styles.head}>
@@ -45,6 +50,42 @@ export default function DataModelPanel({ slug, objectName, onOpen, onBack }: { s
               </div>
             ))}
       </div>
+      <h3 className="groupTitle">Imports and exports</h3>
+      <p className="sectionSubtitle">The last fifty runs. Import records and Export view live in a view's ⋯ menu and in ⌘K (D-065).</p>
+      <div className="group" role="list">
+        {(jobs.data ?? []).length ? (
+          (jobs.data ?? []).map((j) => (
+            <div key={j.id} className="groupRow" role="listitem">
+              <div className="rowText">
+                <div className="rowLabel">
+                  {j.kind === "import" ? "Import" : "Export"} · {j.label || "—"}
+                </div>
+                <div className="rowHint">
+                  {labelOf(j.object)} · {j.detail} · {when(j.created_at)}
+                </div>
+              </div>
+              {j.file_path && (
+                <div className="rowControl">
+                  <button type="button" className="btn btnGhost btnCompact" onClick={() => revealFile(j.file_path).catch((e: Error) => setTrouble(e.message))}>
+                    Reveal
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        ) : (
+          [0, 1].map((i) => (
+            <div key={i} className={`${styles.ghostRow} ghostCard`}>
+              {i === 0 && <span className="ghostText">Not yet captured</span>}
+            </div>
+          ))
+        )}
+      </div>
+      {trouble && (
+        <p className="formError" role="alert">
+          {trouble}
+        </p>
+      )}
       {adding && (
         <NewObjectSheet
           slug={slug}

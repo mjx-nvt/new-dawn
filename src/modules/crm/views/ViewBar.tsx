@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { selectOptions, type FieldMeta, type ObjectDef } from "../../../kernel/bridge/records";
@@ -447,6 +448,9 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
   const dates = object.fields.filter((f) => f.is_active && (f.type === "DATE" || f.type === "DATE_TIME"));
   const numbers = object.fields.filter((f) => f.is_active && ["NUMBER", "CURRENCY", "RATING"].includes(f.type));
   const patchNow = (p: ViewPatch) => update.mutate({ id: current.view.id, patch: p });
+  // Import records / Export view (D-065): both are the page's, reached by URL state.
+  const navigate = useNavigate();
+  const transfer = (flag: "import" | "export") => void navigate({ to: "/crm", search: { tab: object.meta.name_plural, view: current.view.id, [flag]: true } });
 
   if (section === "fields") {
     return (
@@ -558,6 +562,12 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
           {kanban ? "Columns" : "Group"} <span className={styles.muted}>· {groupField ? `by ${groupField.label}` : "none"}</span>
         </button>
       )}
+      <button type="button" className={styles.listButton} onClick={() => transfer("import")}>
+        Import records
+      </button>
+      <button type="button" className={styles.listButton} onClick={() => transfer("export")}>
+        Export view <span className={styles.muted}>· CSV</span>
+      </button>
       {kanban && (
         <div className={styles.row}>
           <span className={styles.name}>Aggregate</span>

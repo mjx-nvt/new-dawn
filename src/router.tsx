@@ -122,9 +122,12 @@ const projectRoute = createRoute({
 const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/crm",
-  validateSearch: (search: Record<string, unknown>): { tab: string; view?: string } => ({
+  // `import` / `export` open the import sheet or run the view's export once, then clear (D-065).
+  validateSearch: (search: Record<string, unknown>): { tab: string; view?: string; import?: boolean; export?: boolean } => ({
     tab: typeof search.tab === "string" && search.tab ? search.tab : "people",
     ...(typeof search.view === "string" && search.view ? { view: search.view } : {}),
+    ...(search.import === true || search.import === "true" ? { import: true } : {}),
+    ...(search.export === true || search.export === "true" ? { export: true } : {}),
   }),
   component: () => (
     <ModuleGate module="crm">

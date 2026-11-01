@@ -1,0 +1,145 @@
+/* The spreadsheet import (D-065): a sheet with three steps — the file, the columns, the rows. */
+
+.sheet {
+  width: min(960px, 92vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.steps {
+  display: flex;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.stepOn { color: var(--primary-text); }
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.intro {
+  margin: 0;
+  max-width: 76ch;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--t-sm);
+}
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--hair);
+  white-space: nowrap;
+}
+.table td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 0.5px solid var(--hair);
+  vertical-align: middle;
+}
+.sample {
+  display: block;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: var(--t-xs);
+}
+.header {
+  display: block;
+  font-weight: 500;
+  color: var(--ink);
+}
+.number {
+  width: 40px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.rowError td { background: var(--status-warning-tint); }
+.cell {
+  width: 100%;
+  min-width: 120px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0.5px solid transparent;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+.cell:hover { border-color: var(--hair); }
+.cell:focus-visible {
+  outline: none;
+  border-color: var(--focus);
+  background: var(--surface);
+}
+.cellError { border-color: var(--status-warning); }
+.note {
+  margin: var(--space-1) 0 0;
+  font-size: var(--t-xs);
+  color: var(--status-warning);
+}
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+.summary label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.foot .spacer { margin-right: auto; }
+.report {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+.big {
+  font-size: var(--t-xl);
+  font-weight: 700;
+  color: var(--ink);
+}
+.identifier {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}

@@ -41,6 +41,7 @@ mod kernel {
     pub mod notify;
     pub mod permissions;
     pub mod profile;
+    pub mod csv;
     pub mod records;
     pub mod text;
     pub mod registry;
@@ -91,6 +92,7 @@ mod commands {
     pub mod minutes;
     pub mod models;
     pub mod navigation;
+    pub mod transfer;
     pub mod onboarding;
     pub mod people;
     pub mod profile;
@@ -282,6 +284,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::navigation::list_all_views,
             commands::navigation::note_visit,
             commands::navigation::list_recents,
+            commands::transfer::read_import_file,
+            commands::transfer::validate_import,
+            commands::transfer::run_import,
+            commands::transfer::export_view,
+            commands::transfer::list_transfer_jobs,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

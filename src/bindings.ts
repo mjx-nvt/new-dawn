@@ -296,6 +296,15 @@ export const commands = {
 	listAllViews: (slug: string) => typedError<ViewEntry[], AppError>(__TAURI_INVOKE("list_all_views", { slug })),
 	noteVisit: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("note_visit", { slug, object, id })),
 	listRecents: (slug: string, limit: number) => typedError<Recent[], AppError>(__TAURI_INVOKE("list_recents", { slug, limit })),
+	/**  Reads a CSV / XLSX / XLS file and proposes how its columns map to the object's fields. */
+	readImportFile: (slug: string, object: string, path: string) => typedError<ImportFile_Serialize, AppError>(__TAURI_INVOKE("read_import_file", { slug, object, path })),
+	/**  Every row checked with the mapping: what would be created, updated, or is in error. */
+	validateImport: (slug: string, object: string, table: Table, mapping: ColumnMap_Deserialize[], identifier: string | null) => typedError<Preview_Serialize, AppError>(__TAURI_INVOKE("validate_import", { slug, object, table, mapping, identifier })),
+	/**  Writes the rows without errors; the report says what happened to each. */
+	runImport: (slug: string, object: string, fileName: string, table: Table, mapping: ColumnMap_Deserialize[], identifier: string | null) => typedError<ImportReport, AppError>(__TAURI_INVOKE("run_import", { slug, object, fileName, table, mapping, identifier })),
+	/**  A view's records — its filters, sorts and visible fields — as a CSV file where asked. */
+	exportView: (slug: string, object: string, viewName: string, query: Query_Deserialize, fields: string[], path: string) => typedError<ExportReport, AppError>(__TAURI_INVOKE("export_view", { slug, object, viewName, query, fields, path })),
+	listTransferJobs: (slug: string) => typedError<TransferJob[], AppError>(__TAURI_INVOKE("list_transfer_jobs", { slug })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -807,6 +816,20 @@ export type Button_Serialize = {
 	secondary: string,
 };
 
+export type CellError = CellError_Serialize | CellError_Deserialize;
+
+export type CellError_Deserialize = {
+	/**  The column in error, or none for the row as a whole. */
+	column?: number | null,
+	message: string,
+};
+
+export type CellError_Serialize = {
+	/**  The column in error, or none for the row as a whole. */
+	column: number | null,
+	message: string,
+};
+
 export type CheckKind = 
 /**  A Whisper model for meetings. */
 "speech" | 
@@ -821,6 +844,31 @@ export type Clarity =
 "uncertain" | 
 /**  Not translated: several voices at once or a weak signal. */
 "unclear";
+
+/**  A column of the file and the field it fills. */
+export type ColumnMap = ColumnMap_Serialize | ColumnMap_Deserialize;
+
+/**  A column of the file and the field it fills. */
+export type ColumnMap_Deserialize = {
+	header: string,
+	/**  The field's name, "id" for the record's id, or none ("Do not map"). */
+	field?: string | null,
+	/**  A composite's part (its key), or none for the whole field. */
+	sub?: string | null,
+	/**  A relation: "id", or the other object's field the cell names (its domain, its email…). */
+	match_by?: string | null,
+};
+
+/**  A column of the file and the field it fills. */
+export type ColumnMap_Serialize = {
+	header: string,
+	/**  The field's name, "id" for the record's id, or none ("Do not map"). */
+	field: string | null,
+	/**  A composite's part (its key), or none for the whole field. */
+	sub: string | null,
+	/**  A relation: "id", or the other object's field the cell names (its domain, its email…). */
+	match_by: string | null,
+};
 
 export type Commitment = Commitment_Serialize | Commitment_Deserialize;
 
@@ -1037,6 +1085,11 @@ export type ExportOptions_Serialize = {
 	file_name: string | null,
 };
 
+export type ExportReport = {
+	row_count: number,
+	file_path: string,
+};
+
 /**  A pinned record or view, with what the sidebar shows for it. */
 export type Favorite = Favorite_Serialize | Favorite_Deserialize;
 
@@ -1099,6 +1152,20 @@ export type Favorites_Deserialize = {
 export type Favorites_Serialize = {
 	folders: FavoriteFolder[],
 	items: Favorite_Serialize[],
+};
+
+/**
+ *  A field the Match columns step offers, with its parts and — for a relation — the ways a
+ *  cell can name the other object's record.
+ */
+export type FieldChoice = {
+	field: string,
+	label: string,
+	type: FieldType,
+	subs: SubChoice[],
+	match_options: MatchChoice[],
+	required: boolean,
+	unique: boolean,
 };
 
 export type FieldInput = FieldInput_Serialize | FieldInput_Deserialize;
@@ -1319,6 +1386,43 @@ export type Hit = {
 	label: string,
 };
 
+/**
+ *  What the Select file step hands the sheet: the table, a first mapping, the identifier that
+ *  updates existing records, and the choices.
+ */
+export type ImportFile = ImportFile_Serialize | ImportFile_Deserialize;
+
+/**
+ *  What the Select file step hands the sheet: the table, a first mapping, the identifier that
+ *  updates existing records, and the choices.
+ */
+export type ImportFile_Deserialize = {
+	file_name: string,
+	table: Table,
+	mapping: ColumnMap_Deserialize[],
+	identifier?: string | null,
+	fields: FieldChoice[],
+};
+
+/**
+ *  What the Select file step hands the sheet: the table, a first mapping, the identifier that
+ *  updates existing records, and the choices.
+ */
+export type ImportFile_Serialize = {
+	file_name: string,
+	table: Table,
+	mapping: ColumnMap_Serialize[],
+	identifier: string | null,
+	fields: FieldChoice[],
+};
+
+export type ImportReport = {
+	created: number,
+	updated: number,
+	skipped: number,
+	errors: RowError[],
+};
+
 export type InstalledModel = {
 	name: string,
 	size_mb: number,
@@ -1489,6 +1593,11 @@ export type LiveStatus_Serialize = {
 	 *  the microphone hears the speakers ("use headphones" — gone once they're on).
 	 */
 	overheard: number,
+};
+
+export type MatchChoice = {
+	value: string,
+	label: string,
 };
 
 /**  What a search by meaning found, and how much of the workspace it could look at. */
@@ -2124,6 +2233,22 @@ export type PersonInput_Serialize = {
 
 export type Pick = "a" | "b" | "same";
 
+export type Preview = Preview_Serialize | Preview_Deserialize;
+
+export type Preview_Deserialize = {
+	rows: RowPreview_Deserialize[],
+	creates: number,
+	updates: number,
+	errors: number,
+};
+
+export type Preview_Serialize = {
+	rows: RowPreview_Serialize[],
+	creates: number,
+	updates: number,
+	errors: number,
+};
+
 export type Profile = {
 	/**  "" until the owner sets it. */
 	name: string,
@@ -2481,6 +2606,28 @@ export type RelationOptions_Serialize = {
 	junction: boolean,
 };
 
+export type RowError = {
+	/**  The row's number in the file (the first data row is 1). */
+	row: number,
+	message: string,
+};
+
+export type RowPreview = RowPreview_Serialize | RowPreview_Deserialize;
+
+export type RowPreview_Deserialize = {
+	index: number,
+	/**  create · update · error */
+	action: string,
+	errors: CellError_Deserialize[],
+};
+
+export type RowPreview_Serialize = {
+	index: number,
+	/**  create · update · error */
+	action: string,
+	errors: CellError_Serialize[],
+};
+
 /**  Everything "Update view" writes, in one go. */
 export type SaveInput = SaveInput_Serialize | SaveInput_Deserialize;
 
@@ -2635,6 +2782,11 @@ export type StorageReport = {
 	models_bytes: number | null,
 	logs_bytes: number | null,
 	retention_days: number,
+};
+
+export type SubChoice = {
+	key: string,
+	label: string,
 };
 
 /**
@@ -2806,6 +2958,11 @@ export type TabRow = {
 	title: string,
 	position: number | null,
 	is_default: boolean,
+};
+
+export type Table = {
+	headers: string[],
+	rows: string[][],
 };
 
 export type Tally = {
@@ -3136,6 +3293,19 @@ export type TranscriptionProgress = {
 	meeting_id: string,
 	stage: Stage,
 	percent: number,
+};
+
+export type TransferJob = {
+	id: string,
+	/**  import · export */
+	kind: string,
+	/**  The object's singular name. */
+	object: string,
+	/**  The file imported, or the view exported. */
+	label: string,
+	detail: string,
+	file_path: string,
+	created_at: string,
 };
 
 /**  One section of a translated summary. */

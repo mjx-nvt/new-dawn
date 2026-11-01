@@ -74,6 +74,11 @@ impl Actor {
     pub fn system(name: &str) -> Self {
         Self { source: "SYSTEM".into(), name: name.into(), member_id: None }
     }
+
+    /// A spreadsheet import, named after its file (D-065).
+    pub fn import(member_id: Option<String>, file_name: &str) -> Self {
+        Self { source: "IMPORT".into(), name: file_name.into(), member_id }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -582,6 +587,11 @@ fn string_list(label: &str, value: &Value) -> Result<Vec<String>> {
         Value::String(s) => Ok(s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect()),
         _ => Err(invalid(format!("{label}: a list of text"))),
     }
+}
+
+/// Whether a value is one the field takes (an import checks every cell before writing).
+pub fn check_value(field: &FieldMeta, value: &Value) -> Result<()> {
+    binds_for(field, value).map(|_| ())
 }
 
 /// The columns a field's value becomes, checked for its type.

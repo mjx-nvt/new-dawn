@@ -101,6 +101,12 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
     }
     if (onRecord && fits("Edit record page layout")) out.push({ id: "action:layout", section: "Actions", label: "Edit record page layout", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:edit-layout"))) });
     if (crmTab && crmTab !== "commitments" && fits("Deleted records")) out.push({ id: "action:deleted", section: "Actions", label: "Deleted records", hint: crmTab, run: go(() => window.dispatchEvent(new CustomEvent("newdawn:show-deleted"))) });
+    // Import / export (D-065): the sheet and the export are the CRM page's, reached by URL state.
+    if (crmTab && crmTab !== "commitments" && fits("Export view")) out.push({ id: "action:export", section: "Actions", label: "Export view", hint: "CSV", run: go(() => void navigate({ to: "/crm", search: { tab: crmTab, export: true } })) });
+    if (modules.crm) for (const o of recordObjects) {
+      const label = `Import ${o.label_plural.toLowerCase()} from a file…`;
+      if (fits(label) || fits("Import records")) out.push({ id: `import:${o.id}`, section: "Actions", label, run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural, import: true } })) });
+    }
     if (fits("Collapse sidebar") || fits("Expand sidebar")) out.push({ id: "action:sidebar", section: "Actions", label: "Collapse or expand the sidebar", hint: "⌃⌘S", run: go(onToggleSidebar) });
     if (fits("Copy link to page")) out.push({ id: "action:link", section: "Actions", label: "Copy link to page", run: go(() => void navigator.clipboard.writeText(window.location.href).catch(() => undefined)) });
     if (fits("Keyboard shortcuts")) out.push({ id: "action:keys", section: "Actions", label: "Keyboard shortcuts", run: () => setKeys(true) });

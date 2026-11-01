@@ -1,12 +1,15 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
 import { useCreateView, useSaveView, useUpdateView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
+import { revealFile, type ExportReport } from "../../kernel/bridge/transfer";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import PeoplePage from "../people/PeoplePage";
 import styles from "./Crm.module.css";
 import RecordSidePanel from "./record/RecordSidePanel";
 import RecordTable, { groupsOf, type Column } from "./RecordTable";
+import { exportCurrentView } from "./transfer/exportView";
+import ImportSheet from "./transfer/ImportSheet";
 import CalendarView from "./views/CalendarView";
 import KanbanBoard from "./views/KanbanBoard";
 import { fromView, newRule, nextPosition, queryOf, same, useWorking, type Working } from "./views/useViewState";
@@ -18,7 +21,7 @@ const route = getRouteApi("/shell/crm");
  *  (D-060, D-061) — and New Dawn's Commitments (D-055) beside them. The tab and the view are
  *  URL state. */
 export default function CrmPage() {
-  const { tab, view } = route.useSearch();
+  const { tab, view, import: wantImport, export: wantExport } = route.useSearch();
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug;
@@ -34,6 +37,15 @@ export default function CrmPage() {
     window.addEventListener("newdawn:show-deleted", on);
     return () => window.removeEventListener("newdawn:show-deleted", on);
   }, []);
+  // `?import` opens the import sheet, `?export` runs the view's export — once; the flag clears
+  // at once so Back never repeats it (D-065).
+  const [importing, setImporting] = useState(false);
+  const clearFlags = useCallback(() => void navigate({ to: "/crm", search: view ? { tab, view } : { tab }, replace: true }), [navigate, tab, view]);
+  useEffect(() => {
+    if (!wantImport) return;
+    setImporting(true);
+    clearFlags();
+  }, [wantImport, clearFlags]);
   const show = (next: string) => void navigate({ to: "/crm", search: { tab: next }, replace: true });
   const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id }, replace: true });
   const title = tab === "commitments" ? "Commitments" : (current?.label_plural ?? "CRM");
@@ -74,25 +86,42 @@ export default function CrmPage() {
         {tab === "commitments" ? (
           <PeoplePage embedded />
         ) : slug && object.data ? (
-          <ObjectViews key={object.data.meta.id} slug={slug} object={object.data} viewId={view} search={search} deleted={deleted} onPickView={showView} />
+          <ObjectViews key={object.data.meta.id} slug={slug} object={object.data} viewId={view} search={search} deleted={deleted} onPickView={showView} exportNow={!!wantExport} onExportDone={clearFlags} />
         ) : (
           <div className={styles.tableWrap}>
             <div className={`${styles.slot} ghostCard`}>{objects.isError || object.isError ? <span className="ghostText">Couldn't be read — {(objects.error ?? object.error)?.message}</span> : null}</div>
           </div>
         )}
       </div>
+      {importing && slug && object.data && <ImportSheet slug={slug} object={object.data} onClose={() => setImporting(false)} />}
     </div>
   );
 }
 
 /** An object's view bar and table: the saved view, the working copy, and what saves it. */
-function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { slug: string; object: ObjectDef; viewId: string | undefined; search: string; deleted: boolean; onPickView: (id: string) => void }) {
+function ObjectViews({ slug, object, viewId, search, deleted, onPickView, exportNow, onExportDone }: { slug: string; object: ObjectDef; viewId: string | undefined; search: string; deleted: boolean; onPickView: (id: string) => void; exportNow: boolean; onExportDone: () => void }) {
   const name = object.meta.name_singular;
   const views = useViews(slug, name);
   const list = views.data ?? [];
   const chosen = list.find((v) => v.id === viewId) ?? list.find((v) => v.key === "INDEX") ?? list[0];
   const def = useView(slug, chosen?.id);
   const [working, setWorking, reset] = useWorking(def.data);
+  // ⌘K → Export view (D-065): once the view is here, the save dialog, then the file.
+  const [exported, setExported] = useState<ExportReport | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportStarted = useRef(false);
+  useEffect(() => {
+    if (!exportNow) {
+      exportStarted.current = false;
+      return;
+    }
+    if (exportStarted.current || !def.data || !working) return;
+    exportStarted.current = true;
+    onExportDone();
+    exportCurrentView(slug, object, def.data, working, search)
+      .then(setExported)
+      .catch((e: Error) => setExportError(e.message));
+  }, [exportNow, def.data, working, slug, object, search, onExportDone]);
   const saveView = useSaveView(slug, name);
   const createView = useCreateView(slug, name);
   const updateView = useUpdateView(slug, name);
@@ -170,6 +199,19 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
       {saving && (
         <p className="formError" role="alert">
           {saving.message}
+        </p>
+      )}
+      {exported && (
+        <p className="fieldHint" role="status">
+          Exported {exported.row_count === 1 ? "1 record" : `${exported.row_count} records`} to {exported.file_path}{" "}
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => revealFile(exported.file_path).catch((e: Error) => setExportError(e.message))}>
+            Reveal in Finder
+          </button>
+        </p>
+      )}
+      {exportError && (
+        <p className="formError" role="alert">
+          {exportError}
         </p>
       )}
       {current.view.type === "KANBAN" ? (

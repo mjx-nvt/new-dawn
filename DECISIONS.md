@@ -2,6 +2,25 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-065 — Import and export: Twenty's spreadsheet import through the engine's own checks, a view's CSV as exactly its columns
+_2026-11-02_
+
+**Context** (plan v4 §3.4 rows 79–80, 0.10.8): Twenty imports CSV / XLSX / XLS (10 000 rows a file), maps columns to fields with "Label / Part" headers, links relations by a unique field, updates existing records by an identifier, validates every row with errors fixed in place, and exports a view's visible columns with its filters and sorts (20 000 rows).
+
+**Decision — one path for every object, no second validator**: `kernel/records/transfer.rs` turns a file into the record JSON the engine already takes (a composite's parts merged, a relation resolved to an id) and asks the engine's own value check for each field (`query::check_value`), so what the sheet flags is what a save would refuse; only what a file needs beyond that lives here — the identifier that names an existing record, duplicates in the file and against the records, required fields on new rows, relation look-ups by id, label, unique field, domain or email (remembered per run). Rows with errors are skipped, never half-written; the actor on the records and the timeline is the import, named after the file.
+
+**Decision — CSV by the standard library, workbooks by `calamine`**: `kernel/csv.rs` (RFC 4180) reads and writes; XLSX / XLS / ODS are read by `calamine` (the one Rust dependency the plan lists for this; its add was accepted), the first sheet, serial dates as ISO text. Headers follow Twenty's export ("Phones / Primary Phone Number"), so a Twenty file and a New Dawn file map by themselves; the usual spreadsheet words (email, website, firstName, companyDomain…) map too.
+
+**Decision — the export is the view**: the UI sends the query it lists with (filters, sorts, search) and the visible fields in order; the file is the Id and those columns and nothing hidden, a relation as its label and its id, so the file re-imports as updates.
+
+**Decision — the flows are URL state** (`/crm?tab=…&import=true`, `&export=true`): ⌘K, the ⋯ menu and any link open the sheet or run the export on the page that owns the view; the flag clears at once so Back never repeats it. Runs are kept (`import_job`, `export_job`, migration 0025) and listed under Workspace → CRM → Data model.
+
+**Trust**: the import reads, and the export writes, the path the native dialog gave — from Rust, unscoped, like the templates, files and audio commands before it. That holds for a local single-user app whose webview runs bundled code only (CSP `default-src 'self'`); the commands must never be reached by remote content. Nothing from a file or the UI reaches the SQL text: table and column names come from the metadata (validated identifiers), every cell is bound.
+
+**Means for future work**: the local REST API (0.10.14) imports through the same `transfer::run`; Plane's CSV importer and exports (0.11.10) reuse `csv.rs` and the sheet's steps with Plane's columns; row multi-select → export (§3.2) calls `export_view` with the ids as the filter.
+
+---
+
 ## D-064 — Navigation: favorites and the Workspace section as rows, one ⌘K for the whole app, Twenty's keys
 _2026-11-02_
 
