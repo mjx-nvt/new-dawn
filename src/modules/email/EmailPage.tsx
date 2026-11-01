@@ -101,7 +101,7 @@ function EmailRow({ slug, email: e }: { slug?: string; email: EmailItem }) {
                 </Link>
               )}
               {e.commitments > 0 && (
-                <Link to="/people" className={styles.link}>
+                <Link to="/crm" className={styles.link}>
                   {e.commitments} commitment{e.commitments === 1 ? "" : "s"}
                 </Link>
               )}

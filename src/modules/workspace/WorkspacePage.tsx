@@ -2,7 +2,9 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useProfile } from "../../kernel/bridge/profile";
 import { openSettings } from "../../kernel/bridge/settings";
+import { useModules, useSetModules, type Modules } from "../../kernel/bridge/modules";
 import { useCurrentWorkspace, useUpdateWorkspace } from "../../kernel/bridge/workspaces";
+import OnOff from "../workspace-settings/OnOff";
 import AgentsPanel from "../workspace-settings/AgentsPanel";
 import BrandPanel from "../workspace-settings/BrandPanel";
 import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
@@ -64,6 +66,39 @@ export default function WorkspacePage() {
         )}
       </div>
     </div>
+  );
+}
+
+/** The modules this workspace has on (D-059). Off hides the module and pauses its agents; its
+ *  data stays. */
+function ModulesGroup({ slug }: { slug: string }) {
+  const modules = useModules(slug).data;
+  const set = useSetModules(slug);
+  const row = (key: keyof Modules, label: string, hint: string) => (
+    <div className="groupRow">
+      <div className="rowText">
+        <p className="rowLabel">{label}</p>
+        <p className="rowHint">{hint}</p>
+      </div>
+      <div className="rowControl">
+        <OnOff label={label} value={modules?.[key]} disabled={!modules || set.isPending} onChange={(value) => modules && set.mutate({ ...modules, [key]: value })} />
+      </div>
+    </div>
+  );
+  return (
+    <>
+      <p className="groupTitle">Modules</p>
+      <div className="group">
+        {row("projects", "Projects", "The projects you follow; the Projects agent proposes their updates after each summary.")}
+        {row("crm", "CRM", "The people you meet and their commitments. Names and spellings (the People tab) stay on either way.")}
+      </div>
+      <p className="fieldHint">Off hides the module and pauses its agents. Its data stays.</p>
+      {set.error && (
+        <p className="formError" role="alert">
+          {set.error.message}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -137,6 +172,7 @@ function Overview({ slug, name, ownerTitle, folder, archived }: { slug: string; 
           </div>
         </div>
       </div>
+      <ModulesGroup slug={slug} />
       {update.error && (
         <p className="formError" role="alert">
           {update.error.message}

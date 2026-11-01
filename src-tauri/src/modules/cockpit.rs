@@ -109,7 +109,7 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
         .collect();
     projects.sort_by(|a, b| a.milestone_due.cmp(&b.milestone_due));
     let mut commitments = crm::open(pool).await?;
-    let open_commitments = commitments.len() as u32;
+    let mut open_commitments = commitments.len() as u32;
     commitments.truncate(COMMITMENTS);
     let (from, to) = week(day);
     let meetings = sqlx::query_as(
@@ -120,13 +120,24 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
     .bind(to)
     .fetch_all(pool)
     .await?;
-    let waiting = sqlx::query_as(
+    let mut waiting: Waiting = sqlx::query_as(
         "SELECT (SELECT count(*) FROM project_update WHERE status = 'proposed') AS updates, \
          (SELECT count(*) FROM commitment WHERE status = 'proposed') AS commitments, \
          (SELECT count(*) FROM email_task WHERE status = 'proposed') AS email_tasks",
     )
     .fetch_one(pool)
     .await?;
+    // A module that's off has nothing to show here (D-059).
+    let modules = crate::modules::switches::enabled(pool).await?;
+    if !modules.projects {
+        projects.clear();
+        waiting.updates = 0;
+    }
+    if !modules.crm {
+        commitments.clear();
+        open_commitments = 0;
+        waiting.commitments = 0;
+    }
     Ok(Day {
         slug,
         name,

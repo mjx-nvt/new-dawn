@@ -34,7 +34,7 @@ export default function Commitments({ slug, items, showWho, empty }: { slug?: st
         <div key={c.id} className={`card ${styles.commitment}`}>
           <div className={styles.text}>
             <p className={styles.what}>
-              {showWho && (c.person_id ? <Link to="/people/$personId" params={{ personId: c.person_id }} className={styles.link}>{c.person_name}</Link> : <span>{c.person_name}</span>)}
+              {showWho && (c.person_id ? <Link to="/crm/people/$personId" params={{ personId: c.person_id }} className={styles.link}>{c.person_name}</Link> : <span>{c.person_name}</span>)}
               {showWho && " · "}
               {c.what}
             </p>

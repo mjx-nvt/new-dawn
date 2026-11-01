@@ -1,3 +1,23 @@
+# Last Build — Modules: Projects and CRM, switched per workspace · release 0.10.0
+_2026-11-01_
+
+## What changed
+- **Modules** (D-059). Workspace → Overview has a new **Modules** group: **Projects** and **CRM**, each On | Off. Off hides the module from the sidebar (its pages open Meetings instead), pauses its agents — the Projects agent after a summary, the commitments pass, the Email reading's project updates and commitments — and leaves it out of Today. Its data stays; On brings everything back. Both are on in every workspace; the setup wizard's first step has the same two rows.
+- **People → CRM.** The sidebar item is now **CRM** (`/crm`; a person at `/crm/people/…`); the old `/people` links redirect. The page itself is unchanged in this release — it becomes Twenty's CRM over the next releases.
+- **Plan v4** is the new `docs/plan.md` (D-058): the Twenty CRM and the Plane project manager rebuilt inside New Dawn, release by release, with the parity tables that say what is the same, adapted or left out. Plan v3 is `docs/plan-v3.md`.
+- Checks: 161 Rust tests pass (the new one covers the default and the round trip of the setting); clippy, tsc and the localhost check are clean.
+- Seen in the dev app, light and dark: the Modules group under the workspace facts; CRM off → the sidebar item gone, Today showing VIFC's project updates and no commitments, `/people` landing on Meetings; CRM on → the item back with its badge, `/people` landing on the CRM page.
+- Review: the architecture review found one must-fix — the person page still used the old route id and would have thrown on open — fixed and seen in the dev app. Its other points were taken too: the meeting menu's "Find project updates" is gone while Projects is off; the Email reading leaves the projects out of the prompt when Projects is off (no wasted model time); a module's page shows nothing for the moment the switch is read instead of flashing; the wizard keeps your Off choice if a later save fails. Left as is: Today and the sidebar still read a paused module's rows before blanking them (harmless).
+
+## Manual steps
+- None. Nothing is installed (the installed app is untouched); update from Settings → About → Check for updates when you want.
+
+## Env / config
+- No migration: the choice is the workspace setting `modules` (`{"projects":true,"crm":true}`; missing = both on).
+- The unattended run for plan v4 is on (state in the memory file `phase3-autorun.md`); it keeps the disk ≥ 4 GB free by clearing build caches.
+
+---
+
 # Last Build — Today: what needs you, across your workspaces · release 0.9.3
 _2026-10-31_
 

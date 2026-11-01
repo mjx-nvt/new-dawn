@@ -208,6 +208,13 @@ export const commands = {
 	dismissEmailTask: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("dismiss_email_task", { slug, id })),
 	/**  What needs the owner today, across every open workspace (D-057). */
 	cockpitToday: () => typedError<Today_Serialize, AppError>(__TAURI_INVOKE("cockpit_today")),
+	/**  Which modules the workspace has on — Projects, CRM (D-059). */
+	getModules: (slug: string) => typedError<Modules, AppError>(__TAURI_INVOKE("get_modules", { slug })),
+	/**
+	 *  Turns the workspace's modules on or off. Off hides the module and pauses its agents; its data
+	 *  stays.
+	 */
+	setModules: (slug: string, modules: Modules) => typedError<Modules, AppError>(__TAURI_INVOKE("set_modules", { slug, modules })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -1332,6 +1339,11 @@ export type ModelStats_Serialize = {
 	model: string,
 	runs: number,
 	avg_ms: number | null,
+};
+
+export type Modules = {
+	projects: boolean,
+	crm: boolean,
 };
 
 /**  What the owner decided for one suspect. */

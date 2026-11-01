@@ -14,6 +14,7 @@ import {
   useSetMeetingFormat,
 } from "../../kernel/bridge/meetings";
 import { useSetMeetingReference } from "../../kernel/bridge/activity";
+import { ALL_MODULES, useModules } from "../../kernel/bridge/modules";
 import { useFindProjectUpdates } from "../../kernel/bridge/projects";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
@@ -56,6 +57,7 @@ export default function MeetingPage() {
   const [confirmRetranscribe, setConfirmRetranscribe] = useState(false);
   const setReference = useSetMeetingReference(workspace?.slug);
   const findUpdates = useFindProjectUpdates(workspace?.slug);
+  const modules = useModules(workspace?.slug).data ?? ALL_MODULES; // a paused module has no menu item (D-059)
 
   if (meeting.error) {
     return (
@@ -154,12 +156,16 @@ export default function MeetingPage() {
                   onSelect: () => (m.status === "recorded" || m.status === "failed" ? retranscribe.mutate({ slug, meetingId }) : setConfirmRetranscribe(true)),
                   disabled: busy || retranscribe.isPending,
                 },
-                {
-                  label: findUpdates.isPending ? "Finding project updates…" : "Find project updates",
-                  onSelect: () => findUpdates.mutate(meetingId),
-                  disabled: m.status !== "summarised" || findUpdates.isPending,
-                  separator: true,
-                },
+                ...(modules.projects
+                  ? [
+                      {
+                        label: findUpdates.isPending ? "Finding project updates…" : "Find project updates",
+                        onSelect: () => findUpdates.mutate(meetingId),
+                        disabled: m.status !== "summarised" || findUpdates.isPending,
+                        separator: true,
+                      },
+                    ]
+                  : []),
                 {
                   label: m.reference ? "Stop using as a reference" : "Use as a reference",
                   onSelect: () => setReference.mutate({ meetingId, on: !m.reference }),

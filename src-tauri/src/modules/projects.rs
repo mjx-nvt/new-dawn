@@ -548,6 +548,9 @@ pub fn follow(app: &AppHandle, slug: &str, meeting_id: &str) {
 pub async fn propose(app: &AppHandle, slug: &str, meeting_id: &str, now: bool) -> Result<u32> {
     let hub = app.state::<WorkspaceHub>();
     let pool = hub.pool(slug)?;
+    if !crate::modules::switches::enabled(&pool).await?.projects {
+        return Ok(0); // the module is off in this workspace (D-059)
+    }
     let folder = hub.workspace(slug).await?.folder_path;
     let open: Vec<Project> = list(&pool)
         .await?

@@ -1,7 +1,9 @@
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useProfile, useSetProfile } from "../../kernel/bridge/profile";
+import { ALL_MODULES, setModules, useModules, type Modules } from "../../kernel/bridge/modules";
 import { useCreateWorkspace, useUpdateWorkspace, useWorkspaces } from "../../kernel/bridge/workspaces";
+import OnOff from "../workspace-settings/OnOff";
 import settings from "../workspace-settings/Settings.module.css";
 import { suggestSlug } from "../workspace-settings/slug";
 import type { StepFrame } from "./TenantSetupPage";
@@ -27,6 +29,11 @@ export default function IdentityStep({ slug, frame, onDone }: { slug?: string; f
   const folder = made ?? slugDraft ?? suggestSlug(name);
   const [you, setYou] = useState("");
   const askName = !!profile && !profile.name;
+  // The modules the workspace has on (D-059): both, unless this step is revisited.
+  const [modules, setModulesDraft] = useState<Modules>(ALL_MODULES);
+  const savedModules = useModules(made ?? undefined).data;
+  // Only a revisit reads the saved choice: after a Create whose later saves failed, the draft stays.
+  useEffect(() => void (slug && savedModules && setModulesDraft(savedModules)), [slug, savedModules]);
 
   const next = useMutation({
     mutationFn: async () => {
@@ -36,6 +43,7 @@ export default function IdentityStep({ slug, frame, onDone }: { slug?: string; f
         setCreated(target);
       }
       await update.mutateAsync({ slug: target, patch: { owner_title: title.trim(), name: made ? name.trim() : null } });
+      await setModules(target, modules);
       if (askName && you.trim()) await setProfile.mutateAsync({ name: you.trim() });
       return target;
     },
@@ -71,6 +79,16 @@ export default function IdentityStep({ slug, frame, onDone }: { slug?: string; f
         )}
         <Row label="Your title here" hint="Optional. With your name on the minutes and in your email sign-off.">
           <input className={`input ${settings.rowInput}`} value={title} maxLength={100} placeholder="Not yet captured" aria-label="Your title here" onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter} />
+        </Row>
+      </div>
+
+      <p className="groupTitle">Modules</p>
+      <div className="group">
+        <Row label="Projects" hint="The projects you follow; the Projects agent proposes their updates after each summary.">
+          <OnOff label="Projects" value={modules.projects} onChange={(projects) => setModulesDraft({ ...modules, projects })} />
+        </Row>
+        <Row label="CRM" hint="The people you meet and their commitments. You can switch either off later in Workspace → Overview.">
+          <OnOff label="CRM" value={modules.crm} onChange={(crm) => setModulesDraft({ ...modules, crm })} />
         </Row>
       </div>
     </>,

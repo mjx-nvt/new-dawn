@@ -68,7 +68,7 @@ export default function TodayPage() {
               </Link>
             )}
             {d.waiting.commitments > 0 && (
-              <Link to="/people" className={styles.link} aria-label={many ? `${plural(d.waiting.commitments, "commitment")} in ${d.name}` : undefined} onClick={via(d.slug)}>
+              <Link to="/crm" className={styles.link} aria-label={many ? `${plural(d.waiting.commitments, "commitment")} in ${d.name}` : undefined} onClick={via(d.slug)}>
                 {plural(d.waiting.commitments, "commitment")}
               </Link>
             )}
@@ -99,18 +99,18 @@ export default function TodayPage() {
             </Row>
           );
           return c.person_id ? (
-            <Link key={c.id} to="/people/$personId" params={{ personId: c.person_id }} className={styles.row} onClick={via(day.slug)}>
+            <Link key={c.id} to="/crm/people/$personId" params={{ personId: c.person_id }} className={styles.row} onClick={via(day.slug)}>
               {row}
             </Link>
           ) : (
-            <Link key={c.id} to="/people" className={styles.row} onClick={via(day.slug)}>
+            <Link key={c.id} to="/crm" className={styles.row} onClick={via(day.slug)}>
               {row}
             </Link>
           );
         })}
         {more > 0 && (
           <p className={`fieldHint ${styles.more}`}>
-            {plural(more, "more open commitment")} in <Link to="/people">People</Link>
+            {plural(more, "more open commitment")} in <Link to="/crm">CRM</Link>
             {many ? " (each workspace's own)" : ""}
           </p>
         )}

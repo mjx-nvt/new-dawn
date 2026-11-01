@@ -384,7 +384,9 @@ async fn read(app: &AppHandle, slug: &str, email: Email, source: EmailSource) ->
 
     let folder = hub.workspace(slug).await?.folder_path;
     let owner = profile::owner(&hub, slug).await?;
-    let open = projects::open(&pool).await?;
+    // A module that's off proposes nothing (D-059): its projects stay out of the prompt too.
+    let modules = crate::modules::switches::enabled(&pool).await?;
+    let open = if modules.projects { projects::open(&pool).await? } else { Vec::new() };
     let guide = agents::guide(std::path::Path::new(&folder), Agent::Inbox);
     let task = Task {
         workspace_slug: Some(slug.to_owned()),
@@ -465,7 +467,11 @@ async fn read(app: &AppHandle, slug: &str, email: Email, source: EmailSource) ->
         }
     }
     let said = said(&email);
-    for u in found.project_updates.iter().take(EACH) {
+    let (updates, commitments) = (
+        if modules.projects { EACH } else { 0 },
+        if modules.crm { EACH } else { 0 },
+    );
+    for u in found.project_updates.iter().take(updates) {
         let Some(project) = projects::named(&open, &u.project) else {
             continue;
         };
@@ -479,7 +485,7 @@ async fn read(app: &AppHandle, slug: &str, email: Email, source: EmailSource) ->
             Err(err) => tracing::warn!("a project update from email {id}: {err:#}"),
         }
     }
-    for c in found.commitments.iter().take(EACH) {
+    for c in found.commitments.iter().take(commitments) {
         match crm::add_from_email(&pool, &id, &c.who, &c.what, &c.due, &known, owner.as_ref()).await
         {
             Ok(true) => n_commitments += 1,

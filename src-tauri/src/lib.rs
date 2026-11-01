@@ -61,6 +61,7 @@ mod modules {
     pub mod model_check;
     pub mod people;
     pub mod projects;
+    pub mod switches;
     pub mod tasks;
     pub mod vocabulary;
 }
@@ -88,6 +89,7 @@ mod commands {
     pub mod people;
     pub mod profile;
     pub mod projects;
+    pub mod switches;
     pub mod recorder;
     pub mod storage;
     pub mod summary;
@@ -212,6 +214,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::inbox::add_email_task,
             commands::inbox::dismiss_email_task,
             commands::cockpit::cockpit_today,
+            commands::switches::get_modules,
+            commands::switches::set_modules,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

@@ -6,7 +6,7 @@ import { formatWhen } from "../meetings/format";
 import Commitments from "./Commitments";
 import styles from "./People.module.css";
 
-const route = getRouteApi("/shell/people/$personId");
+const route = getRouteApi("/shell/crm/people/$personId");
 
 /** A person's page (D-055): what they owe you (waiting, open, done), the meetings they attended,
  *  and your notes. Every section shows even when empty. */

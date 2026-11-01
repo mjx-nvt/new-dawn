@@ -2,6 +2,32 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-059 — Modules per workspace: Projects and CRM, on by default; off hides, pauses and keeps
+_2026-11-01_
+
+**Context** (plan v4 §3, §5.1): the owner works for several companies, and not every workspace needs project management or a CRM — and both are about to grow into Twenty's and Plane's full shape (D-058). People becomes the CRM module's first page.
+
+**Decision — a workspace setting, read through the hub**: the `setting` key `modules` (`{"projects": true, "crm": true}`; a missing or unreadable value means both on) lives in the workspace's own database, so the choice travels with the workspace folder and its backups. Workspace → Overview → Modules has the two On | Off rows; the setup wizard's first step has the same, on. Commands `get_modules` / `set_modules`; `modules::switches::enabled` is the one reader.
+
+**Decision — off means hidden and paused, never deleted**: the sidebar item goes and `ModuleGate` sends the module's routes to Meetings; the Projects agent (`projects::propose`) and the commitments pass (`crm::sync`) return at once; the Email reading keeps proposing the owner's tasks but no project updates or commitments; Today blanks that workspace's projects, commitments and their waiting counts. The rows stay, and everything returns when the module is on again. The people memory (Workspace → People) is not part of the CRM module: transcripts and attendees need it either way.
+
+**Decision — the app's own parts are not modules**: Meetings, Live, Tasks, Email, Today and Workspace are always there.
+
+**Means for future work**: every later release of the two tracks checks the switch where it adds an agent, an automation, a Today section or a ⌘K action; the record engine (0.10.1) keeps its tables whatever the switch says.
+
+---
+
+## D-058 — Twenty and Plane rebuilt inside New Dawn, not embedded
+_2026-11-01_
+
+**Context**: the owner asked for Twenty (CRM) and Plane (project management) "from GitHub, integrated". Both are server products: Twenty is a NestJS server and worker with Postgres 16 and Redis (4 containers, ≥ 2 GB); Plane is Django and Celery with Postgres 15, Valkey, RabbitMQ, an object store, three React apps and a live server (13 containers, 4–8 GB). This Mac has 16 GB and runs a 9 B model beside them; both are AGPL-3.0 and New Dawn is distributed; their UIs cannot follow D-033.
+
+**Decision**: New Dawn rebuilds **the same modules, features and flows** as the two open-source repositories (Plane: its community edition) in its own stack — Rust + SQLite per workspace, React + CSS modules, DM Sans — written from their documented behaviour, structure and data formats, **never from their code** (no line copied or translated). Differences are only what the stack forces, each marked in `docs/plan.md` §3–4: one owner (members are you and the workspace's people), nothing beyond localhost (Apple Mail and meetings stand in for their cloud connectors; HTTP, webhooks and the API are local only), the macOS theme. Their paid tiers are listed, not built. The first draft's "sync with a running Twenty or Plane" was dropped at the owner's request; CSV and the local API are the bridges. Parity is checked release by release and audited at the end (0.12.0, `docs/parity.md`).
+
+**Means for future work**: when one of their features is unclear, read their docs (and the repository only for names and formats), build what the docs describe, and record any deliberate difference in the parity tables.
+
+---
+
 ## D-057 — Today: what needs the owner, across every workspace, on one page
 _2026-10-31_
 

@@ -224,6 +224,9 @@ pub async fn add_from_email(
 /// One meeting's commitments from its stored summary (after a summary or an edit of it).
 pub async fn sync(hub: &WorkspaceHub, slug: &str, meeting_id: &str) -> Result<u32> {
     let pool = hub.pool(slug)?;
+    if !crate::modules::switches::enabled(&pool).await?.crm {
+        return Ok(0); // the module is off in this workspace (D-059)
+    }
     let Some(summary) = crate::modules::meetings::summary(&pool, meeting_id).await? else {
         return Ok(0);
     };

@@ -3,6 +3,7 @@ import { getOnboardingDone } from "./kernel/bridge/onboarding";
 import type { SettingsTab } from "./kernel/bridge/settings";
 import type { SummaryLang } from "./kernel/bridge/summary";
 import AppLayout from "./kernel/shell/AppLayout";
+import ModuleGate from "./kernel/shell/ModuleGate";
 import LivePage from "./modules/live/LivePage";
 import MeetingPage, { MEETING_TABS, type MeetingTab } from "./modules/meetings/MeetingPage";
 import MeetingsPage, { type MeetingsSearch } from "./modules/meetings/MeetingsPage";
@@ -98,30 +99,63 @@ const projectsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects",
   validateSearch: (search: Record<string, unknown>): { new?: true } => (search.new === true ? { new: true as const } : {}),
-  component: ProjectsPage,
+  component: () => (
+    <ModuleGate module="projects">
+      <ProjectsPage />
+    </ModuleGate>
+  ),
   staticData: { title: "Projects" },
 });
 
 const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
-  component: ProjectPage,
+  component: () => (
+    <ModuleGate module="projects">
+      <ProjectPage />
+    </ModuleGate>
+  ),
   staticData: { title: "Project", breadcrumb: "Projects" },
 });
 
-// People as dossiers: last contact, commitments, notes (D-055).
+// The CRM module (D-059): people as dossiers — last contact, commitments, notes (D-055).
 const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
-  path: "/people",
-  component: PeoplePage,
-  staticData: { title: "People" },
+  path: "/crm",
+  component: () => (
+    <ModuleGate module="crm">
+      <PeoplePage />
+    </ModuleGate>
+  ),
+  staticData: { title: "CRM" },
 });
 
 const personRoute = createRoute({
   getParentRoute: () => shellRoute,
+  path: "/crm/people/$personId",
+  component: () => (
+    <ModuleGate module="crm">
+      <PersonPage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Person", breadcrumb: "CRM" },
+});
+
+// The People routes of 0.9.x, kept for old links.
+const peopleRedirect = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/people",
+  beforeLoad: () => {
+    throw redirect({ to: "/crm" });
+  },
+});
+
+const personRedirect = createRoute({
+  getParentRoute: () => shellRoute,
   path: "/people/$personId",
-  component: PersonPage,
-  staticData: { title: "Person", breadcrumb: "People" },
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/crm/people/$personId", params: { personId: params.personId } });
+  },
 });
 
 // Emails you give New Dawn to read: tasks, project updates, commitments (D-056).
@@ -183,7 +217,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

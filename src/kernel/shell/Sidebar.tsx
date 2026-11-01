@@ -4,6 +4,7 @@ import { openSettings } from "../bridge/settings";
 import { useOpenTaskCount } from "../bridge/tasks";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import { useWaitingCommitments } from "../bridge/crm";
+import { ALL_MODULES, useModules } from "../bridge/modules";
 import { useProjects } from "../bridge/projects";
 import { CodeIcon, CollapseIcon, LiveIcon, MailIcon, MeetingsIcon, PeopleIcon, ProjectsIcon, SettingsIcon, TasksIcon, TodayIcon, WorkspaceIcon } from "./icons";
 import styles from "./Sidebar.module.css";
@@ -33,6 +34,7 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
   const projects = useProjects(workspace?.slug);
   const waiting = (projects.data ?? []).reduce((n, p) => n + p.waiting, 0); // updates waiting for you
   const owed = useWaitingCommitments(workspace?.slug).data?.length ?? 0; // commitments waiting for you
+  const modules = useModules(workspace?.slug).data ?? ALL_MODULES; // which modules this workspace has on (D-059)
 
   return (
     <nav className={iconsOnly ? `${styles.sidebar} ${styles.rail}` : styles.sidebar} inert={hidden} aria-label="Sidebar">
@@ -60,26 +62,30 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
           {label("Tasks", <TasksIcon />)}
           {due > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{due}</span>)}
         </Link>
-        <Link
-          to="/projects"
-          className={styles.item}
-          activeProps={{ className: styles.active }}
-          title={tip(waiting ? `Projects · ${waiting} updates waiting` : "Projects")}
-          aria-label={waiting ? `Projects, ${waiting} updates waiting` : undefined}
-        >
-          {label("Projects", <ProjectsIcon />)}
-          {waiting > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{waiting}</span>)}
-        </Link>
-        <Link
-          to="/people"
-          className={styles.item}
-          activeProps={{ className: styles.active }}
-          title={tip(owed ? `People · ${owed} commitments waiting` : "People")}
-          aria-label={owed ? `People, ${owed} commitments waiting` : undefined}
-        >
-          {label("People", <PeopleIcon />)}
-          {owed > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{owed}</span>)}
-        </Link>
+        {modules.projects && (
+          <Link
+            to="/projects"
+            className={styles.item}
+            activeProps={{ className: styles.active }}
+            title={tip(waiting ? `Projects · ${waiting} updates waiting` : "Projects")}
+            aria-label={waiting ? `Projects, ${waiting} updates waiting` : undefined}
+          >
+            {label("Projects", <ProjectsIcon />)}
+            {waiting > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{waiting}</span>)}
+          </Link>
+        )}
+        {modules.crm && (
+          <Link
+            to="/crm"
+            className={styles.item}
+            activeProps={{ className: styles.active }}
+            title={tip(owed ? `CRM · ${owed} commitments waiting` : "CRM")}
+            aria-label={owed ? `CRM, ${owed} commitments waiting` : undefined}
+          >
+            {label("CRM", <PeopleIcon />)}
+            {owed > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{owed}</span>)}
+          </Link>
+        )}
         <Link to="/email" className={styles.item} activeProps={{ className: styles.active }} title={tip("Email")}>
           {label("Email", <MailIcon />)}
         </Link>
