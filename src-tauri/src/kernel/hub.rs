@@ -78,6 +78,8 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
 pub struct WorkspaceHub {
     registry: Registry,
     pools: RwLock<HashMap<String, SqlitePool>>,
+    /// One workspace opens at a time: the engine's first-open carry-overs (D-060) run once.
+    opening: tokio::sync::Mutex<()>,
 }
 
 impl WorkspaceHub {
@@ -87,6 +89,7 @@ impl WorkspaceHub {
         Ok(Self {
             registry: Registry::open(&root).await?,
             pools: RwLock::default(),
+            opening: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -258,8 +261,18 @@ impl WorkspaceHub {
         {
             return Ok(pool.clone());
         }
+        let _opening = self.opening.lock().await;
+        if let Some(pool) = self.pools.read().expect("hub lock poisoned").get(&workspace.slug) {
+            return Ok(pool.clone()); // opened while we waited
+        }
         let path = Path::new(&workspace.folder_path).join("workspace.db");
         let pool = open_pool(&path, &WORKSPACE_MIGRATOR).await?;
+        // The record engine's metadata and backfills (D-060); a failure is logged, the
+        // workspace still opens (its CRM pages say what is wrong).
+        let owner = self.registry.setting("owner_name").await?.unwrap_or_default();
+        if let Err(err) = crate::kernel::records::prepare(&pool, &owner).await {
+            tracing::error!("record engine of {}: {err:#}", workspace.slug);
+        }
         let existing = {
             let mut pools = self.pools.write().expect("hub lock poisoned");
             match pools.get(&workspace.slug) {

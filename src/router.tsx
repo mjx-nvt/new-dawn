@@ -13,7 +13,7 @@ import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboardi
 import TasksPage from "./modules/tasks/TasksPage";
 import ProjectsPage from "./modules/projects/ProjectsPage";
 import ProjectPage from "./modules/projects/ProjectPage";
-import PeoplePage from "./modules/people/PeoplePage";
+import CrmPage from "./modules/crm/CrmPage";
 import PersonPage from "./modules/people/PersonPage";
 import EmailPage from "./modules/email/EmailPage";
 import TodayPage from "./modules/today/TodayPage";
@@ -118,13 +118,14 @@ const projectRoute = createRoute({
   staticData: { title: "Project", breadcrumb: "Projects" },
 });
 
-// The CRM module (D-059): people as dossiers — last contact, commitments, notes (D-055).
+// The CRM module (D-059, D-060): Twenty's objects as tabs, and the commitments (D-055).
 const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/crm",
+  validateSearch: (search: Record<string, unknown>): { tab: string } => ({ tab: typeof search.tab === "string" && search.tab ? search.tab : "people" }),
   component: () => (
     <ModuleGate module="crm">
-      <PeoplePage />
+      <CrmPage />
     </ModuleGate>
   ),
   staticData: { title: "CRM" },
@@ -146,7 +147,7 @@ const peopleRedirect = createRoute({
   getParentRoute: () => shellRoute,
   path: "/people",
   beforeLoad: () => {
-    throw redirect({ to: "/crm" });
+    throw redirect({ to: "/crm", search: { tab: "people" } });
   },
 });
 

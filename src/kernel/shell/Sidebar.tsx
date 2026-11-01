@@ -77,6 +77,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
         {modules.crm && (
           <Link
             to="/crm"
+            search={{ tab: "people" }}
+            activeOptions={{ includeSearch: false }}
             className={styles.item}
             activeProps={{ className: styles.active }}
             title={tip(owed ? `CRM · ${owed} commitments waiting` : "CRM")}

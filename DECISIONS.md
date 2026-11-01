@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-060 — The record engine: Twenty's data model in SQLite, every object a real table
+_2026-11-01_
+
+**Context** (plan v4 §5.2, 0.10.1): the CRM module rebuilds Twenty, whose heart is a metadata-driven data model — standard and custom objects, 20+ field types, relations, views over any of them. Twenty keeps that in Postgres with a schema per workspace; New Dawn keeps one SQLite file per workspace.
+
+**Decision — objects and fields are metadata, records are rows of real tables**: `object_meta` and `field_meta` (migration 0020) describe every object; the standard ones (person, company, opportunity, note, task, and the system objects noteTarget, taskTarget, workspaceMember, attachment, favorite, timelineActivity) are declared in Rust (`kernel/records/standard.rs`) and synced into the metadata at every workspace open; a custom object is a real table made at run time, a custom field a real column (0.10.5). A composite field (full name, emails, phones, links, address, currency, actor) is a few columns side by side, `<column>_<part>`, as Twenty flattens them; a many-to-one relation is `<column>_id`; a one-to-many is its inverse. Every record table has `position`, the `created_by_*` actor (you, an agent, an import, a workflow, the API) and `deleted_at` (soft delete: Deleted records, restore, delete for good).
+
+**Decision — one query layer, one search index, one timeline**: `kernel/records/query.rs` builds every list from Twenty-shaped filter JSON (AND/OR groups, per-type operators incl. relative dates), sorts, search and pages; create / update / delete / restore / destroy validate per type, keep the FTS5 `search_index` in step (no triggers: custom tables come and go) and write `timeline_activity` rows with the diff. Records cross the bridge as JSON (`unknown` in TypeScript), so the UI is metadata-driven: one table, one cell per field type, for standard and custom objects alike.
+
+**Decision — the people memory and Tasks keep their columns**: `person.name`, `title`, `organisation`, `aliases_json` and `task.done_at` stay, because the meeting pipeline reads them; the engine keeps `name` = first + last, `organisation` = the company's name and (through triggers) `task.status` ↔ `done_at`, and the memory's editor writes the split name and the company link. Organisations became companies at the first open; the one workspace member is the owner.
+
+**Means for future work**: views (0.10.2–0.10.3), record pages (0.10.4), the data model editor with run-time DDL (0.10.5) and the local API (0.10.14) all read the same metadata; an agent that proposes a record goes through `query::create` with its own actor. Select colours are Twenty's names on the Majoris palette (green, red, yellow, orange keep their meaning; the rest read neutral).
+
+---
+
 ## D-059 — Modules per workspace: Projects and CRM, on by default; off hides, pauses and keeps
 _2026-11-01_
 

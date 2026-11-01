@@ -6,7 +6,6 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use sqlx::SqlitePool;
-use unicode_normalization::UnicodeNormalization;
 
 use crate::error::AppError;
 use crate::kernel::profile::Owner;
@@ -58,19 +57,7 @@ pub struct PersonInput {
 
 /// "  Nguyễn  Văn Tiến " → "nguyen van tien": case, accents, đ and spacing don't matter.
 pub fn fold(text: &str) -> String {
-    let stripped: String = text
-        .nfd()
-        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
-        .map(|c| match c {
-            'đ' | 'Đ' => 'd',
-            c => c,
-        })
-        .collect();
-    stripped
-        .to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    crate::kernel::text::fold(text)
 }
 
 /// The words of `text`, folded.
@@ -85,7 +72,7 @@ pub fn words(text: &str) -> Vec<String> {
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Person>> {
     let rows: Vec<Row> = sqlx::query_as(
         "SELECT id, name, title, organisation, aliases_json, updated_at FROM person \
-         ORDER BY name COLLATE NOCASE",
+         WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE",
     )
     .fetch_all(pool)
     .await?;
@@ -150,16 +137,23 @@ fn prepare(
 
 pub async fn save(pool: &SqlitePool, input: PersonInput) -> Result<Person> {
     let (name, title, organisation, aliases) = prepare(&list(pool).await?, &input, None)?;
+    // Twenty's shape beside the memory's (D-060): the name split, the organisation as a company.
+    let (first, last) = crate::kernel::records::split_name(&name);
+    let company_id = company_for(pool, &organisation).await?;
     let id = match &input.id {
         Some(id) => {
             let done = sqlx::query(
                 "UPDATE person SET name = ?, title = ?, organisation = ?, aliases_json = ?, \
+                 name_first = ?, name_last = ?, company_id = ?, \
                  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
             )
             .bind(&name)
             .bind(&title)
             .bind(&organisation)
             .bind(&aliases)
+            .bind(&first)
+            .bind(&last)
+            .bind(&company_id)
             .bind(id)
             .execute(pool)
             .await?;
@@ -171,24 +165,54 @@ pub async fn save(pool: &SqlitePool, input: PersonInput) -> Result<Person> {
         None => {
             let id = crate::modules::meetings::new_id();
             sqlx::query(
-                "INSERT INTO person (id, name, title, organisation, aliases_json) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO person (id, name, title, organisation, aliases_json, name_first, name_last, company_id) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(&id)
             .bind(&name)
             .bind(&title)
             .bind(&organisation)
             .bind(&aliases)
+            .bind(&first)
+            .bind(&last)
+            .bind(&company_id)
             .execute(pool)
             .await?;
             id
         }
     };
+    // The engine's search index doesn't see this writer: tell it (D-060).
+    crate::kernel::records::reindex(pool, "person", &id).await?;
     get(pool, &id).await
+}
+
+/// The company an organisation text names: found by its folded name, else made (D-060).
+pub async fn company_for(pool: &SqlitePool, organisation: &str) -> Result<Option<String>> {
+    let organisation = organisation.trim();
+    if organisation.is_empty() {
+        return Ok(None);
+    }
+    let folded = fold(organisation);
+    let known: Vec<(String, String)> = sqlx::query_as("SELECT id, name FROM company WHERE deleted_at IS NULL")
+        .fetch_all(pool)
+        .await?;
+    if let Some((id, _)) = known.into_iter().find(|(_, n)| fold(n) == folded) {
+        return Ok(Some(id));
+    }
+    let company = crate::kernel::records::object(pool, "company").await?;
+    let record = crate::kernel::records::query::create(
+        pool,
+        &company,
+        &serde_json::json!({ "name": organisation }),
+        &crate::kernel::records::Actor::system("New Dawn"),
+    )
+    .await?;
+    Ok(record.get("id").and_then(serde_json::Value::as_str).map(str::to_owned))
 }
 
 async fn get(pool: &SqlitePool, id: &str) -> Result<Person> {
     let row: Option<Row> = sqlx::query_as(
-        "SELECT id, name, title, organisation, aliases_json, updated_at FROM person WHERE id = ?",
+        "SELECT id, name, title, organisation, aliases_json, updated_at FROM person WHERE id = ? AND deleted_at IS NULL",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -225,15 +249,21 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         aliases,
     };
     let (name, title, organisation, aliases) = prepare(&list(pool).await?, &input, Some(&o.id))?;
+    let (first, last) = crate::kernel::records::split_name(&name);
+    let company_id = company_for(pool, &organisation).await?;
     let mut tx = pool.begin().await?;
     sqlx::query(
         "UPDATE person SET name = ?, title = ?, organisation = ?, aliases_json = ?, \
+         name_first = ?, name_last = ?, company_id = ?, \
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     )
     .bind(name)
     .bind(title)
     .bind(organisation)
     .bind(aliases)
+    .bind(first)
+    .bind(last)
+    .bind(company_id)
     .bind(&k.id)
     .execute(&mut *tx)
     .await?;
@@ -256,6 +286,7 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
+    crate::kernel::records::reindex(pool, "person", &k.id).await?;
     get(pool, &k.id).await
 }
 

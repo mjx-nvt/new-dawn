@@ -41,6 +41,8 @@ mod kernel {
     pub mod notify;
     pub mod permissions;
     pub mod profile;
+    pub mod records;
+    pub mod text;
     pub mod registry;
     pub mod storage;
     pub mod tray;
@@ -91,6 +93,7 @@ mod commands {
     pub mod projects;
     pub mod switches;
     pub mod recorder;
+    pub mod records;
     pub mod storage;
     pub mod summary;
     pub mod tasks;
@@ -216,6 +219,16 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::cockpit::cockpit_today,
             commands::switches::get_modules,
             commands::switches::set_modules,
+            commands::records::list_objects,
+            commands::records::get_object,
+            commands::records::list_records,
+            commands::records::get_record,
+            commands::records::create_record,
+            commands::records::update_record,
+            commands::records::delete_record,
+            commands::records::restore_record,
+            commands::records::destroy_record,
+            commands::records::search_records,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

@@ -215,6 +215,21 @@ export const commands = {
 	 *  stays.
 	 */
 	setModules: (slug: string, modules: Modules) => typedError<Modules, AppError>(__TAURI_INVOKE("set_modules", { slug, modules })),
+	/**  Every object of the workspace's CRM, system ones included (D-060). */
+	listObjects: (slug: string) => typedError<ObjectMeta_Serialize[], AppError>(__TAURI_INVOKE("list_objects", { slug })),
+	/**  An object with its fields, by singular name, plural name or id. */
+	getObject: (slug: string, object: string) => typedError<ObjectDef_Serialize, AppError>(__TAURI_INVOKE("get_object", { slug, object })),
+	listRecords: (slug: string, object: string, query: Query_Deserialize) => typedError<Page, AppError>(__TAURI_INVOKE("list_records", { slug, object, query })),
+	getRecord: (slug: string, object: string, id: string) => typedError<Json, AppError>(__TAURI_INVOKE("get_record", { slug, object, id })),
+	createRecord: (slug: string, object: string, data: Json) => typedError<Json, AppError>(__TAURI_INVOKE("create_record", { slug, object, data })),
+	updateRecord: (slug: string, object: string, id: string, data: Json) => typedError<Json, AppError>(__TAURI_INVOKE("update_record", { slug, object, id, data })),
+	/**  A soft delete: the record waits under Deleted records. */
+	deleteRecord: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_record", { slug, object, id })),
+	restoreRecord: (slug: string, object: string, id: string) => typedError<Json, AppError>(__TAURI_INVOKE("restore_record", { slug, object, id })),
+	/**  Deletes for good. */
+	destroyRecord: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("destroy_record", { slug, object, id })),
+	/**  Records of every object whose words match, best first (`/`). */
+	searchRecords: (slug: string, text: string, limit: number) => typedError<Hit[], AppError>(__TAURI_INVOKE("search_records", { slug, text, limit })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -916,6 +931,81 @@ export type ExportOptions_Serialize = {
 	file_name: string | null,
 };
 
+/**  A field of an object (`field_meta`), with its options parsed. */
+export type FieldMeta = FieldMeta_Serialize | FieldMeta_Deserialize;
+
+/**  A field of an object (`field_meta`), with its options parsed. */
+export type FieldMeta_Deserialize = {
+	id: string,
+	object_id: string,
+	name: string,
+	label: string,
+	type: FieldType,
+	/**  The base column name; composites and relations derive theirs from it ('' = no column). */
+	column: string,
+	options: FieldOptions_Deserialize,
+	default_value?: Json | null,
+	is_custom: boolean,
+	is_active: boolean,
+	is_nullable: boolean,
+	is_unique: boolean,
+	is_system: boolean,
+	position: number | null,
+	description: string,
+	icon: string,
+};
+
+/**  A field of an object (`field_meta`), with its options parsed. */
+export type FieldMeta_Serialize = {
+	id: string,
+	object_id: string,
+	name: string,
+	label: string,
+	type: FieldType,
+	/**  The base column name; composites and relations derive theirs from it ('' = no column). */
+	column: string,
+	options: FieldOptions_Serialize,
+	default_value: Json | null,
+	is_custom: boolean,
+	is_active: boolean,
+	is_nullable: boolean,
+	is_unique: boolean,
+	is_system: boolean,
+	position: number | null,
+	description: string,
+	icon: string,
+};
+
+export type FieldOptions = FieldOptions_Serialize | FieldOptions_Deserialize;
+
+export type FieldOptions_Deserialize = {
+	/**  SELECT / MULTI_SELECT options, in order. */
+	select?: SelectOption[],
+	/**  NUMBER: decimals shown. */
+	decimals?: number | null,
+	/**  CURRENCY: the default code; PHONES: the default country (ISO 3166-1 alpha-2). */
+	currency?: string | null,
+	country?: string | null,
+	/**  TEXT shown on several rows (Twenty's "Long text"). */
+	multiline?: boolean | null,
+	relation?: RelationOptions_Deserialize | null,
+};
+
+export type FieldOptions_Serialize = {
+	/**  SELECT / MULTI_SELECT options, in order. */
+	select?: SelectOption[],
+	/**  NUMBER: decimals shown. */
+	decimals?: number,
+	/**  CURRENCY: the default code; PHONES: the default country (ISO 3166-1 alpha-2). */
+	currency?: string,
+	country?: string,
+	/**  TEXT shown on several rows (Twenty's "Long text"). */
+	multiline?: boolean,
+	relation?: RelationOptions_Serialize,
+};
+
+export type FieldType = "TEXT" | "LONG_TEXT" | "RICH_TEXT" | "NUMBER" | "BOOLEAN" | "DATE" | "DATE_TIME" | "SELECT" | "MULTI_SELECT" | "CURRENCY" | "LINKS" | "DOMAIN" | "EMAILS" | "PHONES" | "ADDRESS" | "RATING" | "RELATION" | "ARRAY" | "JSON" | "FULL_NAME" | "ACTOR" | "UUID" | "POSITION";
+
 /**  One line of figures: what it measures, for the model in use and the candidate. */
 export type Figure = {
 	label: string,
@@ -939,6 +1029,11 @@ export type Fonts_Serialize = {
 
 export type GlassStatus = "liquid_glass" | "vibrancy" | "none";
 
+export type Hit = {
+	object: string,
+	record_id: string,
+};
+
 export type InstalledModel = {
 	name: string,
 	size_mb: number,
@@ -946,6 +1041,12 @@ export type InstalledModel = {
 
 /**  A meeting's long job: the activity list shows its progress and can stop it. */
 export type JobKind = "transcription" | "summary";
+
+/**
+ *  A record's JSON as the engine reads and writes it (its shape comes from the metadata, so the
+ *  UI sees `unknown` and narrows by field type).
+ */
+export type Json = unknown;
 
 /**
  *  How the owner judged an agent's work on one model (D-052): of `judged` pieces of work —
@@ -1392,6 +1493,62 @@ export type NewProject_Serialize = {
 	milestone_due: string | null,
 };
 
+/**  An object with its fields, as the query layer needs it. */
+export type ObjectDef = ObjectDef_Serialize | ObjectDef_Deserialize;
+
+/**  An object with its fields, as the query layer needs it. */
+export type ObjectDef_Deserialize = {
+	meta: ObjectMeta_Deserialize,
+	fields: FieldMeta_Deserialize[],
+};
+
+/**  An object with its fields, as the query layer needs it. */
+export type ObjectDef_Serialize = {
+	meta: ObjectMeta_Serialize,
+	fields: FieldMeta_Serialize[],
+};
+
+/**  An object: a table and its fields (`object_meta`). */
+export type ObjectMeta = ObjectMeta_Serialize | ObjectMeta_Deserialize;
+
+/**  An object: a table and its fields (`object_meta`). */
+export type ObjectMeta_Deserialize = {
+	id: string,
+	name_singular: string,
+	name_plural: string,
+	label_singular: string,
+	label_plural: string,
+	icon: string,
+	description: string,
+	table_name: string,
+	is_custom: boolean,
+	is_active: boolean,
+	/**  Hidden from the sidebar and the data model's list (targets, favorites, the timeline…). */
+	is_system: boolean,
+	label_identifier_field_id?: string | null,
+	image_identifier_field_id?: string | null,
+	position: number | null,
+};
+
+/**  An object: a table and its fields (`object_meta`). */
+export type ObjectMeta_Serialize = {
+	id: string,
+	name_singular: string,
+	name_plural: string,
+	label_singular: string,
+	label_plural: string,
+	icon: string,
+	description: string,
+	table_name: string,
+	is_custom: boolean,
+	is_active: boolean,
+	/**  Hidden from the sidebar and the data model's list (targets, favorites, the timeline…). */
+	is_system: boolean,
+	label_identifier_field_id: string | null,
+	image_identifier_field_id: string | null,
+	position: number | null,
+};
+
 /**  The Qwen download ended: `error` is None on success. */
 export type OllamaPullFinished = OllamaPullFinished_Serialize | OllamaPullFinished_Deserialize;
 
@@ -1459,6 +1616,11 @@ export type Pace =
  *  priority, the text model unloaded sooner.
  */
 "gentle";
+
+export type Page = {
+	records: Json[],
+	total: number,
+};
 
 /**  A blind pair as the owner sees it. */
 export type Pair = Pair_Serialize | Pair_Deserialize;
@@ -1717,6 +1879,43 @@ export type Project_Serialize = {
 export type ProposalStatus = "proposed" | "added" | "dismissed";
 
 /**
+ *  What a list asks for. The filter is Twenty-shaped JSON: `{"and": [...]}`, `{"or": [...]}`,
+ *  `{"not": {...}}` or `{"field": "city", "sub": null, "op": "contains", "value": "Hanoi"}`
+ *  (`sub` names a composite's part, e.g. `addressCity`).
+ */
+export type Query = Query_Serialize | Query_Deserialize;
+
+/**
+ *  What a list asks for. The filter is Twenty-shaped JSON: `{"and": [...]}`, `{"or": [...]}`,
+ *  `{"not": {...}}` or `{"field": "city", "sub": null, "op": "contains", "value": "Hanoi"}`
+ *  (`sub` names a composite's part, e.g. `addressCity`).
+ */
+export type Query_Deserialize = {
+	filter?: Json | null,
+	sort?: Sort_Deserialize[],
+	limit?: number | null,
+	offset?: number | null,
+	search?: string | null,
+	/**  The deleted records instead of the live ones. */
+	deleted?: boolean,
+};
+
+/**
+ *  What a list asks for. The filter is Twenty-shaped JSON: `{"and": [...]}`, `{"or": [...]}`,
+ *  `{"not": {...}}` or `{"field": "city", "sub": null, "op": "contains", "value": "Hanoi"}`
+ *  (`sub` names a composite's part, e.g. `addressCity`).
+ */
+export type Query_Serialize = {
+	filter: Json | null,
+	sort: Sort_Serialize[],
+	limit: number | null,
+	offset: number | null,
+	search: string | null,
+	/**  The deleted records instead of the live ones. */
+	deleted: boolean,
+};
+
+/**
  *  The current or last quick translation, kept with its lines so the Live page can show it once
  *  it has ended — after a reload of the window too.
  */
@@ -1821,6 +2020,30 @@ export type Reference = {
 	held_on: string,
 };
 
+export type RelationKind = "MANY_TO_ONE" | "ONE_TO_MANY";
+
+export type RelationOptions = RelationOptions_Serialize | RelationOptions_Deserialize;
+
+export type RelationOptions_Deserialize = {
+	/**  The other object's `name_singular`. */
+	target: string,
+	kind: RelationKind,
+	/**  The field on the other object that shows this relation from its side. */
+	inverse?: string | null,
+	/**  A one-to-many that passes through a junction object (Twenty's many-to-many). */
+	junction?: boolean,
+};
+
+export type RelationOptions_Serialize = {
+	/**  The other object's `name_singular`. */
+	target: string,
+	kind: RelationKind,
+	/**  The field on the other object that shows this relation from its side. */
+	inverse?: string,
+	/**  A one-to-many that passes through a junction object (Twenty's many-to-many). */
+	junction: boolean,
+};
+
 export type Section = Section_Serialize | Section_Deserialize;
 
 export type SectionKind = "overview" | "key_points" | "decisions" | "action_items" | "next_steps" | "open_questions" | "other";
@@ -1841,6 +2064,17 @@ export type Section_Serialize = {
 	edited: boolean,
 };
 
+export type SelectOption = {
+	value: string,
+	label: string,
+	/**
+	 *  Twenty's colour names: green · turquoise · sky · blue · purple · pink · red · orange ·
+	 *  yellow · gray.
+	 */
+	color: string,
+	position: number | null,
+};
+
 export type SettingsTab = "general" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";
 
 export type Slogan = Slogan_Serialize | Slogan_Deserialize;
@@ -1853,6 +2087,20 @@ export type Slogan_Deserialize = {
 export type Slogan_Serialize = {
 	en: string,
 	vi: string,
+};
+
+export type Sort = Sort_Serialize | Sort_Deserialize;
+
+export type Sort_Deserialize = {
+	field: string,
+	sub?: string | null,
+	desc?: boolean,
+};
+
+export type Sort_Serialize = {
+	field: string,
+	sub: string | null,
+	desc: boolean,
 };
 
 /**

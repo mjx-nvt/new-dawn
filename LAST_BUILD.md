@@ -1,3 +1,24 @@
+# Last Build — The record engine: Twenty's data model, five standard objects, a first table · release 0.10.1
+_2026-11-01_
+
+## What changed
+- **The record engine** (D-060, `kernel/records/`). Twenty's data model lives in SQLite now: `object_meta` and `field_meta` describe every object and field; the standard objects — People, Companies, Opportunities, Notes, Tasks, and the system objects behind them (note and task targets, the workspace member, attachments, favorites, timeline activities) — are declared in Rust with every one of Twenty's standard fields and synced into the metadata at every workspace open. Every object is a real table; a composite field (full name, emails, phones, links, address, currency, actor) is a few columns side by side; a relation is a `_id` column.
+- **One query layer**: lists with Twenty-shaped filters (AND/OR groups, the operators of each type incl. relative dates), sorts, search and pages; create, update (with the diff), soft delete, restore, delete for good — each validated per type, each writing the record's timeline and keeping the FTS5 search index in step.
+- **CRM → tabs**: People, Companies, Opportunities, Notes, Tasks — each a Twenty-style table: one column per field, click a cell to edit it in place (text, numbers, dates, selects with colours, currency, links, emails, phones, address, rating, a picker for relations, first/last name), tick rows for Delete, an Add row at the bottom (Enter), a search box, and **Deleted records** with Restore and Delete forever. Commitments (0.9.1) stay as the last tab.
+- **Your people carried over**: names split into first and last, organisations became Companies (linked), the owner is the one workspace member; the people memory (Workspace → People) keeps working and writes both shapes. Tasks gained Twenty's status (mirrors done); the Tasks page is unchanged.
+- Migrations 0020 (metadata, timeline, search index) and 0021 (the tables and columns), reviewed by the migration-safety agent — its must-fixes are in (status triggers, a cleanup trigger for people deleted by the memory).
+- Checks: 162 Rust tests pass; clippy, tsc and the localhost check are clean. Seen in the dev app, light and dark: the People table with the migrated names and companies; an opportunity added from the Add row, its stage changed in place (the timeline shows the diff), its company picked from the picker, deleted, listed under Deleted records, restored; a company's tagline edited in place and found by search.
+- Review: the architecture review found three must-fixes, all in: the search index now syncs at every open and after the people memory writes (it only indexed once before); a system object's permanent delete can no longer wipe the timeline; two concurrent first opens of a workspace can no longer carry people over twice (the hub opens one workspace at a time). Taken too: table and column names are checked before they reach SQL (the DDL layer of 0.10.5 builds on it); a required field without a value becomes an empty record, as in Twenty, instead of a database error; a date filter on a day no longer slips a day west of UTC; a comparison filter without a value says so; a cleared required select returns to its first option; a task done keeps its first done time; deleting a company for good also clears its people's organisation text; a merged person keeps the company link; the relation picker reuses the menu styles; `fold` moved to the kernel.
+  Known gaps, by design for now: ticking a task's status in the CRM table doesn't tick the action item in its summary (the Tasks page does — 0.10.6 reconciles them); tasks added from meetings reach the CRM search at the next open; the CRM can create a second person with the same name (the people memory can't) — the record page's merge comes with 0.10.4.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want. The first open of each workspace runs the two migrations and the carry-over (a second or two).
+
+## Env / config
+- Migrations 0020 + 0021 (workspace). Cargo: the `specta` crate gains the `serde_json` feature. Records cross the bridge as `Json` (`unknown` in TypeScript).
+
+---
+
 # Last Build — Modules: Projects and CRM, switched per workspace · release 0.10.0
 _2026-11-01_
 

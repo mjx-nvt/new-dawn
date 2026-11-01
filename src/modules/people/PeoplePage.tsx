@@ -8,7 +8,7 @@ import styles from "./People.module.css";
 /** People (D-055): the commitments others made in your meetings, waiting for you to confirm, then
  *  everyone you meet — by organisation, with when you last met them. Names and spellings are
  *  managed in Workspace → People. */
-export default function PeoplePage() {
+export default function PeoplePage({ embedded = false }: { embedded?: boolean }) {
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug;
   const cards = usePeopleCards(slug);
@@ -19,16 +19,18 @@ export default function PeoplePage() {
   const groups = byOrganisation(cards.data ?? []);
 
   return (
-    <div className="page">
-      <div className={styles.header}>
-        <div>
-          <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-          <h1 className="pageTitle">People</h1>
+    <div className={embedded ? undefined : "page"}>
+      {!embedded && (
+        <div className={styles.header}>
+          <div>
+            <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
+            <h1 className="pageTitle">People</h1>
+          </div>
+          <Link to="/workspace" search={{ tab: "people" }} className="btn btnGhost">
+            Names and spellings
+          </Link>
         </div>
-        <Link to="/workspace" search={{ tab: "people" }} className="btn btnGhost">
-          Names and spellings
-        </Link>
-      </div>
+      )}
 
       <section className="section">
         <h2 className="sectionTitle">Commitments waiting for you</h2>

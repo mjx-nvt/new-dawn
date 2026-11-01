@@ -277,6 +277,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: TaskPatch) -> Result<Tas
            due_on = CASE WHEN ?2 THEN ?3 ELSE due_on END, \
            done_at = CASE WHEN ?4 IS NULL THEN done_at \
              WHEN ?4 THEN coalesce(done_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) END, \
+           status = CASE WHEN ?4 IS NULL THEN status WHEN ?4 THEN 'DONE' ELSE 'TODO' END, \
            priority = coalesce(?6, priority), \
            updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
          WHERE id = ?5 AND deleted_at IS NULL",

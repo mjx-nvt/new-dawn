@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.10.0"
+version = "0.10.1"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -37,7 +37,7 @@ tracing-appender = "0.2"
 unicode-normalization = "0.1"
 # tauri-specta is in beta: keep all three pinned together (see tauri-specta docs).
 tauri-specta = { version = "=2.0.0-rc.26", features = ["typescript", "derive"] }
-specta = "=2.0.0-rc.26"
+specta = { version = "=2.0.0-rc.26", features = ["serde_json"] }
 specta-typescript = "=0.0.13"
 trash = "5"
 tauri-plugin-window-state = "2"
