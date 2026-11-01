@@ -9,6 +9,7 @@
 :root {
   /* Typeface — DM Sans (Majoris), bundled; variable weight 100–1000 */
   --font: 'DM Sans Variable', 'DM Sans', -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace; /* code inside a document — content, not chrome */
 
   /* Text sizes */
   --t-xs: 11.5px;

@@ -9,10 +9,13 @@ use sqlx::SqlitePool;
 
 use super::types::{FieldType, ObjectDef};
 
-#[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct Hit {
     pub object: String,
+    pub object_plural: String,
     pub record_id: String,
+    /// The record's label identifier, rendered — a mention's text (0.10.6).
+    pub label: String,
 }
 
 /// The words of a record the index should see: its text fields, composite text parts and lists.
@@ -31,6 +34,11 @@ pub fn text_of(object: &ObjectDef, record: &Value) -> String {
                     words.extend(field.options.select.iter().find(|o| o.value == v).map(|o| o.label.clone()));
                 }
             }
+            continue;
+        }
+        if field.r#type == FieldType::RichText {
+            // The editor's JSON: its words, not its structure (0.10.6).
+            words.push(super::rich::plain(value.as_str().unwrap_or_default()));
             continue;
         }
         collect(value, &mut words);
@@ -92,11 +100,35 @@ pub async fn find(pool: &SqlitePool, text: &str, limit: u32) -> Result<Vec<Hit>>
     if query.is_empty() {
         return Ok(Vec::new());
     }
-    Ok(sqlx::query_as("SELECT object, record_id FROM search_index WHERE search_index MATCH ? ORDER BY rank LIMIT ?")
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT object, record_id FROM search_index WHERE search_index MATCH ? ORDER BY rank LIMIT ?")
         .bind(query)
         .bind(limit)
         .fetch_all(pool)
-        .await?)
+        .await?;
+    // The labels, one small query a hit; an object switched off is left out.
+    let mut defs: std::collections::HashMap<String, ObjectDef> = std::collections::HashMap::new();
+    let mut hits = Vec::with_capacity(rows.len());
+    for (name, record_id) in rows {
+        if !defs.contains_key(&name) {
+            match super::object(pool, &name).await {
+                Ok(def) => {
+                    defs.insert(name.clone(), def);
+                }
+                Err(_) => continue,
+            }
+        }
+        let def = &defs[&name];
+        if !def.meta.is_active {
+            continue;
+        }
+        let label: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT {} FROM {} t WHERE t.id = ?", def.label_sql("t"), def.meta.table_name)))
+            .bind(&record_id)
+            .fetch_optional(pool)
+            .await?;
+        let Some((label,)) = label else { continue };
+        hits.push(Hit { object: name.clone(), object_plural: def.meta.name_plural.clone(), record_id, label });
+    }
+    Ok(hits)
 }
 
 /// Indexes the live records the index lacks and drops the rows of records gone or deleted —

@@ -154,6 +154,16 @@ fn related_tabs(object: &ObjectDef, from: f64) -> Vec<TabInput> {
 /// records, Tasks, Notes, Files — and, on a person, New Dawn's Commitments and Meetings.
 pub fn defaults(object: &ObjectDef) -> Vec<TabInput> {
     let name = object.meta.name_singular.as_str();
+    if matches!(name, "note" | "task") {
+        // The body's editor wants the width; Twenty's targets — one row per record the note or
+        // task is attached to — are the system junction's rows, editable (0.10.6).
+        let targets = if name == "note" { "noteTargets" } else { "taskTargets" };
+        return vec![
+            tab("Overview", 0.0, true, vec![widget("FIELDS", "Fields", 0, 0, 12, 9, json!({ "fields": [] })), widget("TIMELINE", "Timeline", 0, 9, 12, 6, json!({}))]),
+            tab("Related to", 1.0, false, vec![widget("RELATED", "Related to", 0, 0, 12, 8, json!({ "field": targets, "editable": true }))]),
+            tab("Files", 2.0, false, vec![widget("FILES", "Files", 0, 0, 12, 8, json!({}))]),
+        ];
+    }
     let mut tabs = vec![tab("Overview", 0.0, true, vec![widget("FIELDS", "Fields", 0, 0, 7, 10, json!({ "fields": [] })), widget("TIMELINE", "Timeline", 7, 0, 5, 10, json!({}))])];
     let mut next = 1.0;
     if name == "person" {

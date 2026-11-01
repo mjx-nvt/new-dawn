@@ -4,8 +4,10 @@
 //! Everything the CRM module shows goes through `query`.
 
 pub mod ddl;
+pub mod files;
 pub mod layouts;
 pub mod linked;
+pub mod rich;
 pub mod query;
 pub mod search;
 pub mod standard;
@@ -163,6 +165,9 @@ pub async fn prepare(pool: &SqlitePool, owner_name: &str) -> Result<()> {
         }
         let obj = object(pool, &meta.id).await?;
         views::ensure_index(pool, &obj).await?;
+        if meta.name_singular == "task" {
+            views::ensure_board(pool, &obj).await?;
+        }
         search::sync(pool, &obj).await?;
     }
     Ok(())

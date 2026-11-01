@@ -139,6 +139,67 @@
   padding: 0;
   margin-left: 0;
 }
+/* A rich text field: its editor across both columns. */
+.fieldWide {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Files */
+.dropZone {
+  border-radius: var(--radius-control);
+  transition: box-shadow 0.12s ease-out;
+}
+.dropOver {
+  box-shadow: 0 0 0 2px var(--focus);
+  background: color-mix(in srgb, var(--focus) 8%, transparent);
+}
+.thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-control);
+  flex-shrink: 0;
+}
+.fileMark {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  font-size: var(--t-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.itemButton {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--ink);
+}
+.itemButton:hover { color: var(--primary-text); }
+.itemButton:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.itemExcerpt {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+.inlineLink {
+  color: var(--primary-text);
+  text-decoration: none;
+}
+.inlineLink:hover { text-decoration: underline; }
 
 /* Timeline */
 .timeline {

@@ -1,8 +1,14 @@
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { Link } from "@tanstack/react-router";
-import { Fragment, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { usePerson, type CommitmentStatus } from "../../../kernel/bridge/crm";
+import { isImage, openAttachment, pickFiles, revealAttachment, saveAttachmentAs, useAddAttachments, useDeleteAttachment } from "../../../kernel/bridge/files";
 import { useAddLinked, useAttachments, useLinked, useTimeline, type LinkedKind, type TimelineEvent, type Widget } from "../../../kernel/bridge/layouts";
 import { asRecord, hasColumns, recordId, recordLabel, tableFields, useObject, useUpdateRecord, type FieldMeta, type ObjectDef, type Query, type RecordJson } from "../../../kernel/bridge/records";
+import Editor from "../../../kernel/editor/Editor";
+import { richExcerpt } from "../../../kernel/editor/plain";
+import MenuButton from "../../../kernel/shell/MenuButton";
 import { formatWhen } from "../../meetings/format";
 import Commitments from "../../people/Commitments";
 import { CellEditor, CellView, editsInPlace, readOnly } from "../cells";
@@ -154,6 +160,16 @@ export function FieldsWidget({ ctx, fields, locked }: { ctx: WidgetContext; fiel
       )}
       <div className={styles.fields}>
         {fields.map((f) => {
+          if (f.type === "RICH_TEXT") {
+            // The body: the editor across both columns, saving as it goes (0.10.6).
+            // Keyed by the record too: ‹ › to another record remounts the editor with its body.
+            return (
+              <div key={`${id}:${f.id}`} className={styles.fieldWide}>
+                <span className={styles.fieldLabel}>{f.label}</span>
+                <Editor value={record[f.name]} placeholder={`Write the ${f.label.toLowerCase()}…`} readOnly={frozen} home={{ slug, object: object.meta.name_plural, recordId: id }} onChange={(json) => update.mutate({ id, data: { [f.name]: json } })} />
+              </div>
+            );
+          }
           const editable = !frozen && !readOnly(f);
           return (
             <Fragment key={f.id}>
@@ -197,8 +213,9 @@ function RelatedWidget({ ctx, config }: { ctx: WidgetContext; config: Record<str
   if (!target.data) return <Ghost text={target.isError ? `Couldn't be read — ${target.error.message}` : "Not yet captured"} />;
   const t = target.data;
   const chosen = names(config.fields);
-  const base = tableFields(t);
-  const shown = chosen.length ? chosen.flatMap((n) => base.filter((f) => f.name === n)) : base.filter((f) => f.name !== relation.inverse).slice(0, 5);
+  // A system junction (a note's or task's targets) has only system fields: its relations are the columns.
+  const base = t.meta.is_system ? t.fields.filter((f) => f.is_active && f.type === "RELATION" && hasColumns(f)) : tableFields(t);
+  const shown = chosen.length ? chosen.flatMap((n) => base.filter((f) => f.name === n)) : base.filter((f) => f.name !== relation.inverse).slice(0, 6);
   const columns: Column[] = shown.map((f) => ({ field: f, size: 180, aggregate: null }));
   const id = recordId(record);
   const query: Query = { filter: { field: relation.inverse, sub: null, op: "is", value: [id] }, sort: [], search: null, deleted: false, limit: null, offset: null };
@@ -245,6 +262,14 @@ function TimelineWidget({ ctx }: { ctx: WidgetContext }) {
             <div>
               <span className={styles.eventWhat}>{describe(a, object)}</span>
               <span> · {a.actor}</span>
+              {meetingOf(a) && (
+                <span>
+                  {" · from "}
+                  <Link to="/meetings/$meetingId" params={{ meetingId: meetingOf(a)?.id ?? "" }} search={{ tab: "summary" }} className={styles.inlineLink}>
+                    {meetingOf(a)?.title}
+                  </Link>
+                </span>
+              )}
               {lines.length > 0 && (
                 <ul className={styles.diff}>
                   {lines.map((line, i) => (
@@ -286,6 +311,7 @@ function LinkedWidget({ ctx, kind }: { ctx: WidgetContext; kind: LinkedKind }) {
               {t ? (
                 <Link to="/crm/$object/$recordId" params={{ object: t.meta.name_plural, recordId: recordId(r) }} className={styles.itemLink}>
                   {recordLabel(t, r) || "Untitled"}
+                  {richExcerpt(r.body, 70) && <span className={styles.itemExcerpt}> — {richExcerpt(r.body, 70)}</span>}
                 </Link>
               ) : (
                 <span className={styles.itemLink}>{typeof r.title === "string" ? r.title : "Untitled"}</span>
@@ -315,22 +341,107 @@ function LinkedWidget({ ctx, kind }: { ctx: WidgetContext; kind: LinkedKind }) {
   );
 }
 
+/** The record's files (0.10.6): dropped on the widget or picked in the dialog, copied into the
+ *  workspace; a picture shows as a thumbnail; ⋯ opens, reveals in Finder, saves a copy or
+ *  deletes (to Deleted records). */
 function FilesWidget({ ctx }: { ctx: WidgetContext }) {
   const { slug, object, record } = ctx;
-  const files = useAttachments(slug, object.meta.name_singular, recordId(record));
+  const name = object.meta.name_singular;
+  const id = recordId(record);
+  const files = useAttachments(slug, name, id);
+  const add = useAddAttachments(slug, name, id);
+  const remove = useDeleteAttachment(slug, name, id);
+  const [over, setOver] = useState(false);
+  const [trouble, setTrouble] = useState<string | null>(null);
+  const zone = useRef<HTMLDivElement>(null);
+  const addFiles = add.mutate; // stable across renders (TanStack Query)
+  const frozen = isDeleted(record) || !id;
+  // Files dragged from the Finder: the window's drag-drop event, kept when it lands on this widget.
+  useEffect(() => {
+    if (frozen) return;
+    let unlisten: (() => void) | undefined;
+    let gone = false;
+    // On macOS wry hands the drop point through in logical pixels (the NSPoint as it is), so
+    // it compares with the widget's rect as it is — no device-pixel scaling.
+    const inside = (x: number, y: number) => {
+      const r = zone.current?.getBoundingClientRect();
+      return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const p = event.payload;
+        if (p.type === "over") setOver(inside(p.position.x, p.position.y));
+        else if (p.type === "drop") {
+          setOver(false);
+          if (p.paths.length && inside(p.position.x, p.position.y)) addFiles(p.paths);
+        } else setOver(false);
+      })
+      .then((fn) => {
+        if (gone) fn();
+        else unlisten = fn;
+      });
+    return () => {
+      gone = true;
+      unlisten?.();
+    };
+  }, [frozen, addFiles]);
+  const act = (work: Promise<unknown>) => {
+    setTrouble(null);
+    work.catch((e: Error) => setTrouble(e.message));
+  };
   const list = files.data ?? [];
-  if (!list.length) return <Ghost text={files.isError ? `Couldn't be read — ${files.error.message}` : "Not yet captured"} />;
+  const error = trouble ?? add.error?.message ?? remove.error?.message ?? (files.isError ? files.error.message : null);
   return (
-    <ul className={styles.list} role="list">
-      {list.map((f) => (
-        <li key={f.id} className={styles.item}>
-          <span className={styles.itemLink}>{f.name || f.full_path}</span>
-          {f.type && <span className={styles.itemMeta}>{f.type}</span>}
-          <span className={styles.itemMeta}>{formatWhen(f.created_at)}</span>
-        </li>
-      ))}
-    </ul>
+    <div ref={zone} className={over ? `${styles.dropZone} ${styles.dropOver}` : styles.dropZone}>
+      {error && (
+        <p className="formError" role="alert">
+          {error}
+        </p>
+      )}
+      {list.length ? (
+        <ul className={styles.list} role="list">
+          {list.map((f) => (
+            <li key={f.id} className={styles.item}>
+              {isImage(f.type) ? <img className={styles.thumb} src={convertFileSrc(f.full_path)} alt="" /> : <span className={styles.fileMark}>{(f.type || "file").slice(0, 4)}</span>}
+              <button type="button" className={`${styles.itemLink} ${styles.itemButton}`} onClick={() => act(openAttachment(slug, f.id))}>
+                {f.name || f.full_path}
+              </button>
+              <span className={styles.itemMeta}>{formatWhen(f.created_at)}</span>
+              <MenuButton
+                label={`Actions for ${f.name}`}
+                className="btn btnGhost btnCompact"
+                items={[
+                  { label: "Open", onSelect: () => act(openAttachment(slug, f.id)) },
+                  { label: "Reveal in Finder", onSelect: () => act(revealAttachment(slug, f.id)) },
+                  { label: "Save as…", onSelect: () => act(saveAttachmentAs(slug, f.id, f.name)) },
+                  { label: "Delete", danger: true, separator: true, disabled: frozen, onSelect: () => remove.mutate(f.id) },
+                ]}
+              >
+                ⋯
+              </MenuButton>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Ghost text={over ? "Drop to add" : "Not yet captured — drop files here, or add them"} />
+      )}
+      {!frozen && (
+        <div className={styles.addRow}>
+          <button type="button" className="btn btnSecondary btnCompact" disabled={add.isPending} onClick={() => act(pickFiles().then((paths) => paths.length && add.mutate(paths)))}>
+            {add.isPending ? "Adding…" : "Add file…"}
+          </button>
+          {over && <span className="fieldHint"> Drop to add</span>}
+        </div>
+      )}
+      {list.length > 0 && remove.isPending && <span className="fieldHint">Deleting…</span>}
+    </div>
   );
+}
+
+/** A task made from a meeting's action item (0.10.6): the timeline names the meeting. */
+function meetingOf(a: TimelineEvent): { id: string; title: string } | null {
+  const m = asRecord(asRecord(a.properties).meeting);
+  return typeof m.id === "string" && m.id ? { id: m.id, title: typeof m.title === "string" ? m.title : "a meeting" } : null;
 }
 
 /** A person's commitments (D-055): waiting for you, what they owe you, kept and dropped. */

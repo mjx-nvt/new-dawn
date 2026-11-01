@@ -287,6 +287,10 @@ async fn create(
         }
     }
     tx.commit().await?;
+    let agent = crate::kernel::records::Actor::system("New Dawn");
+    for (_, id) in &ids {
+        crate::modules::tasks::note_made(pool, id, Some(meeting), &agent, "created").await;
+    }
     let made = ids.len();
     for (i, id) in ids {
         doc.action_items[i].task_id = Some(id);

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "New Dawn",
-  "version": "0.10.5",
+  "version": "0.10.6",
   "identifier": "co.majorisdigital.newdawn",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -37,6 +37,7 @@
           "$APPDATA/workspaces/*/recordings/**",
           "$APPDATA/workspaces/*/exports/**",
           "$APPDATA/workspaces/*/brand/**",
+          "$APPDATA/workspaces/*/files/**",
           "$RESOURCE/**"
         ]
       }

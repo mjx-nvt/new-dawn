@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-063 — Rich text and files: one TipTap editor, documents as JSON, files in the workspace folder as attachment records
+_2026-11-01_
+
+**Context** (plan v4 §3.3 rows 67–70, §5.4, 0.10.6): Twenty's notes and tasks have a block editor body (BlockNote), targets on several records, attachments; every record has a Files tab; records are mentioned in text. Plane's pages (0.11.7) need the same editor. Both modules are distributed with New Dawn, so the editor must be MIT: TipTap (`@tiptap/*` v3, the one dependency this track adds, plan §5.8).
+
+**Decision — one editor, the document stored as JSON, its words extracted in Rust**: `src/kernel/editor/Editor.tsx` (StarterKit's headings, lists, quote, code, rule, marks and links; tables; to-do lists; pictures; `@` mentions of records from `search_records`, which now returns labels) saves the ProseMirror document as JSON text into the RICH_TEXT column, debounced and on blur, only when it changed; a body from before (plain text) loads as one paragraph. `kernel/records/rich.rs::plain` turns the JSON into words — a newline per block, `@Label` for a mention — for the search index (`search::text_of`), the agents and a table cell's excerpt; the table never edits a rich text (its editor is on the page and in the side panel). Pictures and pasted images are attachments of the record, shown through the asset protocol (`convertFileSrc`), never base64 in the document. Code inside a document uses the system's monospace (`--font-mono` in tokens.css) — content, not chrome; DM Sans stays the one UI typeface.
+
+**Decision — files live in the workspace folder, as records**: `workspaces/<slug>/files/<uuid7>_<safe name>` (the name cleaned, 200 MB at most), an `attachment` record through the engine with the link to its record and the member as author — so custom objects have files too, Deleted records / restore apply, and a backup of the folder carries the files. Open and Reveal in Finder go through the opener plugin, Save as… through the save dialog and a copy; Delete is the engine's soft delete (the file stays until a delete for good, which the Files widget doesn't offer yet). Dropped files arrive through Tauri's drag-drop event, kept when they land on the widget.
+
+**Decision — notes and tasks are ordinary records**: their pages are the Fields widget with the body editor across the width, a "Related to" tab (the system junction's rows — Twenty's targets, one row per record, editable) and Files; the Tasks object gets a "By status" board seeded once; tasks made outside the engine (a summary's own pass, Add to Tasks, a typed task) write their timeline row themselves, with the meeting they came from.
+
+**Means for future work**: Plane's pages (0.11.7) reuse the editor and `rich::plain`; comments and descriptions of work items too; the files store serves Plane's attachments; mentions of work items join the `@` list; a slash menu and a bubble menu can come without changing the storage.
+
+---
+
 ## D-062 — Record pages: Twenty's page layouts as rows, widgets on a 12-column grid, one side panel
 _2026-11-01_
 

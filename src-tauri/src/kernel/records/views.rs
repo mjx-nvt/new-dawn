@@ -277,6 +277,24 @@ pub async fn adopt_field(pool: &SqlitePool, object: &ObjectDef, field: &FieldMet
     Ok(())
 }
 
+/// Twenty's Tasks come with a board by status (0.10.6): made once per workspace (a setting
+/// remembers), when the object has no board yet and a select field named `status`.
+pub async fn ensure_board(pool: &SqlitePool, object: &ObjectDef) -> Result<()> {
+    let Some(status) = object.fields.iter().find(|f| f.name == "status" && f.r#type == FieldType::Select && f.is_active) else { return Ok(()) };
+    let key = format!("board_seeded:{}", object.meta.name_singular);
+    let seeded: Option<(String,)> = sqlx::query_as("SELECT value FROM setting WHERE key = ?").bind(&key).fetch_optional(pool).await?;
+    if seeded.is_some() {
+        return Ok(());
+    }
+    let (boards,): (i64,) = sqlx::query_as("SELECT count(*) FROM view WHERE object_id = ? AND type = 'KANBAN'").bind(&object.meta.id).fetch_one(pool).await?;
+    if boards == 0 {
+        let made = create(pool, object, "By status", "IconLayoutKanban", "KANBAN").await?;
+        update(pool, &made.view.id, ViewPatch { kanban_field_id: Some(Some(status.id.clone())), ..Default::default() }).await?;
+    }
+    sqlx::query("INSERT INTO setting (key, value) VALUES (?, '1') ON CONFLICT (key) DO NOTHING").bind(&key).execute(pool).await?;
+    Ok(())
+}
+
 /// A new view of the object, with the INDEX view's columns.
 pub async fn create(pool: &SqlitePool, object: &ObjectDef, name: &str, icon: &str, r#type: &str) -> Result<ViewDef> {
     let name = name.trim();

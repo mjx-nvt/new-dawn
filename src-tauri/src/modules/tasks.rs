@@ -251,7 +251,24 @@ pub async fn add(pool: &SqlitePool, title: &str) -> Result<TaskView> {
         .bind(&title)
         .execute(pool)
         .await?;
+    if let Ok(actor) = crate::kernel::records::owner_actor(pool, "").await {
+        note_made(pool, &id, None, &actor, "created").await;
+    }
     get(pool, &id).await
+}
+
+/// The task's timeline (D-060, 0.10.6): made or restored, and from which meeting — the writers
+/// here bypass the engine's create. Trouble is logged; the task stands.
+pub(crate) async fn note_made(pool: &SqlitePool, id: &str, meeting: Option<&Meeting>, actor: &crate::kernel::records::Actor, event: &str) {
+    use crate::kernel::records;
+    let Ok(task) = records::object(pool, "task").await else { return };
+    let properties = match meeting {
+        Some(m) => serde_json::json!({ "meeting": { "id": m.id, "title": m.title } }),
+        None => serde_json::json!({}),
+    };
+    if let Err(err) = records::timeline::record(pool, &task, id, event, properties, actor).await {
+        tracing::warn!("task {id}: timeline: {err:#}");
+    }
 }
 
 /// Renames, dates, ticks or prioritises a task. A tick follows to the action item it came from.
@@ -485,6 +502,7 @@ pub async fn add_from_item(
         }
     };
     tx.commit().await?;
+    note_made(&pool, &id, Some(&meeting), &crate::kernel::records::actor_of(hub, slug).await?, if restored { "restored" } else { "created" }).await;
     // The owner found this action item worth a task: the summary got it right.
     feedback::record(
         &pool,

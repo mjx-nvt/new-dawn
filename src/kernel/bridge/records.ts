@@ -87,6 +87,11 @@ export function useDestroyRecord(slug: string | undefined, object: string | unde
   return useMutation({ mutationFn: (id: string) => unwrap(commands.destroyRecord(slug ?? "", object ?? "", id)), onSuccess: refresh });
 }
 
+/** Records of every object whose words match, with their labels — the editor's `@` mentions. */
+export function searchRecords(slug: string, text: string, limit = 8): Promise<Hit[]> {
+  return text.trim() ? unwrap(commands.searchRecords(slug, text, limit)) : Promise.resolve([]);
+}
+
 /** Records of every object whose words match (`/`). */
 export function useSearchRecords(slug: string | undefined, text: string) {
   return useQuery({

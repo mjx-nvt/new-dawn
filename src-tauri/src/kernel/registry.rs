@@ -13,7 +13,7 @@ use crate::kernel::hub::{checkpoint_and_close, open_pool, vacuum_into};
 static REGISTRY_MIGRATOR: Migrator = sqlx::migrate!("./migrations/registry");
 
 /// Sub-folders every workspace gets next to its workspace.db (docs/plan.md §3).
-const WORKSPACE_DIRS: [&str; 3] = ["brand", "recordings", "exports"];
+const WORKSPACE_DIRS: [&str; 4] = ["brand", "recordings", "exports", "files"];
 
 #[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
 pub struct Workspace {

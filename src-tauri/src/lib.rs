@@ -83,6 +83,7 @@ mod commands {
     pub mod cockpit;
     pub mod crm;
     pub mod datamodel;
+    pub mod files;
     pub mod glass;
     pub mod inbox;
     pub mod layouts;
@@ -263,6 +264,11 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::datamodel::update_field,
             commands::datamodel::set_field_active,
             commands::datamodel::delete_field,
+            commands::files::add_attachment,
+            commands::files::add_attachment_bytes,
+            commands::files::save_attachment,
+            commands::files::attachment_path,
+            commands::files::delete_attachment,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

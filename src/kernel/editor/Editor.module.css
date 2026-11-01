@@ -1,0 +1,183 @@
+/* The rich text editor (0.10.6): a card with a formatting row and the document; every colour
+   and size on tokens. Code uses the system's monospace — a document font, not a UI one. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 160px;
+  border-radius: var(--radius-card);
+}
+.editing {
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+.editing:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 0.5px solid var(--hair);
+}
+.tool {
+  all: unset;
+  box-sizing: border-box;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: center;
+  cursor: pointer;
+}
+.tool:hover { background: var(--surface-2); }
+.tool[aria-pressed="true"] {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.tool:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.gap {
+  width: 0.5px;
+  height: 18px;
+  margin: 0 var(--space-1);
+  background: var(--hair);
+}
+.linkInput { width: 240px; }
+.content { flex: 1; }
+
+/* The document */
+.prose {
+  min-height: 120px;
+  padding: var(--space-3) var(--space-4);
+  outline: none;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.prose :global(p) { margin: 0 0 var(--space-2); }
+.prose :global(h1) {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--t-xl);
+  font-weight: 700;
+  line-height: 1.2;
+}
+.prose :global(h2) {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--t-lg);
+  font-weight: 600;
+}
+.prose :global(h3) {
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--t-md);
+  font-weight: 600;
+}
+.prose :global(ul),
+.prose :global(ol) {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-5);
+}
+.prose :global(ul[data-type="taskList"]) {
+  list-style: none;
+  padding-left: 0;
+}
+.prose :global(ul[data-type="taskList"] li) {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+.prose :global(ul[data-type="taskList"] li > label) { flex-shrink: 0; padding-top: 3px; }
+.prose :global(ul[data-type="taskList"] li > div) { flex: 1; }
+.prose :global(li[data-checked="true"] > div) {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.prose :global(blockquote) {
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--hair);
+  color: var(--ink-2);
+}
+.prose :global(code) {
+  padding: 1px 4px;
+  border-radius: var(--radius-chip);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+}
+.prose :global(pre) {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  overflow: auto;
+}
+.prose :global(pre code) {
+  padding: 0;
+  background: transparent;
+}
+.prose :global(hr) {
+  margin: var(--space-4) 0;
+  border: 0;
+  border-top: 0.5px solid var(--hair);
+}
+.prose :global(a) {
+  color: var(--primary-text);
+  text-decoration: underline;
+}
+.prose :global(img) {
+  display: block;
+  max-width: 100%;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-control);
+}
+.prose :global(img.ProseMirror-selectednode) { outline: 2px solid var(--focus); }
+.prose :global(table) {
+  margin: 0 0 var(--space-3);
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+.prose :global(td),
+.prose :global(th) {
+  padding: var(--space-1) var(--space-2);
+  border: 0.5px solid var(--hair);
+  vertical-align: top;
+  min-width: 48px;
+}
+.prose :global(th) {
+  background: var(--surface-2);
+  font-weight: 600;
+  text-align: left;
+}
+.prose :global(.selectedCell) { background: color-mix(in srgb, var(--focus) 12%, transparent); }
+.prose :global(p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink-3);
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* Mentions */
+.mention {
+  display: inline-block;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-chip);
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+  font-weight: 500;
+}
+.mentionMenu {
+  position: fixed;
+  z-index: 60;
+  min-width: 220px;
+}
+.mentionItemSelected {
+  background: var(--focus);
+  color: var(--on-focus);
+}

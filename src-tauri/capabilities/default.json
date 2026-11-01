@@ -11,6 +11,11 @@
     "opener:default",
     "core:window:allow-start-dragging",
     "dialog:allow-open",
+    "dialog:allow-save",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [{ "path": "$APPDATA/workspaces/*/files/**" }]
+    },
     "updater:default",
     "process:allow-restart"
   ]

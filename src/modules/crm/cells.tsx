@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { asRecord, selectOptions, useRecords, type FieldMeta, type RecordJson } from "../../kernel/bridge/records";
+import { richExcerpt } from "../../kernel/editor/plain";
 import { formatDay } from "../projects/format";
 import styles from "./Crm.module.css";
 
@@ -134,6 +135,10 @@ export function CellView({ field, record }: { field: FieldMeta; record: RecordJs
       );
     case "JSON":
       return value == null ? null : <span className={styles.muted}>{JSON.stringify(value).slice(0, 60)}</span>;
+    case "RICH_TEXT": {
+      const excerpt = richExcerpt(value);
+      return excerpt ? <span className={styles.text}>{excerpt}</span> : null;
+    }
     default:
       return str(value) ? <span className={styles.text}>{str(value)}</span> : null;
   }
@@ -144,8 +149,9 @@ export function editsInPlace(field: FieldMeta): boolean {
   return field.type === "BOOLEAN";
 }
 
+/** Never edited in a table: the engine's own fields, and a rich text (its editor is on the page). */
 export function readOnly(field: FieldMeta): boolean {
-  return field.type === "ACTOR" || field.type === "UUID" || field.type === "POSITION";
+  return field.type === "ACTOR" || field.type === "UUID" || field.type === "POSITION" || field.type === "RICH_TEXT";
 }
 
 interface EditorProps {
@@ -171,7 +177,6 @@ export function CellEditor({ slug, field, record, onSave, onCancel }: EditorProp
     case "UUID":
       return <TextEditor initial={str(value)} onSave={onSave} onCancel={onCancel} />;
     case "LONG_TEXT":
-    case "RICH_TEXT":
       return <TextEditor initial={str(value)} multiline onSave={onSave} onCancel={onCancel} />;
     case "NUMBER":
       return <TextEditor initial={num(value)?.toString() ?? ""} kind="number" onSave={(v) => onSave(v === "" ? null : Number(v))} onCancel={onCancel} />;

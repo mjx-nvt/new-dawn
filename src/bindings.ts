@@ -272,6 +272,15 @@ export const commands = {
 	updateField: (slug: string, object: string, id: string, patch: FieldPatch_Deserialize) => typedError<FieldMeta_Serialize, AppError>(__TAURI_INVOKE("update_field", { slug, object, id, patch })),
 	setFieldActive: (slug: string, object: string, id: string, active: boolean) => typedError<FieldMeta_Serialize, AppError>(__TAURI_INVOKE("set_field_active", { slug, object, id, active })),
 	deleteField: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_field", { slug, object, id })),
+	/**  Copies a file into the workspace and attaches it to the record. */
+	addAttachment: (slug: string, object: string, id: string, path: string) => typedError<Json, AppError>(__TAURI_INVOKE("add_attachment", { slug, object, id, path })),
+	/**  A picture pasted or dropped into the editor, as bytes. */
+	addAttachmentBytes: (slug: string, object: string, id: string, name: string, bytes: number[]) => typedError<Json, AppError>(__TAURI_INVOKE("add_attachment_bytes", { slug, object, id, name, bytes })),
+	/**  Copies an attachment's file to where the owner chose. */
+	saveAttachment: (slug: string, id: string, to: string) => typedError<null, AppError>(__TAURI_INVOKE("save_attachment", { slug, id, to })),
+	/**  The attachment's file on disk (for Open and Reveal in Finder). */
+	attachmentPath: (slug: string, id: string) => typedError<string, AppError>(__TAURI_INVOKE("attachment_path", { slug, id })),
+	deleteAttachment: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_attachment", { slug, id })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -1225,7 +1234,10 @@ export type GroupValueInput = {
 
 export type Hit = {
 	object: string,
+	object_plural: string,
 	record_id: string,
+	/**  The record's label identifier, rendered — a mention's text (0.10.6). */
+	label: string,
 };
 
 export type InstalledModel = {
