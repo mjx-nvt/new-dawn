@@ -1,10 +1,11 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
 import { useCreateView, useSaveView, useUpdateView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import PeoplePage from "../people/PeoplePage";
 import styles from "./Crm.module.css";
+import RecordSidePanel from "./record/RecordSidePanel";
 import RecordTable, { groupsOf, type Column } from "./RecordTable";
 import CalendarView from "./views/CalendarView";
 import KanbanBoard from "./views/KanbanBoard";
@@ -90,6 +91,9 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
   const createView = useCreateView(slug, name);
   const updateView = useUpdateView(slug, name);
   const [saving, setSaving] = useState<Error | null>(null);
+  // The record open in the side panel (the view's "Open records in", D-062).
+  const [panel, setPanel] = useState<string | null>(null);
+  const closePanel = useCallback(() => setPanel(null), []);
 
   if (!def.data || !working) {
     return (
@@ -151,9 +155,11 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
   const aggregateField = fieldOf(current.view.kanban_aggregate_field_id ?? "");
   const aggregateOp = current.view.kanban_aggregate_operation;
   const aggregate = aggregateOp ? { field: aggregateField ?? (aggregateOp === "COUNT" ? columns[0]?.field : undefined), op: aggregateOp } : null;
+  const onOpen = current.view.open_record_in === "SIDE_PANEL" ? setPanel : undefined;
 
   return (
     <>
+      {panel && <RecordSidePanel slug={slug} object={object} id={panel} onClose={closePanel} />}
       <ViewBar slug={slug} object={object} views={list} current={current} working={working} dirty={dirty} onPick={onPickView} onChange={change} onSave={save} onSaveAs={saveAs} onReset={reset} />
       {saving && (
         <p className="formError" role="alert">
@@ -162,7 +168,7 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
       )}
       {current.view.type === "KANBAN" ? (
         kanbanField ? (
-          <KanbanBoard slug={slug} object={object} field={kanbanField} columns={columns} query={query} deleted={deleted} compact={current.view.is_compact} groups={groupsOf(kanbanField, working.groups, working.groupSort)} aggregate={aggregate && aggregate.field ? { field: aggregate.field, op: aggregate.op } : null} />
+          <KanbanBoard slug={slug} object={object} field={kanbanField} columns={columns} query={query} deleted={deleted} compact={current.view.is_compact} groups={groupsOf(kanbanField, working.groups, working.groupSort)} aggregate={aggregate && aggregate.field ? { field: aggregate.field, op: aggregate.op } : null} onOpen={onOpen} />
         ) : (
           <div className={styles.tableWrap}>
             <div className={`${styles.slot} ghostCard`}>
@@ -172,7 +178,7 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
         )
       ) : current.view.type === "CALENDAR" ? (
         calendarField ? (
-          <CalendarView slug={slug} object={object} field={calendarField} query={query} deleted={deleted} />
+          <CalendarView slug={slug} object={object} field={calendarField} query={query} deleted={deleted} onOpen={onOpen} />
         ) : (
           <div className={styles.tableWrap}>
             <div className={`${styles.slot} ghostCard`}>
@@ -206,6 +212,7 @@ function ObjectViews({ slug, object, viewId, search, deleted, onPickView }: { sl
         onHide={(id) => fieldsWith((f) => (f.field_id === id ? { ...f, is_visible: false } : f))}
         onFilter={filter}
         onAggregate={(id, op) => fieldsWith((f) => (f.field_id === id ? { ...f, aggregate_operation: op } : f))}
+        onOpen={onOpen}
       />
       )}
     </>

@@ -14,7 +14,7 @@ import TasksPage from "./modules/tasks/TasksPage";
 import ProjectsPage from "./modules/projects/ProjectsPage";
 import ProjectPage from "./modules/projects/ProjectPage";
 import CrmPage from "./modules/crm/CrmPage";
-import PersonPage from "./modules/people/PersonPage";
+import RecordPage from "./modules/crm/record/RecordPage";
 import EmailPage from "./modules/email/EmailPage";
 import TodayPage from "./modules/today/TodayPage";
 import WorkspacePage, { WORKSPACE_TABS, type WorkspaceTab } from "./modules/workspace/WorkspacePage";
@@ -134,15 +134,17 @@ const peopleRoute = createRoute({
   staticData: { title: "CRM" },
 });
 
-const personRoute = createRoute({
+// A record's page (D-062): any object by its plural name, the tab as URL state.
+const recordRoute = createRoute({
   getParentRoute: () => shellRoute,
-  path: "/crm/people/$personId",
+  path: "/crm/$object/$recordId",
+  validateSearch: (search: Record<string, unknown>): { tab?: string } => (typeof search.tab === "string" && search.tab ? { tab: search.tab } : {}),
   component: () => (
     <ModuleGate module="crm">
-      <PersonPage />
+      <RecordPage />
     </ModuleGate>
   ),
-  staticData: { title: "Person", breadcrumb: "CRM" },
+  staticData: { title: "Record", breadcrumb: "CRM" },
 });
 
 // The People routes of 0.9.x, kept for old links.
@@ -158,7 +160,7 @@ const personRedirect = createRoute({
   getParentRoute: () => shellRoute,
   path: "/people/$personId",
   beforeLoad: ({ params }) => {
-    throw redirect({ to: "/crm/people/$personId", params: { personId: params.personId } });
+    throw redirect({ to: "/crm/$object/$recordId", params: { object: "people", recordId: params.personId } });
   },
 });
 
@@ -221,7 +223,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, personRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

@@ -3,6 +3,8 @@
 //! in `standard.rs` and synced at every open; custom objects and fields are run-time DDL (0.10.5).
 //! Everything the CRM module shows goes through `query`.
 
+pub mod layouts;
+pub mod linked;
 pub mod query;
 pub mod search;
 pub mod standard;
@@ -69,6 +71,13 @@ pub async fn member_id(pool: &SqlitePool) -> Result<Option<String>> {
 /// The actor for what the owner does by hand in this workspace.
 pub async fn owner_actor(pool: &SqlitePool, owner_name: &str) -> Result<Actor> {
     Ok(Actor::manual(member_id(pool).await?, owner_name))
+}
+
+/// The owner, writing by hand in a workspace (Twenty's actor on the record and its activities):
+/// the profile's name on the workspace's member.
+pub async fn actor_of(hub: &crate::kernel::hub::WorkspaceHub, slug: &str) -> Result<Actor> {
+    let name = crate::kernel::profile::owner(hub, slug).await?.map(|o| o.name).unwrap_or_default();
+    owner_actor(&hub.pool(slug)?, &name).await
 }
 
 /// A person's name split the way Twenty keeps it: the last word is the last name; one word is a

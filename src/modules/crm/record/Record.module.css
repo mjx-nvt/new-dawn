@@ -1,0 +1,384 @@
+/* The record page (D-062): header, tabs, the widget grid; the layout editor; the side panel. */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+.titleBlock {
+  min-width: 0;
+  flex: 1;
+}
+.titleButton {
+  all: unset;
+  cursor: text;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.titleButton:hover:not(:disabled) { background: var(--surface-2); }
+.titleButton:disabled { cursor: default; }
+.titleButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.titleEditor {
+  max-width: 560px;
+  margin-top: var(--space-2);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding-top: var(--space-5);
+}
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--status-warning-tint);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: 500;
+}
+.banner > span { flex: 1; }
+.tabs {
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+/* The grid: 12 columns, rows of 56 pt, as Twenty's page layouts. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: 56px;
+  gap: var(--space-4);
+}
+.widget {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--space-5);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.widgetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  flex-shrink: 0;
+}
+.widgetTitle {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+}
+.widgetBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.widgetGhost {
+  grid-column: 1 / -1;
+  grid-row: span 4;
+  border-radius: var(--radius-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Fields: label · value rows, each value an inline editor. */
+.fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 150px) minmax(0, 1fr);
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+  align-items: center;
+}
+.fieldLabel {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.fieldValue {
+  min-height: 28px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--ink);
+  border-radius: var(--radius-control);
+  padding: 2px var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  overflow-wrap: anywhere;
+}
+.fieldValueEditable { cursor: text; }
+.fieldValueEditable:hover { background: var(--surface-2); }
+.fieldValueEditable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.fieldEditing {
+  padding: 0;
+  margin-left: 0;
+}
+
+/* Timeline */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.eventWhat {
+  font-weight: 500;
+  color: var(--ink);
+}
+.eventWhen {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.diff {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Lists: tasks, notes, files, meetings. */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 0.5px solid var(--hair);
+  font-size: var(--t-md);
+  color: var(--ink);
+  min-width: 0;
+}
+.itemLink {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 500;
+  text-decoration: none;
+}
+.itemLink:hover { color: var(--primary-text); }
+.itemMeta {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.ghostRow {
+  height: 40px;
+  border-radius: var(--radius-control);
+}
+.addRow { margin-top: var(--space-3); }
+.addInput { width: 100%; }
+.rich {
+  margin: 0;
+  font-size: var(--t-md);
+  color: var(--ink-2);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.subTitle {
+  margin: 0;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* Layout editor */
+.editBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+.editTitle {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.spacer { flex: 1; }
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.tabsEdit {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.tabEdit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.tabEditActive {
+  padding: var(--space-1);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+.tabInput { width: 160px; }
+.widgetEditable { outline: 1px dashed var(--hair); }
+.widgetPicked { outline: 2px solid var(--primary); }
+.widgetTools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.handle {
+  all: unset;
+  cursor: grab;
+  font-size: var(--t-lg);
+  line-height: 1;
+  padding: 0 var(--space-2);
+  color: var(--ink-3);
+  touch-action: none;
+}
+.handle:active { cursor: grabbing; }
+.handle:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+.resize {
+  position: absolute;
+  right: var(--space-1);
+  bottom: var(--space-1);
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: 2px solid var(--ink-3);
+  border-bottom: 2px solid var(--ink-3);
+  touch-action: none;
+}
+.settings {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.settingsRow {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+.settingsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* Side panel: a record from a list, without leaving it. */
+.panel {
+  position: fixed;
+  top: 64px;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.panelHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.panelTitle {
+  margin: 0;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.panelActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.panelBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .panel { animation: slideIn 0.18s ease-out; }
+}
+@keyframes slideIn {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}

@@ -250,6 +250,20 @@ export const commands = {
 	aggregateRecords: (slug: string, object: string, query: Query_Deserialize, ops: AggregateInput_Deserialize[]) => typedError<AggregateValue[], AppError>(__TAURI_INVOKE("aggregate_records", { slug, object, query, ops })),
 	/**  How many records a query lists per value of a select field (a grouped table's headers). */
 	groupCounts: (slug: string, object: string, query: Query_Deserialize, field: string) => typedError<GroupCount[], AppError>(__TAURI_INVOKE("group_counts", { slug, object, query, field })),
+	/**  The object's record page layout — tabs of widgets — made from Twenty's default when missing. */
+	getRecordLayout: (slug: string, object: string) => typedError<Layout_Serialize, AppError>(__TAURI_INVOKE("get_record_layout", { slug, object })),
+	/**  The layout editor's Save: every tab and widget, in one transaction. */
+	saveRecordLayout: (slug: string, object: string, input: LayoutInput) => typedError<Layout_Serialize, AppError>(__TAURI_INVOKE("save_record_layout", { slug, object, input })),
+	resetRecordLayout: (slug: string, object: string) => typedError<Layout_Serialize, AppError>(__TAURI_INVOKE("reset_record_layout", { slug, object })),
+	/**  A record's timeline, newest first, with the field labels on each change. */
+	listTimeline: (slug: string, object: string, id: string, limit: number) => typedError<TimelineEvent[], AppError>(__TAURI_INVOKE("list_timeline", { slug, object, id, limit })),
+	/**  The records before and after this one, for ‹ › on the page. */
+	recordNeighbours: (slug: string, object: string, id: string) => typedError<Neighbours_Serialize, AppError>(__TAURI_INVOKE("record_neighbours", { slug, object, id })),
+	/**  The tasks or notes (`kind`) that target a record, newest first. */
+	listLinked: (slug: string, object: string, id: string, kind: string) => typedError<Json[], AppError>(__TAURI_INVOKE("list_linked", { slug, object, id, kind })),
+	/**  A new task or note with this title, targeting the record. */
+	addLinked: (slug: string, object: string, id: string, kind: string, title: string) => typedError<Json, AppError>(__TAURI_INVOKE("add_linked", { slug, object, id, kind, title })),
+	listAttachments: (slug: string, object: string, id: string) => typedError<Attachment[], AppError>(__TAURI_INVOKE("list_attachments", { slug, object, id })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -529,6 +543,14 @@ export type AiPolicy = {
 export type AppError = {
 	code: string,
 	message: string,
+};
+
+export type Attachment = {
+	id: string,
+	name: string,
+	full_path: string,
+	type: string,
+	created_at: string,
 };
 
 /**
@@ -1191,6 +1213,40 @@ export type Lang = "vi" | "en";
 
 export type Language = "en" | "vi" | "auto";
 
+export type Layout = Layout_Serialize | Layout_Deserialize;
+
+export type LayoutInput = {
+	tabs: TabInput[],
+};
+
+export type LayoutRow = LayoutRow_Serialize | LayoutRow_Deserialize;
+
+export type LayoutRow_Deserialize = {
+	id: string,
+	object_id?: string | null,
+	name: string,
+	/**  RECORD · DASHBOARD */
+	kind: string,
+};
+
+export type LayoutRow_Serialize = {
+	id: string,
+	object_id: string | null,
+	name: string,
+	/**  RECORD · DASHBOARD */
+	kind: string,
+};
+
+export type Layout_Deserialize = {
+	layout: LayoutRow_Deserialize,
+	tabs: Tab[],
+};
+
+export type Layout_Serialize = {
+	layout: LayoutRow_Serialize,
+	tabs: Tab[],
+};
+
 /**  A proposed line for an agent's guide. */
 export type Lesson = {
 	id: string,
@@ -1589,6 +1645,21 @@ export type NamingReview = {
 	checked_at: string,
 	/**  The AI step ran (else the list is the deterministic check only). */
 	ai_checked: boolean,
+};
+
+/**  The record before and after this one in the object's default order (position, then made). */
+export type Neighbours = Neighbours_Serialize | Neighbours_Deserialize;
+
+/**  The record before and after this one in the object's default order (position, then made). */
+export type Neighbours_Deserialize = {
+	prev?: string | null,
+	next?: string | null,
+};
+
+/**  The record before and after this one in the object's default order (position, then made). */
+export type Neighbours_Serialize = {
+	prev: string | null,
+	next: string | null,
 };
 
 export type NewProject = NewProject_Serialize | NewProject_Deserialize;
@@ -2465,6 +2536,26 @@ export type SystemAudio =
 /**  The tap could not be created (older macOS or a Core Audio error): mic only. */
 "unavailable";
 
+export type Tab = {
+	tab: TabRow,
+	widgets: Widget[],
+};
+
+export type TabInput = {
+	title: string,
+	position: number | null,
+	is_default: boolean,
+	widgets: WidgetInput[],
+};
+
+export type TabRow = {
+	id: string,
+	layout_id: string,
+	title: string,
+	position: number | null,
+	is_default: boolean,
+};
+
 export type Tally = {
 	candidate: number,
 	baseline: number,
@@ -2679,6 +2770,18 @@ export type TermInput_Serialize = {
 	id: string | null,
 	term: string,
 	heard_as: string[],
+};
+
+/**  One line of a record's timeline, as the page shows it. */
+export type TimelineEvent = {
+	id: string,
+	happens_at: string,
+	/**  `person.created`, `person.updated`, `person.deleted`, `person.restored`… */
+	name: string,
+	/**  For an update: `{ "diff": { "<field>": { "before", "after", "label", "type" } } }`. */
+	properties: Json,
+	/**  Who: the workspace member's name, else "New Dawn" (an agent, an import, the carry-over). */
+	actor: string,
 };
 
 export type Today = Today_Serialize | Today_Deserialize;
@@ -3049,6 +3152,31 @@ export type WeekMeeting = {
 	title: string,
 	held_on: string,
 	status: MeetingStatus,
+};
+
+export type Widget = {
+	id: string,
+	tab_id: string,
+	type: string,
+	title: string,
+	position: number | null,
+	grid_x: number,
+	grid_y: number,
+	grid_w: number,
+	grid_h: number,
+	/**  FIELDS `{fields: [names]}` (none = all) · RELATED `{field, editable}` · RICH_TEXT `{text}`. */
+	config: Json,
+};
+
+export type WidgetInput = {
+	type: string,
+	title: string,
+	position: number | null,
+	grid_x: number,
+	grid_y: number,
+	grid_w: number,
+	grid_h: number,
+	config: Json,
 };
 
 export type Workspace = Workspace_Serialize | Workspace_Deserialize;

@@ -13,11 +13,13 @@ interface Props {
   field: FieldMeta;
   query: Query;
   deleted: boolean;
+  /** Opens an event's record in the side panel instead of on its page (D-062). */
+  onOpen?: (id: string) => void;
 }
 
 /** Twenty's calendar view (D-061): records placed by a date field, a month (Monday to Sunday) or
  *  a week, dragged to another day to move them, "+" on a day to add one. */
-export default function CalendarView({ slug, object, field, query, deleted }: Props) {
+export default function CalendarView({ slug, object, field, query, deleted, onOpen }: Props) {
   const name = object.meta.name_singular;
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [mode, setMode] = useState<"month" | "week">("month");
@@ -101,6 +103,7 @@ export default function CalendarView({ slug, object, field, query, deleted }: Pr
           const other = mode === "month" && day.getMonth() !== anchor.getMonth();
           return (
             <Day
+            onOpen={onOpen}
               key={key}
               day={day}
               isToday={key === today}
@@ -129,6 +132,7 @@ export default function CalendarView({ slug, object, field, query, deleted }: Pr
 }
 
 interface DayProps {
+  onOpen?: (id: string) => void;
   day: Date;
   isToday: boolean;
   other: boolean;
@@ -144,7 +148,7 @@ interface DayProps {
   onAdd: (text: string, done: () => void) => void;
 }
 
-function Day({ day, isToday, other, week, events, object, deleted, dragging, timeOf, onDragStart, onDragEnd, onDrop, onAdd }: DayProps) {
+function Day({ day, isToday, other, week, events, object, deleted, dragging, timeOf, onDragStart, onDragEnd, onDrop, onAdd, onOpen }: DayProps) {
   const [over, setOver] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -192,8 +196,12 @@ function Day({ day, isToday, other, week, events, object, deleted, dragging, tim
           </>
         );
         const common = { className: styles.event, draggable: !deleted, onDragStart: () => onDragStart(id), onDragEnd, title: label };
-        return object.meta.name_singular === "person" && !deleted ? (
-          <Link key={id} to="/crm/people/$personId" params={{ personId: id }} {...common}>
+        return !deleted && onOpen ? (
+          <div key={id} {...common} role="button" tabIndex={0} aria-label={label} onClick={() => onOpen(id)} onKeyDown={(e) => e.key === "Enter" && onOpen(id)}>
+            {inner}
+          </div>
+        ) : !deleted ? (
+          <Link key={id} to="/crm/$object/$recordId" params={{ object: object.meta.name_plural, recordId: id }} {...common}>
             {inner}
           </Link>
         ) : (

@@ -99,7 +99,7 @@ export default function TodayPage() {
             </Row>
           );
           return c.person_id ? (
-            <Link key={c.id} to="/crm/people/$personId" params={{ personId: c.person_id }} className={styles.row} onClick={via(day.slug)}>
+            <Link key={c.id} to="/crm/$object/$recordId" params={{ object: "people", recordId: c.person_id }} className={styles.row} onClick={via(day.slug)}>
               {row}
             </Link>
           ) : (

@@ -23,6 +23,8 @@ interface Props {
   groups: { value: string; label: string; color: string }[];
   /** The number at a column's head: an aggregate of a numeric field (Twenty's expected amount). */
   aggregate: { field: FieldMeta; op: string } | null;
+  /** Opens a card's record in the side panel instead of on its page (D-062). */
+  onOpen?: (id: string) => void;
 }
 
 interface Drag {
@@ -33,7 +35,7 @@ interface Drag {
 /** Twenty's kanban (D-061): a column per option of a select field, cards you drag between
  *  columns (the field changes, the timeline records it) and reorder within one (the position),
  *  a count and an aggregate per column, "+ New" at each column's foot, compact mode. */
-export default function KanbanBoard({ slug, object, field, columns, query, deleted, compact, groups, aggregate }: Props) {
+export default function KanbanBoard({ slug, object, field, columns, query, deleted, compact, groups, aggregate, onOpen }: Props) {
   const name = object.meta.name_singular;
   const update = useUpdateRecord(slug, name);
   const create = useCreateRecord(slug, name);
@@ -61,6 +63,7 @@ export default function KanbanBoard({ slug, object, field, columns, query, delet
             query={query}
             deleted={deleted}
             aggregate={aggregate}
+            onOpen={onOpen}
             drag={drag}
             setDrag={setDrag}
             onMove={(id, value, position) => update.mutate({ id, data: { [field.name]: value || null, ...(position == null ? {} : { position }) } })}
@@ -86,9 +89,10 @@ interface ColumnProps {
   setDrag: (d: Drag | null) => void;
   onMove: (id: string, value: string, position: number | null) => void;
   onAdd: (text: string, done: () => void) => void;
+  onOpen?: (id: string) => void;
 }
 
-function KanbanColumn({ slug, object, field, group, count, cardFields, query, deleted, aggregate, drag, setDrag, onMove, onAdd }: ColumnProps) {
+function KanbanColumn({ slug, object, field, group, count, cardFields, query, deleted, aggregate, drag, setDrag, onMove, onAdd, onOpen }: ColumnProps) {
   const name = object.meta.name_singular;
   const own: Json = group.value ? { field: field.name, op: "is", value: group.value } : { field: field.name, op: "isEmpty" };
   const base = query.filter && typeof query.filter === "object" && query.filter !== null && "and" in query.filter ? (query.filter as { and: Json[] }).and : query.filter ? [query.filter] : [];
@@ -154,7 +158,7 @@ function KanbanColumn({ slug, object, field, group, count, cardFields, query, de
         {aggregate && <span className={styles.columnTotal}>{formatTotal(aggregate, total)}</span>}
       </header>
       {cards.map((record) => (
-        <KanbanCard key={recordId(record)} object={object} record={record} fields={cardFields} deleted={deleted} dragging={drag?.id === recordId(record)} onDragStart={() => setDrag({ id: recordId(record), from: group.value })} onDragEnd={() => setDrag(null)} onDropBefore={() => drop(record)} />
+        <KanbanCard key={recordId(record)} object={object} record={record} fields={cardFields} deleted={deleted} dragging={drag?.id === recordId(record)} onDragStart={() => setDrag({ id: recordId(record), from: group.value })} onDragEnd={() => setDrag(null)} onDropBefore={() => drop(record)} onOpen={onOpen} />
       ))}
       {cards.length === 0 && [0, 1].map((i) => <div key={i} className={`ghostCard ${styles.ghostCard}`} />)}
       {page.isError && <p className="ghostText">Couldn't be read — {page.error.message}</p>}
@@ -163,7 +167,7 @@ function KanbanColumn({ slug, object, field, group, count, cardFields, query, de
   );
 }
 
-function KanbanCard({ object, record, fields, deleted, dragging, onDragStart, onDragEnd, onDropBefore }: { object: ObjectDef; record: RecordJson; fields: Column[]; deleted: boolean; dragging: boolean; onDragStart: () => void; onDragEnd: () => void; onDropBefore: () => void }) {
+function KanbanCard({ object, record, fields, deleted, dragging, onDragStart, onDragEnd, onDropBefore, onOpen }: { object: ObjectDef; record: RecordJson; fields: Column[]; deleted: boolean; dragging: boolean; onDragStart: () => void; onDragEnd: () => void; onDropBefore: () => void; onOpen?: (id: string) => void }) {
   const id = recordId(record);
   const label = recordLabel(object, record) || "Unnamed";
   const body = (
@@ -193,9 +197,13 @@ function KanbanCard({ object, record, fields, deleted, dragging, onDragStart, on
       onDropBefore();
     },
   };
-  // A person's card opens their page (the record pages of every object come with 0.10.4).
-  return object.meta.name_singular === "person" && !deleted ? (
-    <Link to="/crm/people/$personId" params={{ personId: id }} {...common}>
+  // The card opens the record: in the side panel when the view says so, else on its page (D-062).
+  return !deleted && onOpen ? (
+    <div {...common} role="button" aria-label={label} tabIndex={0} onClick={() => onOpen(id)} onKeyDown={(e) => e.key === "Enter" && onOpen(id)}>
+      {body}
+    </div>
+  ) : !deleted ? (
+    <Link to="/crm/$object/$recordId" params={{ object: object.meta.name_plural, recordId: id }} {...common}>
       {body}
     </Link>
   ) : (

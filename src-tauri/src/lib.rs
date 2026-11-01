@@ -84,6 +84,7 @@ mod commands {
     pub mod crm;
     pub mod glass;
     pub mod inbox;
+    pub mod layouts;
     pub mod meetings;
     pub mod minutes;
     pub mod models;
@@ -245,6 +246,14 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::views::set_view_groups,
             commands::views::aggregate_records,
             commands::views::group_counts,
+            commands::layouts::get_record_layout,
+            commands::layouts::save_record_layout,
+            commands::layouts::reset_record_layout,
+            commands::layouts::list_timeline,
+            commands::layouts::record_neighbours,
+            commands::layouts::list_linked,
+            commands::layouts::add_linked,
+            commands::layouts::list_attachments,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

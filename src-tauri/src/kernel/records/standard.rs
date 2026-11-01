@@ -106,6 +106,7 @@ pub fn standard_objects() -> Vec<ObjectDecl> {
         f("phones", "Phones", FieldType::Phones, "phones", "IconPhone"),
         f("city", "City", FieldType::Text, "city", "IconMap"),
         f("avatarUrl", "Avatar", FieldType::Text, "avatar_url", "IconFileUpload"),
+        f("notes", "Notes", FieldType::LongText, "notes", "IconNotes"),
         to_one("company", "Company", "company", "company", "people", "IconBuildingSkyscraper"),
         to_many("pointOfContactForOpportunities", "Linked opportunities", "opportunity", "pointOfContact", "IconTargetArrow"),
     ];

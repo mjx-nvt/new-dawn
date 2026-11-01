@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-062 — Record pages: Twenty's page layouts as rows, widgets on a 12-column grid, one side panel
+_2026-11-01_
+
+**Context** (plan v4 §3.3, 0.10.4): in Twenty a record's page is a layout — tabs of widgets on a grid (fields, related records, timeline, tasks, notes, files, rich text; later charts, emails, calendar, iFrame) — edited in a layout editor, per object; a list opens a record on its page or in a side panel.
+
+**Decision — a layout is three tables** (migration 0023): `page_layout` (one RECORD layout per object; a DASHBOARD kind for 0.10.10), `page_layout_tab` (title, position, default), `page_layout_widget` (type, title, grid x / y / w / h on 12 columns and 56 pt rows, `config_json` genuinely nested: the fields shown, the relation and whether its table edits, the text). Twenty's default page is made in Rust at first read (`layouts::defaults`: Overview with Fields beside Timeline, a Related tab per one-to-many relation, Tasks, Notes, Files; a person also gets New Dawn's Commitments and Meetings), never at open — an object nobody opens costs nothing. Save replaces the whole layout in one transaction (widgets clamped into the grid; the first tab marked default is the default); Reset deletes it and the defaults return.
+
+**Decision — the UI is metadata-driven, like the table**: one `RecordPage` for every object (`/crm/$object/$recordId`; `/crm/people/$id` still works), its header the label identifier edited in place with the table's cell editors, ‹ › through the list's order (`layouts::neighbours`), ⋯ with Delete (a banner with Restore and Delete forever once deleted) and the layout editor. `FieldsWidget` reuses the cell editors as label · value rows; `RelatedWidget` is the `RecordTable` with a rule on the inverse relation (`locked` when "Allow editing" is off; a record added there gets the link back through `defaults`); the timeline reads `timeline_activity` with the field labels resolved in Rust; Tasks and Notes list through `task_target` / `note_target` and add through the engine (`linked::add`: the record, then a target row); the layout editor is the page itself in an edit state — pointer events snapped to the grid, widgets pushed down when they overlap, tabs edited in a bar — and Save sends the whole layout.
+
+**Decision — the side panel is the Overview's Fields widget**: a view's "Open record in" decides whether a label, a card or an event opens the page or the glass side panel (`RecordSidePanel`: the label, the fields, Open, × / Esc); the panel edits through the same hooks, so the list behind it follows at once.
+
+**Means for future work**: dashboards (0.10.10) reuse the three tables with kind DASHBOARD and the same grid; Charts, Emails, Calendar and iFrame widgets are listed (disabled) in the editor until their releases; the data model settings (0.10.5) link to the layout editor from an object; a custom object gets its `<object>_id` on the target tables when it is made, and until then its Tasks, Notes and Files widgets list nothing. The person's legacy `notes` column is now a LONG_TEXT field, so the old person page's Notes textarea lives on in the Fields widget.
+
+---
+
 ## D-061 — Views: a saved way of looking at an object, with a working copy the owner saves or resets
 _2026-11-01_
 

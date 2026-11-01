@@ -62,13 +62,19 @@ interface Props {
   onHide: (fieldId: string) => void;
   onFilter: (field: FieldMeta) => void;
   onAggregate: (fieldId: string, op: string | null) => void;
+  /** Opens a record in the side panel instead of on its page (the view's choice, D-062). */
+  onOpen?: (id: string) => void;
+  /** No cell edits and no Add row (a related table with "Allow editing" off). */
+  locked?: boolean;
+  /** What every record added here gets (a related table's link back). */
+  defaults?: RecordJson;
 }
 
 /** Twenty's table of an object's records (D-060, D-061): one column per visible field of the
  *  view, resized by dragging a border and reordered by dragging a header; a cell edits in place;
  *  rows select for a delete; an Add row at the end of the table or of each group; group rows
  *  with their counts and aggregates; an aggregate footer; the deleted records behind a switch. */
-export default function RecordTable({ slug, object, columns, query, deleted, compact, groupBy, groups, onResize, onReorder, onSort, onHide, onFilter, onAggregate }: Props) {
+export default function RecordTable({ slug, object, columns, query, deleted, compact, groupBy, groups, onResize, onReorder, onSort, onHide, onFilter, onAggregate, onOpen, locked, defaults }: Props) {
   const name = object.meta.name_singular;
   const update = useUpdateRecord(slug, name);
   const create = useCreateRecord(slug, name);
@@ -91,7 +97,7 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
     setEditing(null);
     update.mutate({ id: recordId(record), data: { [field.name]: value } });
   };
-  const add = (text: string, extra: RecordJson, done: () => void) => create.mutate({ ...labelInput(object, text), ...extra }, { onSuccess: done });
+  const add = (text: string, extra: RecordJson, done: () => void) => create.mutate({ ...labelInput(object, text), ...defaults, ...extra }, { onSuccess: done });
   const act = (fn: (id: string) => void) => {
     selected.forEach(fn);
     setSelected([]);
@@ -115,7 +121,7 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
     window.addEventListener("pointerup", up);
   };
   const widthOf = (c: Column) => (live?.id === c.field.id ? live.size : c.size);
-  const rowsProps = { slug, object, columns, deleted, editing, setEditing, selected, setSelected, save, add };
+  const rowsProps = { slug, object, columns, deleted, editing, setEditing, selected, setSelected, save, add, onOpen, locked };
 
   return (
     <div className={styles.tableWrap}>
@@ -304,6 +310,8 @@ interface RowsProps {
   setSelected: (ids: string[]) => void;
   save: (record: RecordJson, field: FieldMeta, value: unknown) => void;
   add: (text: string, extra: RecordJson, done: () => void) => void;
+  onOpen?: (id: string) => void;
+  locked?: boolean;
   /** Extra fields a new record of this section gets (a group's value). */
   extra?: RecordJson;
   /** Ghost rows when there are none: two for a table, one for a group. */
@@ -313,7 +321,7 @@ interface RowsProps {
 }
 
 /** The rows a query lists, the ghost rows when there are none, and the Add row. */
-function Rows({ slug, object, columns, query, deleted, editing, setEditing, selected, setSelected, save, add, extra = {}, ghosts = 2, emptyText }: RowsProps) {
+function Rows({ slug, object, columns, query, deleted, editing, setEditing, selected, setSelected, save, add, onOpen, locked, extra = {}, ghosts = 2, emptyText }: RowsProps) {
   const [limit, setLimit] = useState(PAGE);
   const page = useRecords(slug, object.meta.name_singular, { ...query, limit });
   const rows = (page.data?.records ?? []).map(asRecord);
@@ -339,7 +347,7 @@ function Rows({ slug, object, columns, query, deleted, editing, setEditing, sele
               <input type="checkbox" aria-label={`Select ${recordLabel(object, record) || "record"}`} checked={selected.includes(id)} onChange={(e) => setSelected(e.target.checked ? [...selected, id] : selected.filter((x) => x !== id))} />
             </td>
             {columns.map((c, i) => (
-              <Cell key={c.field.id} slug={slug} object={object} field={c.field} record={record} first={i === 0} deleted={deleted} editing={editing?.id === id && editing.field === c.field.name} onEdit={() => !deleted && !readOnly(c.field) && setEditing({ id, field: c.field.name })} onSave={(v) => save(record, c.field, v)} onCancel={() => setEditing(null)} />
+              <Cell key={c.field.id} slug={slug} object={object} field={c.field} record={record} first={i === 0} deleted={deleted} locked={locked} onOpen={onOpen} editing={editing?.id === id && editing.field === c.field.name} onEdit={() => !deleted && !locked && !readOnly(c.field) && setEditing({ id, field: c.field.name })} onSave={(v) => save(record, c.field, v)} onCancel={() => setEditing(null)} />
             ))}
           </tr>
         );
@@ -361,7 +369,7 @@ function Rows({ slug, object, columns, query, deleted, editing, setEditing, sele
           </td>
         </tr>
       )}
-      {!deleted && (
+      {!deleted && !locked && (
         <tr className={styles.addRow}>
           <td className={styles.check} />
           <td colSpan={columns.length}>
@@ -418,13 +426,16 @@ interface CellProps {
   record: RecordJson;
   first: boolean;
   deleted: boolean;
+  locked?: boolean;
+  onOpen?: (id: string) => void;
   editing: boolean;
   onEdit: () => void;
   onSave: (value: unknown) => void;
   onCancel: () => void;
 }
 
-function Cell({ slug, object, field, record, first, deleted, editing, onEdit, onSave, onCancel }: CellProps) {
+function Cell({ slug, object, field, record, first, deleted, locked, onOpen, editing, onEdit, onSave, onCancel }: CellProps) {
+  const frozen = deleted || !!locked;
   if (editing) {
     return (
       <td className={styles.cellEditing}>
@@ -435,17 +446,22 @@ function Cell({ slug, object, field, record, first, deleted, editing, onEdit, on
   if (editsInPlace(field)) {
     return (
       <td className={styles.cell}>
-        <input type="checkbox" aria-label={field.label} checked={record[field.name] === true} disabled={deleted} onChange={(e) => onSave(e.target.checked)} />
+        <input type="checkbox" aria-label={field.label} checked={record[field.name] === true} disabled={frozen} onChange={(e) => onSave(e.target.checked)} />
       </td>
     );
   }
   const view = <CellView field={field} record={record} />;
-  // The label of a person opens their page (the record pages of every object come with 0.10.4).
-  const link = first && object.meta.name_singular === "person" && !deleted;
+  // The label opens the record: in the side panel when the view says so, else on its page (D-062).
+  const link = first && !deleted;
+  const id = recordId(record);
   return (
-    <td className={readOnly(field) || deleted ? styles.cell : styles.cellEditable} onClick={link ? undefined : onEdit} onKeyDown={(e) => e.key === "Enter" && !link && onEdit()} tabIndex={readOnly(field) || deleted ? undefined : 0}>
-      {link ? (
-        <Link to="/crm/people/$personId" params={{ personId: recordId(record) }} className={styles.labelLink}>
+    <td className={readOnly(field) || frozen ? styles.cell : styles.cellEditable} onClick={link ? undefined : onEdit} onKeyDown={(e) => e.key === "Enter" && !link && onEdit()} tabIndex={readOnly(field) || frozen || link ? undefined : 0}>
+      {link && onOpen ? (
+        <button type="button" className={styles.labelLink} onClick={() => onOpen(id)}>
+          {view ?? <span className="ghostText">Unnamed</span>}
+        </button>
+      ) : link ? (
+        <Link to="/crm/$object/$recordId" params={{ object: object.meta.name_plural, recordId: id }} className={styles.labelLink}>
           {view ?? <span className="ghostText">Unnamed</span>}
         </Link>
       ) : (

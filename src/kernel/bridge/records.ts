@@ -52,6 +52,8 @@ function useRefresh(slug: string | undefined, object: string | undefined) {
     void queryClient.invalidateQueries({ queryKey: ["records", slug ?? "", object ?? ""] });
     void queryClient.invalidateQueries({ queryKey: ["record", slug ?? "", object ?? ""] });
     void queryClient.invalidateQueries({ queryKey: ["search", slug ?? ""] });
+    // The record page's other reads (D-062).
+    for (const key of ["timeline", "neighbours", "linked"]) void queryClient.invalidateQueries({ queryKey: [key, slug ?? ""] });
     // What the engine keeps beside its own columns: the people memory, Tasks, Today.
     for (const key of ["people", "people-cards", "tasks", "open-task-count", "today"]) void queryClient.invalidateQueries({ queryKey: [key] });
   };

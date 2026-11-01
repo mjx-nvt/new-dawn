@@ -104,7 +104,7 @@ function byOrganisation(cards: PersonCard[]): [string, PersonCard[]][] {
 
 function PersonRow({ card: c }: { card: PersonCard }) {
   return (
-    <Link to="/crm/people/$personId" params={{ personId: c.person.id }} className={`card ${styles.row}`}>
+    <Link to="/crm/$object/$recordId" params={{ object: "people", recordId: c.person.id }} className={`card ${styles.row}`}>
       <div className={styles.main}>
         <p className={styles.name}>{c.person.name}</p>
         <p className={styles.meta}>
