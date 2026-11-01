@@ -11,7 +11,7 @@ use specta::Type;
 use sqlx::SqlitePool;
 
 use super::query::{Query, Sort};
-use super::types::{FieldType, Json, ObjectDef};
+use super::types::{FieldMeta, FieldType, Json, ObjectDef};
 use crate::error::AppError;
 
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
@@ -254,6 +254,27 @@ pub async fn ensure_index(pool: &SqlitePool, object: &ObjectDef) -> Result<Strin
             .await?;
     }
     Ok(id)
+}
+
+/// A field made in the data model (0.10.5) joins every view of its object as a visible column
+/// after the others — a one-to-many has no column and joins nothing.
+pub async fn adopt_field(pool: &SqlitePool, object: &ObjectDef, field: &FieldMeta) -> Result<()> {
+    if super::types::columns(field).is_empty() {
+        return Ok(());
+    }
+    let views: Vec<(String,)> = sqlx::query_as("SELECT id FROM view WHERE object_id = ?").bind(&object.meta.id).fetch_all(pool).await?;
+    for (view_id,) in views {
+        let (position,): (f64,) = sqlx::query_as("SELECT coalesce(max(position), 0.0) + 1.0 FROM view_field WHERE view_id = ?").bind(&view_id).fetch_one(pool).await?;
+        sqlx::query("INSERT OR IGNORE INTO view_field (id, view_id, field_id, is_visible, position, size) VALUES (?, ?, ?, 1, ?, ?)")
+            .bind(uuid::Uuid::now_v7().to_string())
+            .bind(&view_id)
+            .bind(&field.id)
+            .bind(position)
+            .bind(default_size(field.r#type))
+            .execute(pool)
+            .await?;
+    }
+    Ok(())
 }
 
 /// A new view of the object, with the INDEX view's columns.

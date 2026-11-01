@@ -1,7 +1,8 @@
 //! Record page layouts (D-062): Twenty's page layouts — per object, tabs of widgets on a
-//! 12-column grid. The default layout of each object is made at first use; the layout editor
-//! saves a whole layout at once; Reset brings the default back. Also the record page's other
-//! reads: a record's timeline with its field labels, and its neighbours in the list.
+//! 12-column grid. An object shows the defaults computed from its metadata until the layout
+//! editor saves a layout of its own (a whole layout at once); Reset deletes it and the defaults
+//! return. Also the record page's other reads: a record's timeline with its field labels, and
+//! its neighbours in the list.
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -244,38 +245,43 @@ async fn write(conn: &mut sqlx::SqliteConnection, layout_id: &str, tabs: &[TabIn
     Ok(())
 }
 
-/// The object's record page layout, made from the defaults when missing.
+/// The object's record page layout: the saved one, else Twenty's defaults computed from the
+/// metadata with placeholder ids — so a relation added later (0.10.5) has its tab until the
+/// owner saves a layout of their own.
 pub async fn record_layout(pool: &SqlitePool, object: &ObjectDef) -> Result<Layout> {
     if let Some(row) = layout_row(pool, &object.meta.id).await? {
         return read(pool, row).await;
     }
-    let id = uuid::Uuid::now_v7().to_string();
+    let tabs = defaults(object)
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let tab_id = format!("default-{i}");
+            let widgets = t
+                .widgets
+                .into_iter()
+                .enumerate()
+                .map(|(j, w)| Widget { id: format!("default-{i}-{j}"), tab_id: tab_id.clone(), r#type: w.r#type, title: w.title, position: w.position, grid_x: w.grid_x, grid_y: w.grid_y, grid_w: w.grid_w, grid_h: w.grid_h, config: w.config })
+                .collect();
+            Tab { tab: TabRow { id: tab_id, layout_id: String::new(), title: t.title, position: t.position, is_default: t.is_default }, widgets }
+        })
+        .collect();
+    Ok(Layout { layout: LayoutRow { id: String::new(), object_id: Some(object.meta.id.clone()), name: format!("{} page", object.meta.label_singular), kind: "RECORD".into() }, tabs })
+}
+
+/// The layout editor's Save: the row (made on the first save), every tab and widget, in one
+/// transaction.
+pub async fn save(pool: &SqlitePool, object: &ObjectDef, input: LayoutInput) -> Result<Layout> {
     let mut tx = pool.begin().await?;
-    let made = sqlx::query("INSERT OR IGNORE INTO page_layout (id, object_id, name, kind) VALUES (?, ?, ?, 'RECORD')")
-        .bind(&id)
+    sqlx::query("INSERT OR IGNORE INTO page_layout (id, object_id, name, kind) VALUES (?, ?, ?, 'RECORD')")
+        .bind(uuid::Uuid::now_v7().to_string())
         .bind(&object.meta.id)
         .bind(format!("{} page", object.meta.label_singular))
         .execute(&mut *tx)
         .await?;
-    if made.rows_affected() == 0 {
-        tx.rollback().await?; // another reader made it first
-    } else {
-        write(&mut tx, &id, &defaults(object)).await?;
-        tx.commit().await?;
-    }
-    let row = layout_row(pool, &object.meta.id).await?.ok_or_else(|| anyhow!("the layout just made is missing"))?;
-    read(pool, row).await
-}
-
-/// The layout editor's Save: every tab and widget, in one transaction.
-pub async fn save(pool: &SqlitePool, object: &ObjectDef, input: LayoutInput) -> Result<Layout> {
-    let current = record_layout(pool, object).await?;
-    let mut tx = pool.begin().await?;
-    write(&mut tx, &current.layout.id, &input.tabs).await?;
-    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE page_layout SET updated_at = {NOW} WHERE id = ?")))
-        .bind(&current.layout.id)
-        .execute(&mut *tx)
-        .await?;
+    let (id,): (String,) = sqlx::query_as("SELECT id FROM page_layout WHERE object_id = ? AND kind = 'RECORD'").bind(&object.meta.id).fetch_one(&mut *tx).await?;
+    write(&mut tx, &id, &input.tabs).await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE page_layout SET updated_at = {NOW} WHERE id = ?"))).bind(&id).execute(&mut *tx).await?;
     tx.commit().await?;
     record_layout(pool, object).await
 }
@@ -370,7 +376,7 @@ mod tests {
             assert_eq!(titles, ["Overview", "People", "Opportunities", "Tasks", "Notes", "Files"]);
             assert!(made.tabs[0].tab.is_default);
             assert_eq!(made.tabs[1].widgets[0].config.0["field"], "people");
-            assert_eq!(record_layout(&pool, &company).await.unwrap().layout.id, made.layout.id, "read again, not made again");
+            assert!(made.layout.id.is_empty(), "the defaults aren't saved until the owner edits");
 
             let saved = save(
                 &pool,
@@ -384,7 +390,7 @@ mod tests {
             )
             .await
             .unwrap();
-            assert_eq!(saved.layout.id, made.layout.id);
+            assert!(!saved.layout.id.is_empty());
             assert_eq!(saved.tabs.len(), 2);
             assert!(!saved.tabs[0].tab.is_default && saved.tabs[1].tab.is_default);
             assert_eq!((saved.tabs[0].widgets[0].grid_x, saved.tabs[0].widgets[0].grid_w), (10, 2), "kept inside the 12 columns");
@@ -393,7 +399,7 @@ mod tests {
             assert!(save(&pool, &company, LayoutInput { tabs: vec![tab("Odd", 0.0, true, vec![widget("GADGET", "", 0, 0, 1, 1, json!({}))])] }).await.is_err());
 
             let back = reset(&pool, &company).await.unwrap();
-            assert_ne!(back.layout.id, made.layout.id);
+            assert!(back.layout.id.is_empty(), "the defaults again");
             assert_eq!(back.tabs.len(), 6);
             assert_eq!(back.tabs[0].tab.title, "Overview");
             hub.close_all().await;

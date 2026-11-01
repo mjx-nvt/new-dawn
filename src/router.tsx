@@ -175,8 +175,10 @@ const emailRoute = createRoute({
 const workspaceRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/workspace",
-  validateSearch: (search: Record<string, unknown>): { tab: WorkspaceTab } => ({
+  validateSearch: (search: Record<string, unknown>): { tab: WorkspaceTab; object?: string } => ({
     tab: WORKSPACE_TABS.find((t) => t.id === search.tab)?.id ?? "overview",
+    // The CRM tab's data model: the object open (D-060, 0.10.5).
+    ...(typeof search.object === "string" && search.object ? { object: search.object } : {}),
   }),
   component: WorkspacePage,
   staticData: { title: "Workspace" },

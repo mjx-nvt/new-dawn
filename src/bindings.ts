@@ -264,6 +264,14 @@ export const commands = {
 	/**  A new task or note with this title, targeting the record. */
 	addLinked: (slug: string, object: string, id: string, kind: string, title: string) => typedError<Json, AppError>(__TAURI_INVOKE("add_linked", { slug, object, id, kind, title })),
 	listAttachments: (slug: string, object: string, id: string) => typedError<Attachment[], AppError>(__TAURI_INVOKE("list_attachments", { slug, object, id })),
+	createObject: (slug: string, input: ObjectInput_Deserialize) => typedError<ObjectDef_Serialize, AppError>(__TAURI_INVOKE("create_object", { slug, input })),
+	updateObject: (slug: string, id: string, patch: ObjectPatch_Deserialize) => typedError<ObjectDef_Serialize, AppError>(__TAURI_INVOKE("update_object", { slug, id, patch })),
+	setObjectActive: (slug: string, id: string, active: boolean) => typedError<ObjectDef_Serialize, AppError>(__TAURI_INVOKE("set_object_active", { slug, id, active })),
+	deleteObject: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_object", { slug, id })),
+	createField: (slug: string, object: string, input: FieldInput_Deserialize) => typedError<FieldMeta_Serialize, AppError>(__TAURI_INVOKE("create_field", { slug, object, input })),
+	updateField: (slug: string, object: string, id: string, patch: FieldPatch_Deserialize) => typedError<FieldMeta_Serialize, AppError>(__TAURI_INVOKE("update_field", { slug, object, id, patch })),
+	setFieldActive: (slug: string, object: string, id: string, active: boolean) => typedError<FieldMeta_Serialize, AppError>(__TAURI_INVOKE("set_field_active", { slug, object, id, active })),
+	deleteField: (slug: string, object: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_field", { slug, object, id })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -1005,6 +1013,32 @@ export type ExportOptions_Serialize = {
 	file_name: string | null,
 };
 
+export type FieldInput = FieldInput_Serialize | FieldInput_Deserialize;
+
+export type FieldInput_Deserialize = {
+	label: string,
+	type: FieldType,
+	description?: string,
+	icon?: string,
+	options?: FieldOptions_Deserialize,
+	default_value?: Json | null,
+	required?: boolean,
+	unique?: boolean,
+	relation?: RelationInput_Deserialize | null,
+};
+
+export type FieldInput_Serialize = {
+	label: string,
+	type: FieldType,
+	description: string,
+	icon: string,
+	options: FieldOptions_Serialize,
+	default_value: Json | null,
+	required: boolean,
+	unique: boolean,
+	relation: RelationInput_Serialize | null,
+};
+
 /**  A field of an object (`field_meta`), with its options parsed. */
 export type FieldMeta = FieldMeta_Serialize | FieldMeta_Deserialize;
 
@@ -1076,6 +1110,30 @@ export type FieldOptions_Serialize = {
 	/**  TEXT shown on several rows (Twenty's "Long text"). */
 	multiline?: boolean,
 	relation?: RelationOptions_Serialize,
+};
+
+export type FieldPatch = FieldPatch_Serialize | FieldPatch_Deserialize;
+
+export type FieldPatch_Deserialize = {
+	label?: string | null,
+	description?: string | null,
+	icon?: string | null,
+	options?: FieldOptions_Deserialize | null,
+	/**  An empty string clears the default. */
+	default_value?: Json | null,
+	required?: boolean | null,
+	unique?: boolean | null,
+};
+
+export type FieldPatch_Serialize = {
+	label: string | null,
+	description: string | null,
+	icon: string | null,
+	options: FieldOptions_Serialize | null,
+	/**  An empty string clears the default. */
+	default_value: Json | null,
+	required: boolean | null,
+	unique: boolean | null,
 };
 
 export type FieldType = "TEXT" | "LONG_TEXT" | "RICH_TEXT" | "NUMBER" | "BOOLEAN" | "DATE" | "DATE_TIME" | "SELECT" | "MULTI_SELECT" | "CURRENCY" | "LINKS" | "DOMAIN" | "EMAILS" | "PHONES" | "ADDRESS" | "RATING" | "RELATION" | "ARRAY" | "JSON" | "FULL_NAME" | "ACTOR" | "UUID" | "POSITION";
@@ -1693,6 +1751,26 @@ export type ObjectDef_Serialize = {
 	fields: FieldMeta_Serialize[],
 };
 
+export type ObjectInput = ObjectInput_Serialize | ObjectInput_Deserialize;
+
+export type ObjectInput_Deserialize = {
+	label_singular: string,
+	label_plural: string,
+	icon?: string,
+	description?: string,
+	/**  Twenty's "Skip creating a Name field" (a junction object). */
+	skip_name?: boolean,
+};
+
+export type ObjectInput_Serialize = {
+	label_singular: string,
+	label_plural: string,
+	icon: string,
+	description: string,
+	/**  Twenty's "Skip creating a Name field" (a junction object). */
+	skip_name: boolean,
+};
+
 /**  An object: a table and its fields (`object_meta`). */
 export type ObjectMeta = ObjectMeta_Serialize | ObjectMeta_Deserialize;
 
@@ -1732,6 +1810,28 @@ export type ObjectMeta_Serialize = {
 	label_identifier_field_id: string | null,
 	image_identifier_field_id: string | null,
 	position: number | null,
+};
+
+export type ObjectPatch = ObjectPatch_Serialize | ObjectPatch_Deserialize;
+
+export type ObjectPatch_Deserialize = {
+	label_singular?: string | null,
+	label_plural?: string | null,
+	icon?: string | null,
+	description?: string | null,
+	/**  A field id; an empty string clears it. */
+	label_identifier_field_id?: string | null,
+	image_identifier_field_id?: string | null,
+};
+
+export type ObjectPatch_Serialize = {
+	label_singular: string | null,
+	label_plural: string | null,
+	icon: string | null,
+	description: string | null,
+	/**  A field id; an empty string clears it. */
+	label_identifier_field_id: string | null,
+	image_identifier_field_id: string | null,
 };
 
 /**  The Qwen download ended: `error` is None on success. */
@@ -2203,6 +2303,32 @@ export type Reference = {
 	id: string,
 	title: string,
 	held_on: string,
+};
+
+export type RelationInput = RelationInput_Serialize | RelationInput_Deserialize;
+
+export type RelationInputKind = "MANY_TO_ONE" | "ONE_TO_MANY" | 
+/**  Through a junction object, made for you. */
+"MANY_TO_MANY";
+
+export type RelationInput_Deserialize = {
+	/**  The other object, by singular name, plural name or id. */
+	target: string,
+	kind: RelationInputKind,
+	/**  The field's label on the other object (Twenty's "Field name on destination object"). */
+	inverse_label?: string | null,
+	/**  A one-to-many through a junction object shows the far records (Twenty's toggle). */
+	junction?: boolean,
+};
+
+export type RelationInput_Serialize = {
+	/**  The other object, by singular name, plural name or id. */
+	target: string,
+	kind: RelationInputKind,
+	/**  The field's label on the other object (Twenty's "Field name on destination object"). */
+	inverse_label: string | null,
+	/**  A one-to-many through a junction object shows the far records (Twenty's toggle). */
+	junction: boolean,
 };
 
 export type RelationKind = "MANY_TO_ONE" | "ONE_TO_MANY";

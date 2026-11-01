@@ -10,6 +10,7 @@ import BrandPanel from "../workspace-settings/BrandPanel";
 import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
 import PeoplePanel from "../workspace-settings/PeoplePanel";
 import VocabularyPanel from "../workspace-settings/VocabularyPanel";
+import DataModelPanel from "../workspace-settings/DataModelPanel";
 import styles from "./WorkspacePage.module.css";
 
 const route = getRouteApi("/shell/workspace");
@@ -21,6 +22,7 @@ export const WORKSPACE_TABS = [
   { id: "people", label: "People" },
   { id: "vocabulary", label: "Vocabulary" },
   { id: "agents", label: "Agents" },
+  { id: "crm", label: "CRM" },
 ] as const;
 
 export type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
@@ -28,7 +30,7 @@ export type WorkspaceTab = (typeof WORKSPACE_TABS)[number]["id"];
 /** The current workspace's own settings — its brand, meeting types and people — in the main
  *  window. App-wide settings (permissions, backup, AI models) live in the Settings window. */
 export default function WorkspacePage() {
-  const { tab } = route.useSearch();
+  const { tab, object } = route.useSearch();
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug ?? "";
@@ -57,6 +59,8 @@ export default function WorkspacePage() {
           <BrandPanel key={slug} slug={slug} />
         ) : tab === "types" ? (
           <MeetingTypesPanel slug={slug} />
+        ) : tab === "crm" ? (
+          <DataModelPanel slug={slug} objectName={object} onOpen={(name) => void navigate({ to: "/workspace", search: { tab: "crm", object: name }, replace: true })} onBack={() => void navigate({ to: "/workspace", search: { tab: "crm" }, replace: true })} />
         ) : tab === "agents" ? (
           <AgentsPanel slug={slug} />
         ) : tab === "vocabulary" ? (

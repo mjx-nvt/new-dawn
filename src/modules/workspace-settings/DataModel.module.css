@@ -1,0 +1,176 @@
+/* Workspace → CRM → Data model (D-060, 0.10.5): the objects list, an object's page, the field sheet. */
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.head .sectionSubtitle { margin-bottom: 0; }
+.filters { margin-bottom: var(--space-4); }
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.row {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+}
+.row:hover { background: var(--surface-2); }
+.row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.rowMuted { opacity: 0.6; }
+.mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.name {
+  font-size: var(--t-md);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.ghostRow {
+  height: 56px;
+  border-radius: var(--radius-card);
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.back { margin-bottom: var(--space-4); }
+.saveRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.aboutGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+@container content (max-width: 640px) {
+  .aboutGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The field sheet */
+.sheetWide { width: min(640px, calc(100vw - 2 * var(--space-5))); }
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-2);
+}
+.typeCard {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+}
+.typeCard:hover { background: var(--surface-2); }
+.typeCard:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+.typeName {
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--ink);
+}
+.typeHint {
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.twoUp {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.optionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sheetScroll {
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+}
+.danger {
+  display: flex;
+  gap: var(--space-3);
+  margin-right: auto;
+}

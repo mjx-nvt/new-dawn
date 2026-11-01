@@ -3,6 +3,7 @@
 //! in `standard.rs` and synced at every open; custom objects and fields are run-time DDL (0.10.5).
 //! Everything the CRM module shows goes through `query`.
 
+pub mod ddl;
 pub mod layouts;
 pub mod linked;
 pub mod query;
@@ -95,6 +96,7 @@ pub fn split_name(name: &str) -> (String, String) {
 /// and the search index for tables that predate it. Idempotent.
 pub async fn prepare(pool: &SqlitePool, owner_name: &str) -> Result<()> {
     standard::sync(pool).await?;
+    ddl::repair(pool).await?;
     let (first, last) = split_name(owner_name);
     match member_id(pool).await? {
         None => {
