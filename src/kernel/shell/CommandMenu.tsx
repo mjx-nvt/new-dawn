@@ -4,6 +4,7 @@ import { ALL_MODULES, useModules } from "../bridge/modules";
 import { useAllViews, useRecents } from "../bridge/navigation";
 import { labelInput, useCreateRecord, useObject, useObjects, useSearchRecords } from "../bridge/records";
 import { openSettings } from "../bridge/settings";
+import { askAssistant } from "../bridge/assistant";
 import { useManualWorkflows, useRunWorkflow } from "../bridge/workflows";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import styles from "./CommandMenu.module.css";
@@ -50,7 +51,8 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
   // Manual workflows (D-068): the global ones run from here; on a record's page, those that
   // take a record of its object run on it.
   const globalWorkflows = useManualWorkflows(slug, null, open);
-  const pathObject = /^\/crm\/([^/]+)\/[^/]+$/.exec(location.pathname)?.[1];
+  const onPath = /^\/crm\/([^/]+)\/([^/]+)$/.exec(location.pathname);
+  const pathObject = onPath?.[1];
   const recordObject = (objects.data ?? []).find((o) => o.name_plural === pathObject);
   const recordWorkflows = useManualWorkflows(slug, recordObject?.name_singular, open && !!recordObject);
   const runWorkflow = useRunWorkflow(slug);
@@ -108,6 +110,14 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
     if (modules.crm) {
       for (const o of recordObjects) if (fits(o.label_plural)) out.push({ id: `object:${o.id}`, section: "Go to", label: o.label_plural, hint: "CRM", run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural } })) });
       for (const v of views.data ?? []) if (needle && (fits(v.name) || fits(v.object_label))) out.push({ id: `view:${v.id}`, section: "Views", label: v.name, hint: v.object_label, run: go(() => void navigate({ to: "/crm", search: { tab: v.object, view: v.id } })) });
+    }
+    // The assistant (D-070): a chat of its own, or about the record on screen.
+    if (modules.crm && (fits("Ask AI") || fits("Ask the assistant"))) out.push({ id: "action:ask", section: "Actions", label: "Ask AI", hint: "the local model", run: go(() => askAssistant()) });
+    // Not on a workflow, a run or a dashboard: the assistant doesn't work on those (D-070).
+    const askable = recordObject && !["workflow", "workflowRun", "dashboard"].includes(recordObject.name_singular);
+    if (modules.crm && askable && onPath?.[2] && fits(`Ask AI about this ${recordObject.label_singular.toLowerCase()}`)) {
+      const id = onPath[2];
+      out.push({ id: "action:ask-record", section: "Actions", label: `Ask AI about this ${recordObject.label_singular.toLowerCase()}`, run: go(() => askAssistant({ object: recordObject.name_singular, id, objectLabel: recordObject.label_singular.toLowerCase() })) });
     }
     // The menu stays open until a run has started, so a refusal shows here.
     const runIt = (workflowId: string) => () =>

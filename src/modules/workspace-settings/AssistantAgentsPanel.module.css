@@ -1,0 +1,24 @@
+/* Workspace → CRM → AI agents (D-070). */
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.tools > legend { margin-bottom: var(--space-2); }
+.tool {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-md);
+  color: var(--ink);
+}
+.add { margin-top: var(--space-3); }

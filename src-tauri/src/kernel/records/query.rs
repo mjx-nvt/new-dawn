@@ -84,6 +84,11 @@ impl Actor {
     pub fn workflow(name: &str) -> Self {
         Self { source: "WORKFLOW".into(), name: name.into(), member_id: None }
     }
+
+    /// What the owner applied from an assistant's proposal (D-070), named after the agent.
+    pub fn agent(name: &str) -> Self {
+        Self { source: "AGENT".into(), name: name.into(), member_id: None }
+    }
 }
 
 #[derive(Debug, Clone)]

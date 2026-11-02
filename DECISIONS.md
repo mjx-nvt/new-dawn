@@ -53,6 +53,23 @@ _2026-11-02_
 
 ---
 
+## D-070 — The CRM's assistant: agents as settings, a turn of lookups on the local model, writes only as proposals
+_2026-11-02_
+
+**Context** (plan v4 §3.6, 0.10.13): Twenty's AI chatbot (questions over the workspace's data in plain words, follow-ups that keep their context, "this company" meaning the record on screen) and AI agents (a name, a prompt, a model, the tools and permissions they get, usable as workflow steps); here one owner, one Mac, the local model.
+
+**Decision — agents are settings, not records** (migration 0029, `crm_*` tables beside the meeting agents of D-035): an agent is a name, a description, its instructions, its model (the app's or one of Ollama's installed models) and the tools it may use; a default "Assistant" is made the first time it's asked for and can't be deleted (Workspace → CRM → AI agents). A chat thread belongs to an agent (the default when its agent is deleted) and may sit on a record — on a record deleted for good, it stays, detached.
+
+**Decision — one turn, lookups first, through the gateway**: a question opens a session on the AI queue in the lane the owner waits in (the gateway's new `chat` turn: Ollama's `/api/chat` with tools, logged in `ai_log` as a completion, the session's model, Whisper unloaded; thinking off — a chat turn waits on every round, and tool calls read well without it — an exception to the house's "thinking on") and the model answers or calls tools, up to six rounds: `find_records` (filters in the view bar's operators; a select by its label, an amount in units, a relation by the record's name; `inactive_days` — no change, note or task on the record for that long, read from the timeline and the note/task targets over the first 2 000 matches), `count_records`, `aggregate` (sum, average, smallest, largest; amounts back in units), `open_record`. A record may be named rather than given by id; numbers may come as text; `find_records` takes an order. A tool's mistake goes back to the model as an error to correct, never as a failed turn; each call and result is kept in the thread, and an earlier turn's results are read back in brief so a long chat stays within the model's context. A question is kept only once the model can be reached. The system message carries the agent's instructions, today, the ground rules (look things up, never invent; link records as `[label](/crm/…)`; changes are proposals), the objects with their fields and options, and the record the chat is on.
+
+**Decision — the model never writes**: `propose_create`, `propose_update` and `propose_note` only store a proposal (checked as the engine would, shown in words: "Add a note to Keppel Land — “…”"); the panel shows it as a card with **Apply** and **Dismiss**; Apply writes through the engine as the agent (actor AGENT, named after it), once — a second click finds it applied — and a refusal leaves it proposed with the reason. A proposed value is written whole: an amount keeps the record's currency (else the field's), a name is split in two, an email, a phone or a link is its first part. An update never lands on a record deleted since; a note is attached to its record through the note's targets, or not made at all. Workflows, their runs, dashboards and objects turned off are out of the assistant's reach. The record engine's `forget_visits` detaches the threads on a record deleted for good — the one place the kernel writes the assistant's table, a module's.
+
+**Decision — the panel**: ⌘K → "Ask AI" (and "Ask AI about this <object>" on a record), or a record's ⋯ → "Ask AI about this …", opens a glass panel on the right: the chats of that place (newest first; New chat; an agent to pick when there are several), the owner's questions on the right, the answers with their record links opening in the app and the AI marker with the model, each lookup in a quiet line, proposals as cards, the AI progress bar while the model works, and the question box (Enter asks). A workflow's AI step can take an agent: its instructions, its model and its lookups — never a proposal inside a run.
+
+**Means for future work**: 0.10.15's CRM agent runs on these tools; Plane's Projects agent (0.11.12) gets the same proposal cards; chat threads on records can join the record page as a tab when one is asked for.
+
+---
+
 ## D-066 — Emails and calendar from local sources: Apple Mail answers for a record's addresses, meetings are the calendar
 _2026-11-02_
 

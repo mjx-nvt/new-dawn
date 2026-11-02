@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { selectOptions, useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
+import { useAssistantAgents } from "../../kernel/bridge/assistant";
 import { useOllamaStatus } from "../../kernel/bridge/summary";
 import { CONDITION_OPS, STEP_TYPES, type Branch, type Condition, type Step, type Trigger } from "../../kernel/bridge/workflows";
 import { kindOf, needsValue, OPS, subsOf } from "../crm/views/useViewState";
@@ -717,7 +718,7 @@ export function StepSettings({ slug, step, variables, onChange }: { slug: string
           </Row>
         </>
       )}
-      {kind === "AI_AGENT" && <AiSettings step={step} set={set} variables={variables} />}
+      {kind === "AI_AGENT" && <AiSettings slug={slug} step={step} set={set} variables={variables} />}
       {kind === "SEND_EMAIL" && (
         <>
           <Row label="To" htmlFor="wf-mail-to">
@@ -744,8 +745,9 @@ export function StepSettings({ slug, step, variables, onChange }: { slug: string
 type Patch = (patch: Record<string, unknown>) => void;
 
 /** The AI step: a prompt with variables on the local model; outputs make it answer in JSON. */
-function AiSettings({ step, set, variables }: { step: Step; set: Patch; variables: Variable[] }) {
+function AiSettings({ slug, step, set, variables }: { slug: string; step: Step; set: Patch; variables: Variable[] }) {
   const ollama = useOllamaStatus();
+  const agents = useAssistantAgents(slug);
   const st = step.settings;
   const outputs = Array.isArray(st.outputs) ? (st.outputs as { name: string; type: string }[]) : [];
   const edit = (i: number, patch: Partial<{ name: string; type: string }>) => set({ outputs: outputs.map((o, j) => (j === i ? { ...o, ...patch } : o)) });
@@ -754,17 +756,30 @@ function AiSettings({ step, set, variables }: { step: Step; set: Patch; variable
       <Row label="Prompt" htmlFor="wf-ai-prompt">
         <TemplateInput id="wf-ai-prompt" rows={6} value={str(st.prompt)} placeholder="Two lines on {{trigger.record.name}} for the weekly review" variables={variables} onChange={(prompt) => set({ prompt })} />
       </Row>
-      <Row label="Model" htmlFor="wf-ai-model">
-        <select id="wf-ai-model" className="input" value={str(st.model)} onChange={(e) => set({ model: e.target.value })}>
-          <option value="">App default{ollama.data?.model ? ` (${ollama.data.model})` : ""}</option>
-          {(ollama.data?.installed ?? []).map((m) => (
-            <option key={m.name} value={m.name}>
-              {m.name}
+      <Row label="Agent" htmlFor="wf-ai-agent">
+        <select id="wf-ai-agent" className="input" value={str(st.agent)} onChange={(e) => set({ agent: e.target.value })}>
+          <option value="">None — the model alone</option>
+          {(agents.data ?? []).map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
             </option>
           ))}
         </select>
-        {ollama.data && !ollama.data.running && <p className="fieldHint">Ollama isn't running: a run stops at this step until it is, then Retry.</p>}
+        <p className="fieldHint">An agent brings its instructions, its model and its lookups (find, count, open — never a change).</p>
       </Row>
+      {!str(st.agent) && (
+        <Row label="Model" htmlFor="wf-ai-model">
+          <select id="wf-ai-model" className="input" value={str(st.model)} onChange={(e) => set({ model: e.target.value })}>
+            <option value="">App default{ollama.data?.model ? ` (${ollama.data.model})` : ""}</option>
+            {(ollama.data?.installed ?? []).map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          {ollama.data && !ollama.data.running && <p className="fieldHint">Ollama isn't running: a run stops at this step until it is, then Retry.</p>}
+        </Row>
+      )}
       <Row label="Outputs">
         <div className={s.blocks}>
           {outputs.map((o, i) => (

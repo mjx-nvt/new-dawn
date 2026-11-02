@@ -404,7 +404,7 @@ fn list_cell(t: &str) -> Vec<String> {
 }
 
 /// Plain lines as the editor's document.
-fn rich_doc(text: &str) -> Value {
+pub fn rich_doc(text: &str) -> Value {
     let paragraphs: Vec<Value> = text
         .lines()
         .map(|l| if l.trim().is_empty() { json!({ "type": "paragraph" }) } else { json!({ "type": "paragraph", "content": [{ "type": "text", "text": l }] }) })

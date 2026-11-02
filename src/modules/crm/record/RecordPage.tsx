@@ -6,6 +6,7 @@ import { noteVisit, useAddFavorite, useFavorites, useRemoveFavorite } from "../.
 import { asRecord, recordLabel, useDeleteRecord, useDestroyRecord, useObject, useRecord, useRestoreRecord, useUpdateRecord } from "../../../kernel/bridge/records";
 import { useCurrentWorkspace } from "../../../kernel/bridge/workspaces";
 import { useManualWorkflows, useRunWorkflow } from "../../../kernel/bridge/workflows";
+import { askAssistant } from "../../../kernel/bridge/assistant";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { CellEditor } from "../cells";
@@ -161,6 +162,7 @@ export default function RecordPage() {
               { label: isDashboard ? "Edit dashboard" : "Edit page layout", onSelect: () => setEditingLayout(true), disabled: !ctx || (!isDashboard && !layout.data) },
               ...(isDashboard ? [{ label: "Duplicate dashboard", onSelect: copyDashboard, disabled: !ctx || duplicate.isPending }] : []),
               ...(manual.data ?? []).map((w, i) => ({ label: `Run ${w.name}`, separator: i === 0, disabled: !ctx || deleted || runWorkflow.isPending, onSelect: () => runOnThis(w.workflow_id) })),
+              ...(name && !isWorkflow && !isRun && !isDashboard ? [{ label: `Ask AI about this ${def?.meta.label_singular.toLowerCase() ?? "record"}`, separator: true, disabled: !ctx || deleted, onSelect: () => askAssistant({ object: name, id, label, objectLabel: def?.meta.label_singular.toLowerCase() }) }] : []),
               deleted ? { label: "Restore", onSelect: () => restore.mutate(id), separator: true } : { label: "Delete", danger: true, separator: true, disabled: !ctx, onSelect: () => remove.mutate(id) },
             ]}
           />

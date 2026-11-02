@@ -10,6 +10,7 @@ import BrandPanel from "../workspace-settings/BrandPanel";
 import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
 import PeoplePanel from "../workspace-settings/PeoplePanel";
 import VocabularyPanel from "../workspace-settings/VocabularyPanel";
+import AssistantAgentsPanel from "../workspace-settings/AssistantAgentsPanel";
 import DataModelPanel from "../workspace-settings/DataModelPanel";
 import styles from "./WorkspacePage.module.css";
 
@@ -60,7 +61,10 @@ export default function WorkspacePage() {
         ) : tab === "types" ? (
           <MeetingTypesPanel slug={slug} />
         ) : tab === "crm" ? (
-          <DataModelPanel slug={slug} objectName={object} onOpen={(name) => void navigate({ to: "/workspace", search: { tab: "crm", object: name }, replace: true })} onBack={() => void navigate({ to: "/workspace", search: { tab: "crm" }, replace: true })} />
+          <>
+            <DataModelPanel slug={slug} objectName={object} onOpen={(name) => void navigate({ to: "/workspace", search: { tab: "crm", object: name }, replace: true })} onBack={() => void navigate({ to: "/workspace", search: { tab: "crm" }, replace: true })} />
+            {!object && <AssistantAgentsPanel slug={slug} />}
+          </>
         ) : tab === "agents" ? (
           <AgentsPanel slug={slug} />
         ) : tab === "vocabulary" ? (

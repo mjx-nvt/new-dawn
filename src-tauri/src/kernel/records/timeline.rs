@@ -48,6 +48,40 @@ pub async fn forget(pool: &SqlitePool, object: &ObjectDef, record_id: &str) -> R
     Ok(())
 }
 
+/// The time each record was last touched — a change on its timeline, a note or a task attached
+/// to it — by id (D-070: the assistant's "no activity for N days").
+pub async fn last_activity(pool: &SqlitePool, object: &ObjectDef, ids: &[String]) -> Result<std::collections::HashMap<String, String>> {
+    let mut out: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if ids.is_empty() {
+        return Ok(out);
+    }
+    let marks = vec!["?"; ids.len()].join(", ");
+    let column = format!("{}_id", snake(&object.meta.name_singular));
+    let mut sources = Vec::new();
+    if let Some(col) = target_column(pool, object).await? {
+        sources.push(format!("SELECT {col} AS rid, max(happens_at) AS at FROM timeline_activity WHERE {col} IN ({marks}) GROUP BY {col}"));
+    }
+    for junction in ["note_target", "task_target"] {
+        // The column comes from the metadata and is checked against the table before it's used.
+        let has: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT name FROM pragma_table_info('{junction}') WHERE name = ?"))).bind(&column).fetch_optional(pool).await?;
+        if has.is_some() {
+            sources.push(format!("SELECT {column} AS rid, max(created_at) AS at FROM {junction} WHERE {column} IN ({marks}) GROUP BY {column}"));
+        }
+    }
+    for sql in sources {
+        let mut q = sqlx::query_as::<_, (String, String)>(sqlx::AssertSqlSafe(sql));
+        for id in ids {
+            q = q.bind(id);
+        }
+        for (rid, at) in q.fetch_all(pool).await? {
+            if out.get(&rid).is_none_or(|known| known < &at) {
+                out.insert(rid, at);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// camelCase → snake_case (`workspaceMember` → `workspace_member`).
 pub fn snake(name: &str) -> String {
     let mut out = String::with_capacity(name.len() + 4);

@@ -1,5 +1,5 @@
 import { Outlet, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useBrandSync } from "../bridge/brand";
 import { openSettings } from "../bridge/settings";
 import { useUpdateCheckAtLaunch } from "../bridge/updater";
@@ -12,6 +12,7 @@ import RecorderBanner from "../../modules/recorder/RecorderBanner";
 import StartRecordingDialog from "../../modules/recorder/StartRecordingDialog";
 import { useStopAndOpen } from "../../modules/recorder/useStopAndOpen";
 import { useCodeRunner } from "../../modules/workflows/useCodeRunner";
+import ChatPanel, { type AskTarget } from "../../modules/assistant/ChatPanel";
 import styles from "./AppLayout.module.css";
 import CommandMenu from "./CommandMenu";
 import ContentRoot from "./ContentRoot";
@@ -94,6 +95,16 @@ export default function AppLayout() {
   // The workflows' code steps run in this window (D-069).
   const { data: workspace } = useCurrentWorkspace();
   useCodeRunner(workspace?.slug);
+  // The assistant's panel (D-070): asked for from ⌘K or a record's menu, on a record or not.
+  const [asking, setAsking] = useState<{ on: AskTarget | null } | null>(null);
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const detail = (e as CustomEvent<AskTarget | null>).detail;
+      setAsking({ on: detail && typeof detail.object === "string" ? detail : null });
+    };
+    window.addEventListener("newdawn:ask-ai", onAsk);
+    return () => window.removeEventListener("newdawn:ask-ai", onAsk);
+  }, []);
   useMenuAction((action) => {
     switch (action) {
       case "toggle_sidebar":
@@ -165,6 +176,7 @@ export default function AppLayout() {
         </ContentRoot>
       </div>
       {startOpen && <StartRecordingDialog onClose={() => setStartOpen(false)} />}
+      {asking && <ChatPanel on={asking.on} onClose={() => setAsking(null)} />}
       <CommandMenu open={menu !== null} mode={menu ?? "all"} onClose={closeMenu} onToggleSidebar={toggleIcons} />
     </div>
   );

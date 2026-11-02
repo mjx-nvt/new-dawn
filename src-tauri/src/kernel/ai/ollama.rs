@@ -528,8 +528,28 @@ pub struct Request {
 
 pub struct Completion {
     pub content: String,
-    pub prompt_tokens: u32,
-    pub output_tokens: u32,
+}
+
+/// A tool the model called in a chat turn: its name and arguments (D-070).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolCall {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+/// A chat turn's answer: its words, or the tools it calls first.
+#[derive(Debug, Clone)]
+pub struct ChatReply {
+    pub content: String,
+    pub tool_calls: Vec<ToolCall>,
+}
+
+/// What one streamed call gave.
+struct Streamed {
+    content: String,
+    tool_calls: Vec<ToolCall>,
+    prompt_tokens: u32,
+    output_tokens: u32,
 }
 
 /// A feature's turn with the text model: holds the AI queue so nothing else runs meanwhile; a long
@@ -711,12 +731,47 @@ impl TextSession<'_> {
             bail!(AppError::new("cancelled", "Summary cancelled"));
         }
         let started = Instant::now();
-        let result = self.stream(request, cancel, &mut on_token).await;
-        // Ollama truncates an over-long prompt silently; treat a full context as an overflow,
-        // but keep the token counts in the log row that explains it.
+        let messages = serde_json::to_value(&request.messages)?;
+        let result = self.stream(messages, None, request.think, request.max_tokens, cancel, &mut on_token).await;
+        let overflow = self.overflowed(&result).await;
+        self.log("complete", started, &result, overflow).await;
+        if overflow {
+            bail!(AppError::new(
+                "context_overflow",
+                "The prompt filled the model's context"
+            ));
+        }
+        result.map(|r| Completion { content: r.content })
+    }
+
+    /// One streamed `/api/chat` turn with tools (D-070): the model answers, or calls tools for
+    /// the caller to run and answer in the next turn. `messages` are Ollama's chat messages as
+    /// they go — system, user, the assistant's with its tool calls, the tools' results. Logged
+    /// like `complete`; thinking off (a turn waits on it).
+    pub async fn chat(&self, messages: Vec<serde_json::Value>, tools: &serde_json::Value, max_tokens: u32) -> Result<ChatReply> {
+        let started = Instant::now();
+        let cancel = AtomicBool::new(false);
+        let result = self.stream(serde_json::Value::Array(messages), Some(tools), false, max_tokens, &cancel, &mut |_| {}).await;
+        let overflow = self.overflowed(&result).await;
+        self.log("complete", started, &result, overflow).await;
+        if overflow {
+            bail!(AppError::new(
+                "context_overflow",
+                "The conversation filled the model's context — start a new chat"
+            ));
+        }
+        result.map(|r| ChatReply { content: r.content, tool_calls: r.tool_calls })
+    }
+
+    /// Ollama truncates an over-long prompt silently: a full context counts as an overflow, the
+    /// token counts kept in the log row that explains it.
+    async fn overflowed(&self, result: &Result<Streamed>) -> bool {
         let num_ctx = self.num_ctx.min(caps(&self.model).await.context);
-        let overflow = matches!(&result, Ok(c) if c.prompt_tokens + 16 >= num_ctx);
-        let (status, error, prompt_tokens, output_tokens) = match &result {
+        matches!(result, Ok(c) if c.prompt_tokens + 16 >= num_ctx)
+    }
+
+    async fn log(&self, kind: &'static str, started: Instant, result: &Result<Streamed>, overflow: bool) {
+        let (status, error, prompt_tokens, output_tokens) = match result {
             Ok(c) if overflow => (
                 "error",
                 Some("context_overflow".to_owned()),
@@ -734,7 +789,7 @@ impl TextSession<'_> {
             Err(err) => ("error", Some(format!("{err:#}")), None, None),
         };
         let entry = AiLogEntry {
-            kind: "complete",
+            kind,
             agent: self.agent,
             model: &self.model,
             meeting_id: self.meeting_id.as_deref(),
@@ -747,21 +802,17 @@ impl TextSession<'_> {
         if let Err(err) = ai_log::record(&self.pool, entry).await {
             tracing::warn!("could not write ai_log: {err:#}");
         }
-        if overflow {
-            bail!(AppError::new(
-                "context_overflow",
-                "The prompt filled the model's context"
-            ));
-        }
-        result
     }
 
     async fn stream(
         &self,
-        request: Request,
+        messages: serde_json::Value,
+        tools: Option<&serde_json::Value>,
+        think: bool,
+        max_tokens: u32,
         cancel: &AtomicBool,
         on_token: &mut impl FnMut(u32),
-    ) -> Result<Completion> {
+    ) -> Result<Streamed> {
         #[derive(Deserialize)]
         struct Chunk {
             #[serde(default)]
@@ -777,19 +828,34 @@ impl TextSession<'_> {
         struct ChunkMessage {
             #[serde(default)]
             content: String,
+            #[serde(default)]
+            tool_calls: Vec<ChunkToolCall>,
+        }
+        #[derive(Deserialize)]
+        struct ChunkToolCall {
+            function: ChunkFunction,
+        }
+        #[derive(Deserialize)]
+        struct ChunkFunction {
+            name: String,
+            #[serde(default)]
+            arguments: serde_json::Value,
         }
 
         let caps = caps(&self.model).await;
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.model,
-            "messages": request.messages,
+            "messages": messages,
             "stream": true,
             // A model that can't think is never asked to (Ollama refuses), and never more context
             // than it has (D-050).
-            "think": request.think && caps.thinking,
+            "think": think && caps.thinking,
             "keep_alive": self.keep_alive,
-            "options": { "num_ctx": self.num_ctx.min(caps.context), "num_predict": request.max_tokens, "temperature": self.temperature },
+            "options": { "num_ctx": self.num_ctx.min(caps.context), "num_predict": max_tokens, "temperature": self.temperature },
         });
+        if let Some(tools) = tools {
+            body["tools"] = tools.clone();
+        }
         let response = client(Duration::from_secs(180))? // the first token can wait for the model to load
             .post(format!("{BASE}/api/chat"))
             .json(&body)
@@ -808,6 +874,7 @@ impl TextSession<'_> {
         let mut stream = response.bytes_stream();
         let mut buffer = Vec::new();
         let mut content = String::new();
+        let mut tool_calls = Vec::new();
         let mut tokens = 0u32;
         let (mut prompt_tokens, mut output_tokens) = (0, 0);
         let mut truncated = false;
@@ -828,6 +895,8 @@ impl TextSession<'_> {
                 }
                 if let Some(message) = chunk.message {
                     content.push_str(&message.content);
+                    // A call without arguments is echoed back with an empty object, not null.
+                    tool_calls.extend(message.tool_calls.into_iter().map(|c| ToolCall { name: c.function.name, arguments: if c.function.arguments.is_null() { serde_json::json!({}) } else { c.function.arguments } }));
                 }
                 tokens += 1; // one streamed chunk ≈ one token (thinking included)
                 on_token(tokens);
@@ -844,8 +913,9 @@ impl TextSession<'_> {
                 "The answer hit its length limit before finishing"
             ));
         }
-        Ok(Completion {
+        Ok(Streamed {
             content: strip_think(&content),
+            tool_calls,
             prompt_tokens,
             output_tokens,
         })

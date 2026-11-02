@@ -21,6 +21,7 @@ use crate::kernel::ai::ollama::{self, Message, Request};
 use crate::kernel::ai::queue::{Lane, Task};
 use crate::kernel::records::types::{FieldType, Json};
 use crate::kernel::records::{self, query, transfer, Actor, ObjectDef, Query};
+use crate::modules::assistant;
 
 const SEARCH_LIMIT: u64 = 200;
 /// Twenty's limits for an HTTP request: 30 s, 10 MB.
@@ -508,22 +509,38 @@ async fn ai_step(pool: &SqlitePool, state: &State, s: &Value, ctx: &Value, label
         })
         .unwrap_or_default();
     let app = super::app().ok_or_else(|| invalid(format!("{label}: the AI step runs in the app")))?;
-    let model = s.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_owned);
-    let mut system = String::from("You are one step of a workflow in New Dawn, a CRM on this Mac. Do what the instruction says with the data it gives. Answer briefly, in the language of the instruction.");
+    // An agent (D-070) brings its instructions, its model and its lookups; else the plain model.
+    let agent = match s.get("agent").and_then(Value::as_str).filter(|a| !a.is_empty()) {
+        Some(id) => Some(assistant::agent_by_id(pool, id).await.map_err(|e| invalid(format!("{label}: {e:#}")))?),
+        None => None,
+    };
+    // An agent's model (or the app's, when the agent keeps the app's); the step's own otherwise.
+    let model = match &agent {
+        Some(a) => (!a.model.is_empty()).then(|| a.model.clone()),
+        None => s.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_owned),
+    };
+    let mut shape = String::new();
     if !outputs.is_empty() {
         let keys: Vec<String> = outputs.iter().map(|(n, t)| format!("\"{n}\" ({})", if t == "number" { "a number" } else if t == "boolean" { "true or false" } else { "text" })).collect();
-        system.push_str(&format!(" Answer with one JSON object and nothing else, with exactly these keys: {}.", keys.join(", ")));
+        shape = format!(" Answer with one JSON object and nothing else, with exactly these keys: {}.", keys.join(", "));
     }
     let task = Task::new(format!("Workflow · {}", state.workflow_name));
     let _one = AI_TURN.acquire().await?;
     let mut session = ollama::session(app, pool.clone(), None, model, Lane::Foreground, task).await?;
-    session.for_agent("workflow");
-    let answer = session
-        .complete(Request { messages: vec![Message { role: "system", content: system }, Message { role: "user", content: prompt }], think: false, max_tokens: AI_MAX_TOKENS }, &AtomicBool::new(false), |_| {})
-        .await?;
+    session.for_agent(if agent.is_some() { "assistant" } else { "workflow" });
     let model = session.model().to_owned();
-    drop(session);
-    let text = ollama::strip_think(&answer.content).trim().to_owned();
+    let text = match &agent {
+        Some(agent) => assistant::answer(pool, agent, &assistant::Gateway(session), &format!("{prompt}{}", if shape.is_empty() { String::new() } else { format!("\n\n{}", shape.trim()) })).await?,
+        None => {
+            let system = format!("You are one step of a workflow in New Dawn, a CRM on this Mac. Do what the instruction says with the data it gives. Answer briefly, in the language of the instruction.{shape}");
+            let answer = session
+                .complete(Request { messages: vec![Message { role: "system", content: system }, Message { role: "user", content: prompt }], think: false, max_tokens: AI_MAX_TOKENS }, &AtomicBool::new(false), |_| {})
+                .await?;
+            drop(session);
+            ollama::strip_think(&answer.content)
+        }
+    };
+    let text = text.trim().to_owned();
     let mut out = json!({ "text": text, "model": model });
     if !outputs.is_empty() {
         let parsed = json_block(&text).ok_or_else(|| invalid(format!("{label}: the model's answer isn't the JSON asked for — {}", text.chars().take(200).collect::<String>())))?;

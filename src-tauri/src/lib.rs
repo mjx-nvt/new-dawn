@@ -59,6 +59,7 @@ mod modules {
     pub mod feedback;
     pub mod inbox;
     pub mod mailbox;
+    pub mod assistant;
     pub mod workflows;
     pub mod lessons;
     pub mod meetings;
@@ -90,6 +91,7 @@ mod commands {
     pub mod glass;
     pub mod inbox;
     pub mod mailbox;
+    pub mod assistant;
     pub mod workflows;
     pub mod layouts;
     pub mod meetings;
@@ -323,6 +325,16 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::workflows::list_manual_workflows,
             commands::workflows::pending_workflow_code,
             commands::workflows::answer_workflow_code,
+            commands::assistant::list_assistant_agents,
+            commands::assistant::save_assistant_agent,
+            commands::assistant::delete_assistant_agent,
+            commands::assistant::list_chat_threads,
+            commands::assistant::new_chat_thread,
+            commands::assistant::delete_chat_thread,
+            commands::assistant::chat_messages,
+            commands::assistant::ask_assistant,
+            commands::assistant::apply_chat_proposal,
+            commands::assistant::dismiss_chat_proposal,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

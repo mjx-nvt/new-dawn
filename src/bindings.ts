@@ -344,6 +344,18 @@ export const commands = {
 	pendingWorkflowCode: (slug: string) => typedError<PendingCode[], AppError>(__TAURI_INVOKE("pending_workflow_code", { slug })),
 	/**  What the window's run of a code step gave: its output, or the error. */
 	answerWorkflowCode: (slug: string, runId: string, stepId: string, attempt: string, output: Json | null, error: string | null) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("answer_workflow_code", { slug, runId, stepId, attempt, output, error })),
+	listAssistantAgents: (slug: string) => typedError<AssistantAgent[], AppError>(__TAURI_INVOKE("list_assistant_agents", { slug })),
+	saveAssistantAgent: (slug: string, input: AssistantAgentInput_Deserialize) => typedError<AssistantAgent, AppError>(__TAURI_INVOKE("save_assistant_agent", { slug, input })),
+	deleteAssistantAgent: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_assistant_agent", { slug, id })),
+	/**  The chats, newest first — all, or a record's (`record_object` + `record_id`). */
+	listChatThreads: (slug: string, recordObject: string | null, recordId: string | null) => typedError<ChatThread[], AppError>(__TAURI_INVOKE("list_chat_threads", { slug, recordObject, recordId })),
+	newChatThread: (slug: string, agentId: string | null, recordObject: string, recordId: string) => typedError<ChatThread, AppError>(__TAURI_INVOKE("new_chat_thread", { slug, agentId, recordObject, recordId })),
+	deleteChatThread: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_chat_thread", { slug, id })),
+	chatMessages: (slug: string, threadId: string) => typedError<ChatMessage[], AppError>(__TAURI_INVOKE("chat_messages", { slug, threadId })),
+	/**  The owner asks in a chat: the thread after the agent's turn. */
+	askAssistant: (slug: string, threadId: string, text: string) => typedError<ChatMessage[], AppError>(__TAURI_INVOKE("ask_assistant", { slug, threadId, text })),
+	applyChatProposal: (slug: string, messageId: string) => typedError<ChatMessage, AppError>(__TAURI_INVOKE("apply_chat_proposal", { slug, messageId })),
+	dismissChatProposal: (slug: string, messageId: string) => typedError<ChatMessage, AppError>(__TAURI_INVOKE("dismiss_chat_proposal", { slug, messageId })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -623,6 +635,37 @@ export type AiPolicy = {
 export type AppError = {
 	code: string,
 	message: string,
+};
+
+export type AssistantAgent = {
+	id: string,
+	name: string,
+	description: string,
+	instructions: string,
+	/**  "" = the app's selected model. */
+	model: string,
+	tools: string[],
+	is_default: boolean,
+};
+
+export type AssistantAgentInput = AssistantAgentInput_Serialize | AssistantAgentInput_Deserialize;
+
+export type AssistantAgentInput_Deserialize = {
+	id?: string | null,
+	name: string,
+	description?: string,
+	instructions?: string,
+	model?: string,
+	tools?: string[],
+};
+
+export type AssistantAgentInput_Serialize = {
+	id: string | null,
+	name: string,
+	description: string,
+	instructions: string,
+	model: string,
+	tools: string[],
 };
 
 export type Attachment = {
@@ -993,6 +1036,36 @@ export type ChartData_Serialize = {
 	total: number | null,
 	/**  Some categories or series were left out (Twenty's "Undisplayed data"). */
 	truncated: boolean,
+};
+
+export type ChatMessage = {
+	id: string,
+	/**  user · assistant · tool */
+	role: string,
+	content: string,
+	tool_name: string,
+	/**  assistant: the tool calls; tool: the result. */
+	tool: Json,
+	/**  A change the agent proposes (`{kind, object, id, fields, summary}`), or null. */
+	proposal: Json,
+	/**  "" · PROPOSED · APPLYING · APPLIED · DISMISSED */
+	proposal_status: string,
+	/**  What applying made (a record's id), or why it couldn't. */
+	proposal_result: string,
+	model: string,
+	created_at: string,
+};
+
+export type ChatThread = {
+	id: string,
+	agent_id: string,
+	agent_name: string,
+	title: string,
+	/**  A thread on a record: its object's singular name and id (empty otherwise). */
+	record_object: string,
+	record_id: string,
+	record_label: string,
+	updated_at: string,
 };
 
 export type CheckKind = 

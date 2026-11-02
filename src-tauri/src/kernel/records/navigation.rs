@@ -329,11 +329,18 @@ pub async fn note_visit(pool: &SqlitePool, object_name: &str, record_id: &str) -
     Ok(())
 }
 
-/// A record deleted for good, or a whole object dropped (`record_id` None): its visits go too.
+/// A record deleted for good, or a whole object dropped (`record_id` None): its visits go too,
+/// and the assistant's threads on it are kept, detached from it (D-070).
 pub async fn forget_visits(pool: &SqlitePool, object_name: &str, record_id: Option<&str>) -> Result<()> {
     match record_id {
-        Some(id) => sqlx::query("DELETE FROM recent_visit WHERE object = ? AND record_id = ?").bind(object_name).bind(id).execute(pool).await?,
-        None => sqlx::query("DELETE FROM recent_visit WHERE object = ?").bind(object_name).execute(pool).await?,
+        Some(id) => {
+            sqlx::query("DELETE FROM recent_visit WHERE object = ? AND record_id = ?").bind(object_name).bind(id).execute(pool).await?;
+            sqlx::query("UPDATE crm_chat_thread SET record_object = '', record_id = '' WHERE record_object = ? AND record_id = ?").bind(object_name).bind(id).execute(pool).await?;
+        }
+        None => {
+            sqlx::query("DELETE FROM recent_visit WHERE object = ?").bind(object_name).execute(pool).await?;
+            sqlx::query("UPDATE crm_chat_thread SET record_object = '', record_id = '' WHERE record_object = ?").bind(object_name).execute(pool).await?;
+        }
     };
     Ok(())
 }
