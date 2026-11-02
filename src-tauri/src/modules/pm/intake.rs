@@ -198,6 +198,8 @@ pub async fn accept(pool: &SqlitePool, id: &str, state_id: Option<&str>, actor: 
     set_status(&mut tx, id, IntakeStatus::Accepted, None, None).await?;
     items::activity(&mut tx, id, "updated", "intake", was(&it), "Accepted", (None, None), actor).await?;
     tx.commit().await?;
+    // Out of Intake, into the project's work: Plane's webhooks hear of it as made now.
+    super::events::emit(pool, "issue", "created", id, actor);
     get(pool, id, today).await
 }
 
@@ -246,7 +248,7 @@ pub async fn delete(pool: &SqlitePool, folder: &str, id: &str, today: NaiveDate)
     if it.status == IntakeStatus::Accepted {
         return Err(invalid(format!("{} was accepted — delete it as a work item", it.item.key)));
     }
-    items::delete(pool, folder, id).await
+    items::delete(pool, folder, id, "me").await
 }
 
 /// A request the Email reading agent found for a project with Intake on: an intake item quoting

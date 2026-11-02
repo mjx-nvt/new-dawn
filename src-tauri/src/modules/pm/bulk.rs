@@ -114,7 +114,7 @@ pub async fn act(pool: &SqlitePool, folder: &str, ids: &[String], action: PmBulk
             for i in &all {
                 // A sub-item may have gone with its parent already.
                 if items::get(pool, &i.id).await.is_ok() {
-                    items::delete(pool, folder, &i.id).await?;
+                    items::delete(pool, folder, &i.id, actor).await?;
                 }
                 done += 1;
             }

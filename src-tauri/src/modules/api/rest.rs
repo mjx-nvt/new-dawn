@@ -345,6 +345,7 @@ pub fn router(app: AppHandle) -> Router {
         .route("/rest/{objects}/{id}", get(get_h).patch(update_h).delete(delete_h))
         .route("/webhooks/workflows/{workspace}/{workflow}", post(workflow_hook_h))
         .route("/docs", get(docs_h))
+        .merge(super::plane::routes(app.clone()))
         .with_state(app)
         .layer(middleware::from_fn(this_mac_only))
 }
@@ -406,13 +407,13 @@ mod tests {
             assert_eq!(create(&pool, "people", json!({ "favouriteColour": "red" }), &actor).await.unwrap_err().status(), 400);
             assert_eq!(batch(&pool, "people", json!({ "not": "a list" }), &actor).await.unwrap_err().status(), 400);
 
-            let made_key = keys::create(&pool, "Zapier", Some(30)).await.unwrap();
+            let made_key = keys::create(&pool, "Zapier", "", Some(30)).await.unwrap();
             assert!(made_key.secret.starts_with("nd_") && made_key.key.prefix == made_key.secret[..10]);
             assert_eq!(keys::find(&hub, &made_key.secret).await.unwrap(), Some(("test".into(), "Zapier".into())));
             assert!(keys::find(&hub, "nd_wrong").await.unwrap().is_none());
             keys::revoke(&pool, &made_key.key.id).await.unwrap();
             assert!(keys::find(&hub, &made_key.secret).await.unwrap().is_none(), "revoked");
-            let old = keys::create(&pool, "Old", Some(1)).await.unwrap();
+            let old = keys::create(&pool, "Old", "", Some(1)).await.unwrap();
             sqlx::query("UPDATE api_key SET expires_at = '2026-01-01T00:00:00.000Z' WHERE id = ?").bind(&old.key.id).execute(&pool).await.unwrap();
             assert!(keys::find(&hub, &old.secret).await.unwrap().is_none(), "expired");
             assert!(on_this_mac(&HeaderValue::from_static("localhost:5123")) && on_this_mac(&HeaderValue::from_static("127.0.0.1")) && on_this_mac(&HeaderValue::from_static("[::1]:5123")));

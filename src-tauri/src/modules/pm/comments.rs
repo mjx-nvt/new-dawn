@@ -140,6 +140,26 @@ async fn keep_mentions(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>, comment: &s
 }
 
 /// An item that takes comments and reactions: not archived (read-only).
+/// A comment as Plane's webhooks carry it: its work item and project, its words, who and when.
+#[derive(sqlx::FromRow)]
+pub(crate) struct Told {
+    pub item_id: String,
+    pub project_id: String,
+    pub body_text: String,
+    pub created_by: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+pub(crate) async fn one(pool: &SqlitePool, id: &str) -> Result<Option<Told>> {
+    Ok(sqlx::query_as("SELECT c.item_id, i.project_id, c.body_text, c.created_by, c.created_at, c.updated_at FROM pm_comment c JOIN pm_item i ON i.id = c.item_id WHERE c.id = ?").bind(id).fetch_optional(pool).await?)
+}
+
+/// Whether Plane's webhooks hear of a comment: not on a request still waiting in Intake (D-084).
+fn told(item: &PmItem) -> bool {
+    item.state_group != super::settings::StateGroup::Triage
+}
+
 async fn open_item(pool: &SqlitePool, item: &str) -> Result<PmItem> {
     let it = items::get(pool, item).await?;
     if it.archived_at.is_some() {
@@ -150,7 +170,7 @@ async fn open_item(pool: &SqlitePool, item: &str) -> Result<PmItem> {
 
 /// Adds a comment, or a reply to one (one level: a reply to a reply answers its comment).
 pub async fn add(pool: &SqlitePool, item: &str, json: &str, parent: Option<&str>, actor: &str) -> Result<Vec<PmComment>> {
-    open_item(pool, item).await?;
+    let told = told(&open_item(pool, item).await?);
     let (doc, text) = body(json)?;
     let parent = match parent.filter(|p| !p.is_empty()) {
         Some(p) => {
@@ -184,18 +204,24 @@ pub async fn add(pool: &SqlitePool, item: &str, json: &str, parent: Option<&str>
         sqlx::query("INSERT INTO pm_item_subscriber (item_id, who) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(item).bind(actor).execute(&mut *tx).await?;
     }
     tx.commit().await?;
+    if told {
+        super::events::emit(pool, "issue_comment", "created", &id, actor);
+    }
     list(pool, item).await
 }
 
 pub async fn edit(pool: &SqlitePool, id: &str, json: &str) -> Result<Vec<PmComment>> {
     let row: Option<(String,)> = sqlx::query_as("SELECT item_id FROM pm_comment WHERE id = ?").bind(id).fetch_optional(pool).await?;
     let (item,) = row.ok_or_else(|| anyhow!(AppError::not_found("That comment is gone")))?;
-    open_item(pool, &item).await?;
+    let told = told(&open_item(pool, &item).await?);
     let (doc, text) = body(json)?;
     let mut tx = pool.begin().await?;
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_comment SET body_json = ?, body_text = ?, edited_at = {NOW}, updated_at = {NOW} WHERE id = ?"))).bind(doc.to_string()).bind(&text).bind(id).execute(&mut *tx).await?;
     keep_mentions(&mut tx, id, &doc).await?;
     tx.commit().await?;
+    if told {
+        super::events::emit(pool, "issue_comment", "updated", id, "me");
+    }
     list(pool, &item).await
 }
 
@@ -203,8 +229,11 @@ pub async fn edit(pool: &SqlitePool, id: &str, json: &str) -> Result<Vec<PmComme
 pub async fn delete(pool: &SqlitePool, id: &str) -> Result<Vec<PmComment>> {
     let row: Option<(String,)> = sqlx::query_as("SELECT item_id FROM pm_comment WHERE id = ?").bind(id).fetch_optional(pool).await?;
     let (item,) = row.ok_or_else(|| anyhow!(AppError::not_found("That comment is gone")))?;
-    open_item(pool, &item).await?;
+    let told = told(&open_item(pool, &item).await?);
     sqlx::query("DELETE FROM pm_comment WHERE id = ?").bind(id).execute(pool).await?;
+    if told {
+        super::events::emit(pool, "issue_comment", "deleted", id, "me");
+    }
     list(pool, &item).await
 }
 

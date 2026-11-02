@@ -286,6 +286,8 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: ProjectPatch) -> Result<
             .collect()
     };
     let name = patch.name.as_deref().map(clean_name).transpose()?;
+    // Its name is Plane's project name too: a new one is told to Plane's webhooks (D-084).
+    let renamed = name.as_deref().is_some_and(|n| n != current.name);
     // Two open projects can't share a name; a finished one may.
     if patch.status.unwrap_or(current.status) != ProjectStatus::Done {
         check_name(pool, name.as_deref().unwrap_or(&current.name), Some(id)).await?;
@@ -320,6 +322,9 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: ProjectPatch) -> Result<
     .bind(id)
     .execute(pool)
     .await?;
+    if renamed {
+        crate::modules::pm::events::emit(pool, "project", "updated", id, "me");
+    }
     get(pool, id).await
 }
 

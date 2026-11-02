@@ -33,6 +33,8 @@ pub fn sha256_hex(text: &str) -> String {
 pub struct ApiKey {
     pub id: String,
     pub name: String,
+    /// What it's for (Plane's tokens have one; D-084).
+    pub description: String,
     /// The key's first characters, to tell keys apart.
     pub prefix: String,
     pub expires_at: Option<String>,
@@ -48,25 +50,30 @@ pub struct NewApiKey {
     pub secret: String,
 }
 
-const COLUMNS: &str = "id, name, prefix, expires_at, revoked_at, last_used_at, created_at";
+const COLUMNS: &str = "id, name, description, prefix, expires_at, revoked_at, last_used_at, created_at";
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<ApiKey>> {
     Ok(sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT {COLUMNS} FROM api_key ORDER BY created_at DESC"))).fetch_all(pool).await?)
 }
 
-/// A new key, valid for `expires_days` (forever when none).
-pub async fn create(pool: &SqlitePool, name: &str, expires_days: Option<u32>) -> Result<NewApiKey> {
+/// A new key, valid for `expires_days` (forever when none). One key opens both of the local
+/// API's path families: Twenty's `/rest` and Plane's `/api/v1` (D-084).
+pub async fn create(pool: &SqlitePool, name: &str, description: &str, expires_days: Option<u32>) -> Result<NewApiKey> {
     let name = name.trim();
-    if name.is_empty() {
-        return Err(anyhow!(AppError::invalid("A key needs a name")));
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(anyhow!(AppError::invalid("A key needs a name of at most 100 characters")));
+    }
+    if description.trim().chars().count() > 500 {
+        return Err(anyhow!(AppError::invalid("A description is at most 500 characters")));
     }
     let secret = format!("nd_{}", random_hex(24)?);
     let id = uuid::Uuid::now_v7().to_string();
     // The expiry in the same text as "now", so the lookup compares like with like.
     let expires = expires_days.map(|d| format!("+{} days", d.clamp(1, 3650)));
-    sqlx::query("INSERT INTO api_key (id, name, prefix, key_hash, expires_at) VALUES (?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) END)")
+    sqlx::query("INSERT INTO api_key (id, name, description, prefix, key_hash, expires_at) VALUES (?, ?, ?, ?, ?, CASE WHEN ? IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) END)")
     .bind(&id)
     .bind(name)
+    .bind(description.trim())
     .bind(&secret[..10])
     .bind(sha256_hex(&secret))
     .bind(&expires)

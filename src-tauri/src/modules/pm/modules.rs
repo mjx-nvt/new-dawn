@@ -192,6 +192,7 @@ pub async fn create(pool: &SqlitePool, input: ModuleInput, actor: &str) -> Resul
         sqlx::query("INSERT INTO pm_module_member (module_id, who) VALUES (?, ?)").bind(&id).bind(w).execute(&mut *tx).await?;
     }
     tx.commit().await?;
+    super::events::emit(pool, "module", "created", &id, actor);
     get(pool, &id).await
 }
 
@@ -216,7 +217,10 @@ pub struct ModulePatch {
     pub sort_order: Option<f64>,
 }
 
-pub async fn update(pool: &SqlitePool, id: &str, patch: ModulePatch) -> Result<PmModule> {
+pub async fn update(pool: &SqlitePool, id: &str, patch: ModulePatch, actor: &str) -> Result<PmModule> {
+    // A new place in the list alone is the owner's view, not a change to tell.
+    let p = &patch;
+    let quiet = p.name.is_none() && p.description.is_none() && p.start_date.is_none() && p.target_date.is_none() && p.status.is_none() && p.lead.is_none() && p.members.is_none();
     let m = get(pool, id).await?;
     if m.archived_at.is_some() {
         return Err(invalid("An archived module is read-only — restore it to change it"));
@@ -271,6 +275,9 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: ModulePatch) -> Result<P
         }
     }
     tx.commit().await?;
+    if !quiet {
+        super::events::emit(pool, "module", "updated", id, actor);
+    }
     get(pool, id).await
 }
 
@@ -286,6 +293,9 @@ pub async fn archive(pool: &SqlitePool, id: &str, on: bool) -> Result<PmModule> 
     if on {
         super::views::pin(pool, super::views::Pin::Module, id, false).await?;
     }
+    if on != m.archived_at.is_some() {
+        super::events::emit(pool, "module", "updated", id, "me");
+    }
     get(pool, id).await
 }
 
@@ -299,6 +309,7 @@ pub async fn delete(pool: &SqlitePool, id: &str, actor: &str) -> Result<()> {
     }
     sqlx::query("DELETE FROM pm_module WHERE id = ?").bind(id).execute(&mut *tx).await?;
     tx.commit().await?;
+    super::events::emit(pool, "module", "deleted", id, actor);
     Ok(())
 }
 
@@ -362,6 +373,10 @@ pub async fn add_items(pool: &SqlitePool, id: &str, item_ids: &[String], actor: 
         let it = items::get(pool, item).await?;
         if it.archived_at.is_some() {
             return Err(invalid(format!("{} is archived — restore it first", it.key)));
+        }
+        // A request is planned once it's accepted (D-081).
+        if it.state_group == super::settings::StateGroup::Triage {
+            return Err(invalid(format!("{} waits in Intake — accept it first", it.key)));
         }
         let held: Vec<String> = it.modules.iter().map(|m| m.id.clone()).collect();
         let mut wanted = held.clone();
@@ -559,9 +574,9 @@ mod tests {
             assert_eq!(moved, [("".into(), "Sandbox licence".into()), ("".into(), "Pilot cohort".into()), ("Sandbox licence".into(), "".into())]);
 
             // Dates moved (the timeline's drag); a link; starred into the sidebar.
-            let moved = update(&pool, &m.id, ModulePatch { start_date: Some(day(-3)), target_date: Some(day(30)), ..ModulePatch::default() }).await.unwrap();
+            let moved = update(&pool, &m.id, ModulePatch { start_date: Some(day(-3)), target_date: Some(day(30)), ..ModulePatch::default() }, "me").await.unwrap();
             assert_eq!((moved.start_date, moved.target_date), (Some(day(-3)), Some(day(30))));
-            assert!(update(&pool, &m.id, ModulePatch { name: Some("pilot COHORT".into()), ..ModulePatch::default() }).await.is_err());
+            assert!(update(&pool, &m.id, ModulePatch { name: Some("pilot COHORT".into()), ..ModulePatch::default() }, "me").await.is_err());
             add_link(&pool, &m.id, "example.com/spec", "Spec", "me").await.unwrap();
             assert!(add_link(&pool, &m.id, &format!("{}://example.com/spec", "https"), "", "me").await.is_err(), "the same address once");
             assert!(favorite(&pool, &m.id, true).await.unwrap().is_favorite);
@@ -570,10 +585,10 @@ mod tests {
 
             // Archived only when completed or cancelled — which unstars it; read-only then.
             assert!(archive(&pool, &m.id, true).await.is_err());
-            update(&pool, &m.id, ModulePatch { status: Some(ModuleStatus::Completed), ..ModulePatch::default() }).await.unwrap();
+            update(&pool, &m.id, ModulePatch { status: Some(ModuleStatus::Completed), ..ModulePatch::default() }, "me").await.unwrap();
             let archived = archive(&pool, &m.id, true).await.unwrap();
             assert!(archived.archived_at.is_some() && !archived.is_favorite);
-            assert!(update(&pool, &m.id, ModulePatch { name: Some("x".into()), ..ModulePatch::default() }).await.is_err());
+            assert!(update(&pool, &m.id, ModulePatch { name: Some("x".into()), ..ModulePatch::default() }, "me").await.is_err());
             assert!(items::update(&pool, &blocker.id, ItemPatch { modules: Some(vec![m.id.clone()]), ..ItemPatch::default() }, "me").await.is_err(), "nothing joins an archived module");
             let kept = items::update(&pool, &late.id, ItemPatch { modules: Some(vec![m.id.clone(), second.id.clone()]), ..ItemPatch::default() }, "me").await.unwrap();
             assert_eq!(kept.modules.len(), 2, "an item stays in an archived module it was in");

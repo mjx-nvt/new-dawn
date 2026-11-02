@@ -538,11 +538,14 @@ export const commands = {
 	apiStatus: () => typedError<ApiStatus, AppError>(__TAURI_INVOKE("api_status")),
 	setApiEnabled: (on: boolean) => typedError<ApiStatus, AppError>(__TAURI_INVOKE("set_api_enabled", { on })),
 	listApiKeys: (slug: string) => typedError<ApiKey_Serialize[], AppError>(__TAURI_INVOKE("list_api_keys", { slug })),
-	/**  A new key: shown this once. */
-	createApiKey: (slug: string, name: string, expiresDays: number | null) => typedError<NewApiKey_Serialize, AppError>(__TAURI_INVOKE("create_api_key", { slug, name, expiresDays })),
+	/**  A new key (a Twenty key, or a Plane token with its description): shown this once. */
+	createApiKey: (slug: string, name: string, description: string, expiresDays: number | null) => typedError<NewApiKey_Serialize, AppError>(__TAURI_INVOKE("create_api_key", { slug, name, description, expiresDays })),
 	revokeApiKey: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("revoke_api_key", { slug, id })),
-	listWebhooks: (slug: string) => typedError<Webhook[], AppError>(__TAURI_INVOKE("list_webhooks", { slug })),
+	/**  Twenty's webhooks (Workspace → CRM) or Plane's (Workspace → Projects). */
+	listWebhooks: (slug: string, format: HookFormat) => typedError<Webhook[], AppError>(__TAURI_INVOKE("list_webhooks", { slug, format })),
 	saveWebhook: (slug: string, input: WebhookInput_Deserialize) => typedError<Webhook, AppError>(__TAURI_INVOKE("save_webhook", { slug, input })),
+	/**  A new secret for a webhook (Plane's "Re-generate key"): the old one stops at once. */
+	regenerateWebhookSecret: (slug: string, id: string) => typedError<Webhook, AppError>(__TAURI_INVOKE("regenerate_webhook_secret", { slug, id })),
 	deleteWebhook: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_webhook", { slug, id })),
 	webhookDeliveries: (slug: string, webhookId: string) => typedError<Delivery_Serialize[], AppError>(__TAURI_INVOKE("webhook_deliveries", { slug, webhookId })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
@@ -826,6 +829,8 @@ export type ApiKey = ApiKey_Serialize | ApiKey_Deserialize;
 export type ApiKey_Deserialize = {
 	id: string,
 	name: string,
+	/**  What it's for (Plane's tokens have one; D-084). */
+	description: string,
 	/**  The key's first characters, to tell keys apart. */
 	prefix: string,
 	expires_at?: string | null,
@@ -837,6 +842,8 @@ export type ApiKey_Deserialize = {
 export type ApiKey_Serialize = {
 	id: string,
 	name: string,
+	/**  What it's for (Plane's tokens have one; D-084). */
+	description: string,
 	/**  The key's first characters, to tell keys apart. */
 	prefix: string,
 	expires_at: string | null,
@@ -2232,6 +2239,13 @@ export type HomeWidget = {
 	key: string,
 	is_enabled: boolean,
 };
+
+/**  The API a webhook speaks. */
+export type HookFormat = 
+/**  Twenty's record events (Workspace → CRM). */
+"twenty" | 
+/**  Plane's project events (Workspace → Projects). */
+"plane";
 
 /**
  *  What the Select file step hands the sheet: the table, a first mapping, the identifier that
@@ -5858,7 +5872,11 @@ export type Webhook = {
 	id: string,
 	url: string,
 	description: string,
-	/**  "*.*", "person.*", "opportunity.updated" … */
+	format: HookFormat,
+	/**
+	 *  Twenty's "*.*", "person.*", "opportunity.updated" …; Plane's "project", "issue", "cycle",
+	 *  "module", "issue_comment".
+	 */
 	events: string[],
 	/**  The signature's key. */
 	secret: string,
@@ -5872,6 +5890,8 @@ export type WebhookInput_Deserialize = {
 	id?: string | null,
 	url: string,
 	description?: string,
+	/**  Kept as made: a webhook's format doesn't change. */
+	format?: HookFormat,
 	events?: string[],
 	is_active?: boolean,
 };
@@ -5880,6 +5900,8 @@ export type WebhookInput_Serialize = {
 	id: string | null,
 	url: string,
 	description: string,
+	/**  Kept as made: a webhook's format doesn't change. */
+	format: HookFormat,
 	events: string[],
 	is_active: boolean,
 };

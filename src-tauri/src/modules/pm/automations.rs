@@ -266,7 +266,7 @@ mod tests {
             let tomorrow = today.succ_opt().unwrap();
             items::update(&pool, &ten[4], items::ItemPatch { target_date: Some(tomorrow.to_string()), ..items::ItemPatch::default() }, "me").await.unwrap();
             let auto = Automations { archive_in: 1, close_in: 3, close_state_id: None, due_reminders: true };
-            pm::update(&pool, &p.id, PmProjectPatch { automations: Some(auto), ..PmProjectPatch::default() }).await.unwrap();
+            pm::update(&pool, &p.id, PmProjectPatch { automations: Some(auto), ..PmProjectPatch::default() }, "me").await.unwrap();
             let ran = run(&pool, Utc::now(), today).await.unwrap();
             assert_eq!(ran, Ran { archived: 0, closed: 0, reminded: 1 });
             let reminders = inbox::list(&pool, &inbox_query(false, InboxShow::Inbox), &[]).await.unwrap();

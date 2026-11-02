@@ -11,6 +11,7 @@ pub mod comments;
 pub mod cycles;
 pub mod display;
 pub mod drafts;
+pub mod events;
 pub mod filters;
 pub mod home;
 pub mod inbox;
@@ -266,6 +267,49 @@ pub struct NewPmProject {
 }
 
 pub async fn create(pool: &SqlitePool, new: NewPmProject) -> Result<PmProject> {
+    create_by(pool, new, "me").await
+}
+
+/// Per project: its cycles and modules (not archived) and its default state — Plane's API's
+/// `total_cycles`, `total_modules`, `default_state` (D-084).
+pub(crate) async fn tallies(pool: &SqlitePool) -> Result<std::collections::HashMap<String, (u32, u32, Option<String>)>> {
+    let mut out: std::collections::HashMap<String, (u32, u32, Option<String>)> = std::collections::HashMap::new();
+    let cycles: Vec<(String, u32)> = sqlx::query_as("SELECT project_id, count(*) FROM pm_cycle WHERE archived_at IS NULL GROUP BY 1").fetch_all(pool).await?;
+    let modules: Vec<(String, u32)> = sqlx::query_as("SELECT project_id, count(*) FROM pm_module WHERE archived_at IS NULL GROUP BY 1").fetch_all(pool).await?;
+    let defaults: Vec<(String, String)> = sqlx::query_as("SELECT project_id, id FROM pm_state WHERE is_default = 1").fetch_all(pool).await?;
+    for (p, n) in cycles {
+        out.entry(p).or_default().0 = n;
+    }
+    for (p, n) in modules {
+        out.entry(p).or_default().1 = n;
+    }
+    for (p, s) in defaults {
+        out.entry(p).or_default().2 = Some(s);
+    }
+    Ok(out)
+}
+
+/// Each cycle's or module's work items (not archived) by state group — backlog, unstarted, started,
+/// completed, cancelled — for Plane's API (`link`: pm_cycle_item.cycle_id or pm_module_item.module_id).
+pub(crate) async fn by_state_group(pool: &SqlitePool, link: &'static str, column: &'static str, project: &str) -> Result<std::collections::HashMap<String, [u32; 5]>> {
+    let rows: Vec<(String, String, u32)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+        "SELECT x.{column}, s.state_group, count(*) FROM {link} x JOIN pm_item i ON i.id = x.item_id JOIN pm_state s ON s.id = i.state_id \
+         WHERE i.project_id = ? AND i.archived_at IS NULL GROUP BY 1, 2"
+    )))
+    .bind(project)
+    .fetch_all(pool)
+    .await?;
+    let mut out: std::collections::HashMap<String, [u32; 5]> = std::collections::HashMap::new();
+    for (id, group, n) in rows {
+        if let Some(at) = ["backlog", "unstarted", "started", "completed", "cancelled"].iter().position(|g| *g == group) {
+            out.entry(id).or_default()[at] += n;
+        }
+    }
+    Ok(out)
+}
+
+/// A project made by someone named (an API token's "… (API)"), for Plane's webhooks (D-084).
+pub async fn create_by(pool: &SqlitePool, new: NewPmProject, actor: &str) -> Result<PmProject> {
     let identifier = clean_identifier(&new.identifier)?;
     if identifier_taken(pool, &identifier, None).await? {
         return Err(taken(&identifier));
@@ -299,6 +343,7 @@ pub async fn create(pool: &SqlitePool, new: NewPmProject) -> Result<PmProject> {
     .map_err(|e| or_taken(e, &identifier))?;
     settings::add_default_states(&mut tx, &project_id).await?;
     tx.commit().await?;
+    events::emit(pool, "project", "created", &project_id, actor);
     get(pool, &project_id).await
 }
 
@@ -332,8 +377,11 @@ async fn keep_or_check(pool: &SqlitePool, given: &str, now: Option<&str>) -> Res
 
 /// The settings' edits. Everything is checked first; then one transaction writes only what was
 /// given, so a merge or a state deleted meanwhile is never written back.
-pub async fn update(pool: &SqlitePool, id: &str, patch: PmProjectPatch) -> Result<PmProject> {
+pub async fn update(pool: &SqlitePool, id: &str, patch: PmProjectPatch, actor: &str) -> Result<PmProject> {
     let current = get(pool, id).await?;
+    // Only a star or a place in the list: the owner's view of it, not a change to tell (as Plane's).
+    let p = &patch;
+    let quiet = p.name.is_none() && p.identifier.is_none() && p.description.is_none() && p.emoji.is_none() && p.cover.is_none() && p.network.is_none() && p.lead.is_none() && p.default_assignee.is_none() && p.subscribers.is_none() && p.time_zone.is_none() && p.features.is_none() && p.automations.is_none();
     let name = match patch.name.as_deref().map(str::trim).filter(|n| *n != current.name) {
         Some(n) => {
             let n = projects::clean_name(n)?;
@@ -439,24 +487,31 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: PmProjectPatch) -> Resul
     .await
     .map_err(|e| or_taken(e, identifier.as_deref().unwrap_or("that identifier")))?;
     tx.commit().await?;
+    if !quiet {
+        events::emit(pool, "project", "updated", id, actor);
+    }
     get(pool, id).await
 }
 
 /// Deletes a project with everything in it — its dossier, its Plane side, its items' files.
-pub async fn delete(pool: &SqlitePool, folder: &str, id: &str) -> Result<()> {
+pub async fn delete(pool: &SqlitePool, folder: &str, id: &str, actor: &str) -> Result<()> {
     let dirs = items::delete_project_files(pool, folder, id).await?;
     projects::delete(pool, id).await?;
     for d in dirs {
         let _ = std::fs::remove_dir_all(d);
     }
+    events::emit(pool, "project", "deleted", id, actor);
     Ok(())
 }
 
 /// Archives a project (it leaves the list, keeps everything) or brings it back.
-pub async fn archive(pool: &SqlitePool, id: &str, archived: bool) -> Result<PmProject> {
-    get(pool, id).await?;
+pub async fn archive(pool: &SqlitePool, id: &str, archived: bool, actor: &str) -> Result<PmProject> {
+    let was = get(pool, id).await?.archived_at.is_some();
     let sql = if archived { format!("UPDATE pm_project SET archived_at = coalesce(archived_at, {NOW}), updated_at = {NOW} WHERE project_id = ?") } else { format!("UPDATE pm_project SET archived_at = NULL, updated_at = {NOW} WHERE project_id = ?") };
     sqlx::query(sqlx::AssertSqlSafe(sql)).bind(id).execute(pool).await?;
+    if archived != was {
+        events::emit(pool, "project", "updated", id, actor);
+    }
     get(pool, id).await
 }
 
@@ -530,12 +585,12 @@ mod tests {
             let made = create(&pool, new("VIFC Fintech Hub", "vifc")).await.unwrap();
             // A subscriber now in Deleted records doesn't block the others' edits.
             sqlx::query("INSERT INTO person (id, name, name_first) VALUES ('p1', 'Lan Pham', 'Lan')").execute(&pool).await.unwrap();
-            update(&pool, &made.id, PmProjectPatch { subscribers: Some(vec!["p1".into()]), ..PmProjectPatch::default() }).await.unwrap();
+            update(&pool, &made.id, PmProjectPatch { subscribers: Some(vec!["p1".into()]), ..PmProjectPatch::default() }, "me").await.unwrap();
             sqlx::query("UPDATE person SET deleted_at = '2026-11-02T00:00:00.000Z' WHERE id = 'p1'").execute(&pool).await.unwrap();
-            let both = update(&pool, &made.id, PmProjectPatch { subscribers: Some(vec!["p1".into(), "me".into()]), ..PmProjectPatch::default() }).await.unwrap();
+            let both = update(&pool, &made.id, PmProjectPatch { subscribers: Some(vec!["p1".into(), "me".into()]), ..PmProjectPatch::default() }, "me").await.unwrap();
             assert_eq!(both.subscribers, ["p1", "me"]);
-            assert!(update(&pool, &made.id, PmProjectPatch { lead: Some("p1".into()), ..PmProjectPatch::default() }).await.is_err(), "a new lead must be live");
-            assert_eq!(update(&pool, &made.id, PmProjectPatch { lead: Some(String::new()), ..PmProjectPatch::default() }).await.unwrap().lead, None, "empty clears");
+            assert!(update(&pool, &made.id, PmProjectPatch { lead: Some("p1".into()), ..PmProjectPatch::default() }, "me").await.is_err(), "a new lead must be live");
+            assert_eq!(update(&pool, &made.id, PmProjectPatch { lead: Some(String::new()), ..PmProjectPatch::default() }, "me").await.unwrap().lead, None, "empty clears");
             assert_eq!((made.identifier.as_str(), made.features.cycles, made.features.intake, made.features.modules, made.lead.as_deref()), ("VIFC", true, true, false, Some("me")));
             let twice = create(&pool, new("Another hub", "VIFC")).await.unwrap_err().to_string();
             assert!(twice.contains("Another project uses VIFC"), "{twice}");
@@ -543,7 +598,7 @@ mod tests {
             assert!(create(&pool, new("Third project", "TP")).await.is_ok());
             assert!(create(&pool, NewPmProject { lead: Some("nobody".into()), ..new("No such lead", "NSL") }).await.is_err());
             // Settings: a renamed identifier stays unique; features, automations, favorite.
-            let refused = update(&pool, &made.id, PmProjectPatch { name: Some("Renamed".into()), identifier: Some("wc".into()), ..PmProjectPatch::default() }).await.unwrap_err().to_string();
+            let refused = update(&pool, &made.id, PmProjectPatch { name: Some("Renamed".into()), identifier: Some("wc".into()), ..PmProjectPatch::default() }, "me").await.unwrap_err().to_string();
             assert!(refused.contains("Another project uses WC"), "{refused}");
             assert_eq!(get(&pool, &made.id).await.unwrap().name, "VIFC Fintech Hub", "nothing written when one field is refused");
             let cancelled = settings::states(&pool, &made.id).await.unwrap().into_iter().find(|s| s.group == settings::StateGroup::Cancelled).unwrap();
@@ -557,14 +612,15 @@ mod tests {
                     subscribers: Some(vec!["me".into(), "me".into()]),
                     ..PmProjectPatch::default()
                 },
+                "me",
             )
             .await
             .unwrap();
             assert_eq!((changed.name.as_str(), changed.automations.close_in, changed.favorite, changed.subscribers.len()), ("VIFC Hub", 6, true, 1));
             let backlog = settings::states(&pool, &made.id).await.unwrap().remove(0);
-            assert!(update(&pool, &made.id, PmProjectPatch { automations: Some(Automations { archive_in: 0, close_in: 1, close_state_id: Some(backlog.id), due_reminders: false }), ..PmProjectPatch::default() }).await.is_err(), "only into a cancelled state");
+            assert!(update(&pool, &made.id, PmProjectPatch { automations: Some(Automations { archive_in: 0, close_in: 1, close_state_id: Some(backlog.id), due_reminders: false }), ..PmProjectPatch::default() }, "me").await.is_err(), "only into a cancelled state");
             assert_eq!(list(&pool).await.unwrap()[0].id, made.id, "favorites first");
-            assert!(archive(&pool, &made.id, true).await.unwrap().archived_at.is_some());
+            assert!(archive(&pool, &made.id, true, "me").await.unwrap().archived_at.is_some());
             projects::delete(&pool, &made.id).await.unwrap();
             let (states,): (i64,) = sqlx::query_as("SELECT count(*) FROM pm_state WHERE project_id = ?").bind(&made.id).fetch_one(&pool).await.unwrap();
             assert_eq!(states, 0, "its Plane side goes with it");

@@ -447,7 +447,7 @@ async fn descendants(pool: &SqlitePool, id: &str) -> Result<Vec<String>> {
 }
 
 /// How "me" and people read in the activity.
-async fn names(pool: &SqlitePool, who: &[String]) -> Result<String> {
+pub(crate) async fn names(pool: &SqlitePool, who: &[String]) -> Result<String> {
     let mut out = Vec::new();
     for w in who {
         if w == "me" {
@@ -521,8 +521,19 @@ async fn version(tx: &mut Transaction<'_, Sqlite>, item: &str, json: Option<&str
 /// Makes a work item: numbered in its project in the same transaction; the default state when
 /// none is given; the project's default assignee when none; the maker, the assignees and the
 /// project's default subscribers subscribed.
+/// The work item a key names ("VIFC-12": the project's identifier any case, the item's number).
+pub(crate) async fn by_key(pool: &SqlitePool, key: &str) -> Result<Option<String>> {
+    let Some((ident, n)) = key.rsplit_once('-') else { return Ok(None) };
+    let Ok(n) = n.parse::<u32>() else { return Ok(None) };
+    let found: Option<(String,)> = sqlx::query_as("SELECT i.id FROM pm_item i JOIN pm_project m ON m.project_id = i.project_id WHERE upper(m.identifier) = upper(?) AND i.sequence = ?").bind(ident).bind(n).fetch_optional(pool).await?;
+    Ok(found.map(|(id,)| id))
+}
+
 pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<PmItem> {
-    create_with(pool, input, actor, None).await
+    let item = create_with(pool, input, actor, None).await?;
+    // Plane's webhooks (D-084) hear of work made here; Intake's requests once accepted.
+    super::events::emit(pool, "issue", "created", &item.id, actor);
+    Ok(item)
 }
 
 /// Where an intake item comes from (D-081): `in_app` or `email`, and the email's reading.
@@ -972,7 +983,84 @@ pub(crate) async fn write(pool: &SqlitePool, plan: Plan, actor: &str, merge: boo
         activity(&mut tx, id, "updated", field, old, new, (refs.0.as_deref(), refs.1.as_deref()), actor).await?;
     }
     tx.commit().await?;
+    // Plane's webhooks hear nothing of a request still waiting in Intake.
+    if item.state_group != StateGroup::Triage {
+        for change in told(pool, &item, &changes, quiet, &assignees, &labels, &point, &parent, &cycle, &modules).await {
+            super::events::changed(pool, id, change, actor);
+        }
+    }
     Ok(true)
+}
+
+/// The changes as Plane's webhooks tell them (D-084): Plane's field names; one event a label, an
+/// assignee or a module added or taken off, with its id; a cycle, a parent or an estimate with
+/// the ids behind the values; a priority by its value. A description's autosave folded into the
+/// last one tells nothing; nor does a new place in a list alone. Read after the commit: a name
+/// that can't be read is left empty rather than failing a write that's done.
+#[allow(clippy::too_many_arguments)]
+async fn told(
+    pool: &SqlitePool,
+    item: &PmItem,
+    changes: &[Change<'_>],
+    quiet: bool,
+    assignees: &Option<Vec<String>>,
+    labels: &Option<Vec<String>>,
+    point: &Option<Option<String>>,
+    parent: &Option<Option<String>>,
+    cycle: &Option<Option<super::cycles::PmCycle>>,
+    modules: &Option<Vec<String>>,
+) -> Vec<super::events::Change> {
+    let one = |field: &str, old: &str, new: &str, old_id: Option<String>, new_id: Option<String>| super::events::Change { field: field.into(), old: old.into(), new: new.into(), old_id, new_id };
+    let mut out = Vec::new();
+    for (field, old, new, (old_id, new_id)) in changes {
+        out.push(match *field {
+            "title" => one("name", old, new, None, None),
+            "description" if quiet => continue,
+            "priority" => one("priority", &old.to_lowercase(), &new.to_lowercase(), None, None),
+            "start date" => one("start_date", old, new, None, None),
+            "due date" => one("target_date", old, new, None, None),
+            "estimate" => one("estimate_point", old, new, item.estimate_point_id.clone(), point.clone().flatten()),
+            "parent" => one("parent", old, new, item.parent_id.clone(), parent.clone().flatten()),
+            // One event each, below.
+            "assignees" | "labels" => continue,
+            other => one(other, old, new, old_id.clone(), new_id.clone()),
+        });
+    }
+    let diff = |was: &[String], now: &[String]| -> (Vec<String>, Vec<String>) { (now.iter().filter(|x| !was.contains(x)).cloned().collect(), was.iter().filter(|x| !now.contains(x)).cloned().collect()) };
+    if let Some(now) = assignees {
+        let (added, gone) = diff(&item.assignees, now);
+        for w in added {
+            out.push(one("assignees", "", &names(pool, std::slice::from_ref(&w)).await.unwrap_or_default(), None, Some(w)));
+        }
+        for w in gone {
+            out.push(one("assignees", &names(pool, std::slice::from_ref(&w)).await.unwrap_or_default(), "", Some(w), None));
+        }
+    }
+    if let Some(now) = labels {
+        let (added, gone) = diff(&item.labels, now);
+        for l in added {
+            out.push(one("labels", "", &label_names(pool, std::slice::from_ref(&l)).await.unwrap_or_default(), None, Some(l)));
+        }
+        for l in gone {
+            out.push(one("labels", &label_names(pool, std::slice::from_ref(&l)).await.unwrap_or_default(), "", Some(l), None));
+        }
+    }
+    if let Some(to) = cycle {
+        out.push(one("cycles", item.cycle_name.as_deref().unwrap_or(""), to.as_ref().map_or("", |c| c.name.as_str()), item.cycle_id.clone(), to.as_ref().map(|c| c.id.clone())));
+    }
+    if let Some(now) = modules {
+        let was: Vec<String> = item.modules.iter().map(|m| m.id.clone()).collect();
+        let (added, gone) = diff(&was, now);
+        for m in added {
+            let name: Option<(String,)> = sqlx::query_as("SELECT name FROM pm_module WHERE id = ?").bind(&m).fetch_optional(pool).await.ok().flatten();
+            out.push(one("modules", "", &name.map(|(n,)| n).unwrap_or_default(), None, Some(m)));
+        }
+        for m in gone {
+            let name = item.modules.iter().find(|x| x.id == m).map(|x| x.name.clone()).unwrap_or_default();
+            out.push(one("modules", &name, "", Some(m), None));
+        }
+    }
+    out
 }
 
 /// Archives an item — only a completed or cancelled one (read-only after, still found) — or
@@ -990,6 +1078,7 @@ pub async fn archive(pool: &SqlitePool, id: &str, archived: bool, actor: &str) -
     sqlx::query(sqlx::AssertSqlSafe(sql)).bind(id).execute(&mut *tx).await?;
     activity(&mut tx, id, if archived { "archived" } else { "restored" }, "", "", "", (None, None), actor).await?;
     tx.commit().await?;
+    super::events::emit(pool, "issue", "updated", id, actor);
     get(pool, id).await
 }
 
@@ -1001,8 +1090,9 @@ pub async fn delete_project_files(pool: &SqlitePool, folder: &str, project_id: &
 }
 
 /// Deletes an item with its sub-items (and their comments, activity and files).
-pub async fn delete(pool: &SqlitePool, folder: &str, id: &str) -> Result<()> {
-    get(pool, id).await?;
+pub async fn delete(pool: &SqlitePool, folder: &str, id: &str, actor: &str) -> Result<()> {
+    // A request deleted while it waits in Intake was never told of (D-084).
+    let waiting = get(pool, id).await?.state_group == StateGroup::Triage;
     let mut all = descendants(pool, id).await?;
     all.push(id.to_owned());
     let mut tx = pool.begin().await?;
@@ -1012,6 +1102,9 @@ pub async fn delete(pool: &SqlitePool, folder: &str, id: &str) -> Result<()> {
     tx.commit().await?;
     for i in &all {
         let _ = std::fs::remove_dir_all(files_dir(folder, i));
+        if !waiting {
+            super::events::emit(pool, "issue", "deleted", i, actor);
+        }
     }
     Ok(())
 }
@@ -1319,7 +1412,7 @@ mod tests {
 
             // A state items are in can't go; numbers aren't given twice; delete takes sub-items.
             assert!(settings::delete_state(&pool, &state("In Progress")).await.unwrap_err().to_string().contains("work item"));
-            delete(&pool, &folder, &parent.id).await.unwrap();
+            delete(&pool, &folder, &parent.id, "me").await.unwrap();
             assert!(list(&pool, &p.id, false).await.unwrap().is_empty(), "sub-items went with it");
             let next = create(&pool, ItemInput { project_id: p.id.clone(), name: "After".into(), ..ItemInput::default() }, "me").await.unwrap();
             assert_eq!(next.key, "VIFC-4");
@@ -1345,7 +1438,7 @@ mod tests {
             // Files: kept under the workspace, gone with the item.
             let f = add_file_bytes(&pool, &folder, &child.id, "plan.png", b"png").await.unwrap();
             assert!(std::path::Path::new(&f.path).exists());
-            delete(&pool, &folder, &child.id).await.unwrap();
+            delete(&pool, &folder, &child.id, "me").await.unwrap();
             assert!(!std::path::Path::new(&f.path).exists());
             hub.close_all().await;
         });

@@ -43,6 +43,13 @@ pub(crate) fn same(a: &str, b: &str) -> bool {
     a.nfc().collect::<String>().to_lowercase() == b.nfc().collect::<String>().to_lowercase()
 }
 
+/// When each of a project's states or labels was made and last changed (`table`: pm_state or
+/// pm_label), for Plane's API (D-084).
+pub(crate) async fn times(pool: &SqlitePool, table: &'static str, project: &str) -> Result<std::collections::HashMap<String, (String, String)>> {
+    let rows: Vec<(String, String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT id, created_at, updated_at FROM {table} WHERE project_id = ?"))).bind(project).fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|(id, c, u)| (id, (c, u))).collect())
+}
+
 fn id() -> String {
     uuid::Uuid::now_v7().to_string()
 }

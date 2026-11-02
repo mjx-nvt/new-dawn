@@ -141,6 +141,20 @@ impl WorkspaceHub {
         self.registry.get(slug).await
     }
 
+    /// The open workspace whose database a pool is (for a listener that holds only the pool:
+    /// Plane's webhooks, D-084).
+    pub async fn workspace_of(&self, pool: &SqlitePool) -> Result<Option<Workspace>> {
+        let file = pool.connect_options().get_filename().to_path_buf();
+        let slug = {
+            let pools = self.pools.read().expect("hub lock poisoned");
+            pools.iter().find(|(_, p)| p.connect_options().get_filename() == file).map(|(slug, _)| slug.clone())
+        };
+        match slug {
+            Some(slug) => Ok(Some(self.workspace(&slug).await?)),
+            None => Ok(None),
+        }
+    }
+
     pub async fn list(&self) -> Result<Vec<Workspace>> {
         self.registry.list().await
     }

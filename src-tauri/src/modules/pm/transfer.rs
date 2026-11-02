@@ -455,7 +455,12 @@ async fn labels_for(pool: &SqlitePool, x: &mut Known, project_id: &str, names: &
 /// Plane's CSV into a project: a row a work item (a row without a name, or with one too long,
 /// skipped), then the parents by Identifier within the file. What doesn't come in as written is
 /// in the summary, by row; an item made stays made (a link or a comment that failed is said).
+/// Made quietly: Plane's webhooks don't hear of an import's rows, as Plane's bulk import (D-084).
 pub async fn import(pool: &SqlitePool, project_id: &str, path: &Path, actor: &str) -> Result<PmImportSummary> {
+    super::events::quietly(import_rows(pool, project_id, path, actor)).await
+}
+
+async fn import_rows(pool: &SqlitePool, project_id: &str, path: &Path, actor: &str) -> Result<PmImportSummary> {
     open_project(pool, project_id).await?;
     let file_name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let t = read(path).await?;

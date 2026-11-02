@@ -1,10 +1,11 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands, type ApiKey_Serialize, type ApiStatus, type Delivery_Serialize, type NewApiKey_Serialize, type Webhook, type WebhookInput_Deserialize } from "../../bindings";
+import { commands, type ApiKey_Serialize, type ApiStatus, type Delivery_Serialize, type HookFormat, type NewApiKey_Serialize, type Webhook, type WebhookInput_Deserialize } from "../../bindings";
 import { unwrap } from "./unwrap";
 
-/** The local API (D-071, 0.10.14): on/off and its address, keys, webhooks. */
-export type { ApiStatus, Webhook };
+/** The local API (D-071, 0.10.14): on/off and its address, keys, webhooks — Twenty's and, with
+ *  D-084, Plane's (the same keys; webhooks by format). */
+export type { ApiStatus, HookFormat, Webhook };
 export type ApiKey = ApiKey_Serialize;
 export type NewApiKey = NewApiKey_Serialize;
 export type Delivery = Delivery_Serialize;
@@ -26,7 +27,7 @@ export function useApiKeys(slug: string | undefined) {
 export function useCreateApiKey(slug: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, expiresDays }: { name: string; expiresDays: number | null }) => unwrap(commands.createApiKey(slug ?? "", name, expiresDays)),
+    mutationFn: ({ name, description, expiresDays }: { name: string; description?: string; expiresDays: number | null }) => unwrap(commands.createApiKey(slug ?? "", name, description ?? "", expiresDays)),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["api-keys", slug ?? ""] }),
   });
 }
@@ -36,13 +37,19 @@ export function useRevokeApiKey(slug: string | undefined) {
   return useMutation({ mutationFn: (id: string) => unwrap(commands.revokeApiKey(slug ?? "", id)), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["api-keys", slug ?? ""] }) });
 }
 
-export function useWebhooks(slug: string | undefined) {
-  return useQuery({ queryKey: ["webhooks", slug ?? ""], queryFn: () => unwrap(commands.listWebhooks(slug ?? "")), enabled: !!slug });
+export function useWebhooks(slug: string | undefined, format: HookFormat = "twenty") {
+  return useQuery({ queryKey: ["webhooks", slug ?? "", format], queryFn: () => unwrap(commands.listWebhooks(slug ?? "", format)), enabled: !!slug });
 }
 
 export function useSaveWebhook(slug: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: (input: WebhookInput) => unwrap(commands.saveWebhook(slug ?? "", input)), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["webhooks", slug ?? ""] }) });
+}
+
+/** A new secret for a webhook: the old one stops at once. */
+export function useRegenerateWebhookSecret(slug: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => unwrap(commands.regenerateWebhookSecret(slug ?? "", id)), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["webhooks", slug ?? ""] }) });
 }
 
 export function useDeleteWebhook(slug: string | undefined) {

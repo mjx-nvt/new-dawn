@@ -1,3 +1,77 @@
+# Last Build — Developers: Plane's API tokens, local REST API, webhooks · release 0.11.11
+_2026-11-02_
+
+## What changed
+- **Plane's API on this Mac** (D-084): with the local API on, tools and scripts on this Mac can use Plane's v1 paths: `/api/v1/workspaces/<workspace>/projects/`, and each project's `issues/` (or `work-items/`), `states/`, `labels/`, `cycles/` and `modules/` (each with their work items) and `intake-issues/`. Answers come in Plane's JSON and pages. Requests send `X-API-Key`, and Plane's limit of 60 requests a minute applies (`X-RateLimit-Remaining`, `X-RateLimit-Reset`). A work item can also be read by its key: `…/issues/VIFC-12/`. The docs page (Open the docs) has a Projects section.
+- **Workspace → Projects** (a new tab) holds Developers:
+  - the Local API switch;
+  - **API tokens**: a title, a description, and an expiry of a week, a month, three months, a year or never; shown once;
+  - **Webhooks**: an address on this Mac and All events or Individual events (Projects, Work items, Cycles, Modules, Work item comments), with on/off, deliveries, a new secret and delete. Each change is posted as Plane's, signed with X-Plane-Signature.
+- One key store: a token made here is also listed, and works, in Workspace → CRM → Developers, and the reverse.
+- Migration **0042** (`api_key.description`, `webhook.format`), reviewed by migration-safety (SAFE). No new dependency.
+- Seen in the dev app, light and dark. The dev workspace took 0042. Set-up: a new VIFC Fintech Hub; the Local API on; a token "Dev check script" ("Plane's API from curl", one week) made in the app; a Plane webhook to a listener on this Mac, all events. Results:
+  - `curl -H "X-API-Key: …" http://localhost:50603/api/v1/workspaces/vifc/projects/` → 200, X-RateLimit-Remaining 59, and Plane's page (`count`, `next_cursor`, `total_results`, `results` …). The project read VIFC Fintech Hub, VIFC, network 0, cycles and modules on, intake off, with its default state.
+  - POST `issues/` "Draft the rules" (high, an HTML description) → 201. PATCH through `work-items/` to urgent → 200. GET `issues/VIFC-1/` → Draft the rules, urgent, "<p>Ask Minh by Friday</p>", created by "Dev check script (API)".
+  - No key → 401. Another workspace's path → 403 "This API token isn't for that workspace." An unknown item → 404.
+  - The listener got `issue created` and `issue updated`, both with valid signatures. The update was priority High → Urgent; it is now sent in Plane's values, high → urgent. Both deliveries were logged with 200.
+  - 60 more requests in the same minute → 429, Retry-After 35, X-RateLimit-Remaining 0.
+  - Workspace → Projects showed the switch on, the token with its description, expiry and last use, and the webhook with All events.
+  - Afterwards the project, token and webhook were removed and the Local API turned back off.
+- Seen again after the review (scratchpad dev-0121b.out). A second change through the API (title and state) reached the listener as Plane's:
+  - `name` "Draft the rules" → "Draft the rules, v2";
+  - `state` Backlog → Done, with both states' ids;
+  - the priority as `high` → `urgent`;
+  - each delivery's work item with its state as an object, and `workspace_id` the workspace's id;
+  - the webhook stored as `*` (All events).
+  The window opened where it couldn't be captured, so the shots are from the first run; a probe read the panel's rows.
+- Review: the architecture review found three must-fixes, all taken:
+  1. Webhooks now name fields as Plane does (`name`, `start_date`, `target_date`, `estimate_point`) and send `null` for none.
+  2. A description's autosaves no longer post to every webhook.
+  3. Intake's PATCH checks the status and what it needs before writing anything, and the status a request already has is a no-op.
+
+  Should-fixes, all taken:
+  - Writes through the API are named by their token for projects, cycles, modules and deletes too.
+  - A request waiting in Intake is no longer announced, nor read or listed through the work items' paths. Its Triage state isn't listed, and it can't be put into a cycle or a module.
+  - Accepting a request announces a work item made.
+  - The CSV import runs quietly.
+  - Labels, assignees and modules come one event each, with their ids; cycles, parents and estimates carry ids.
+  - A state or label made with doubled spaces is found again.
+  - A large cursor can't overflow.
+  - A rich description survives a round trip.
+  - A webhook's work item is expanded, as Plane's.
+  - The workspace's id is found through the hub.
+  - The Projects module's own reads moved into it.
+
+  Nits, taken:
+  - paths without the trailing slash;
+  - HEAD as GET;
+  - whole months for automations;
+  - numbered entities;
+  - repeated ids once;
+  - no "updated" for a change that changed nothing;
+  - a project renamed from its dossier is announced;
+  - a webhook can't point at the API itself;
+  - "All events" as `*`;
+  - caps on token names;
+  - the docs list `work-items/<KEY>/` and the slug;
+  - expired tokens marked, "Revoke" as the word, descriptions in the CRM list, "Reading…" while lists load;
+  - no Projects tab with the module off.
+
+  Left as they are:
+  - one delivery task per event;
+  - Plane's full user object and User-Agent;
+  - Plane's five retries.
+- Checks: 217 Rust tests pass. New tests cover:
+  - Plane's paths answering as Plane, the cursor, null clearing, the key route, Intake's statuses checked before writing, a rich description kept, the Triage state hidden, the rate of 60, and entities;
+  - a Plane delivery carrying the change, signed, with its work item expanded, plus a new secret.
+
+  Clippy, tsc and the localhost check are clean.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+---
+
 # Last Build — Analytics, exports, CSV importer (Plane) · release 0.11.10
 _2026-11-02_
 

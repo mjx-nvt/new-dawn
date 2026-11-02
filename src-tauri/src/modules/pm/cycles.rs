@@ -226,6 +226,7 @@ pub async fn create(pool: &SqlitePool, input: CycleInput, actor: &str, today: Na
         .bind(actor)
         .execute(pool)
         .await?;
+    super::events::emit(pool, "cycle", "created", &id, actor);
     get(pool, &id, today).await
 }
 
@@ -239,7 +240,7 @@ pub struct CyclePatch {
     pub is_favorite: Option<bool>,
 }
 
-pub async fn update(pool: &SqlitePool, id: &str, patch: CyclePatch, today: NaiveDate) -> Result<PmCycle> {
+pub async fn update(pool: &SqlitePool, id: &str, patch: CyclePatch, actor: &str, today: NaiveDate) -> Result<PmCycle> {
     let c = get(pool, id, today).await?;
     let name = patch.name.as_deref().map(clean_name).transpose()?;
     let dates = if patch.start_date.is_some() || patch.end_date.is_some() {
@@ -273,6 +274,9 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: CyclePatch, today: Naive
     if let Some(on) = patch.is_favorite {
         super::views::pin(pool, super::views::Pin::Cycle, id, on).await?;
     }
+    if name.is_some() || patch.description.is_some() || dates.is_some() {
+        super::events::emit(pool, "cycle", "updated", id, actor);
+    }
     get(pool, id, today).await
 }
 
@@ -285,6 +289,7 @@ pub async fn start_now(pool: &SqlitePool, id: &str, today: NaiveDate) -> Result<
     let day = today.to_string();
     check_overlap(pool, &c.project_id, Some(id), Some(&day), c.end_date.as_deref()).await?;
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_cycle SET start_date = ?, updated_at = {NOW} WHERE id = ?"))).bind(&day).bind(id).execute(pool).await?;
+    super::events::emit(pool, "cycle", "updated", id, "me");
     get(pool, id, today).await
 }
 
@@ -294,6 +299,7 @@ pub async fn complete_now(pool: &SqlitePool, id: &str, today: NaiveDate) -> Resu
         return Err(invalid("Only an active cycle can be completed now"));
     }
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_cycle SET end_date = ?, completed_at = {NOW}, updated_at = {NOW} WHERE id = ?"))).bind(today.to_string()).bind(id).execute(pool).await?;
+    super::events::emit(pool, "cycle", "updated", id, "me");
     get(pool, id, today).await
 }
 
@@ -311,6 +317,10 @@ pub async fn add_items(pool: &SqlitePool, id: &str, item_ids: &[String], actor: 
         }
         if it.archived_at.is_some() {
             return Err(invalid(format!("{} is archived — restore it first", it.key)));
+        }
+        // A request is planned once it's accepted (D-081).
+        if it.state_group == super::settings::StateGroup::Triage {
+            return Err(invalid(format!("{} waits in Intake — accept it first", it.key)));
         }
     }
     let mut tx = pool.begin().await?;
@@ -390,6 +400,9 @@ pub async fn archive(pool: &SqlitePool, id: &str, on: bool, today: NaiveDate) ->
     if on {
         super::views::pin(pool, super::views::Pin::Cycle, id, false).await?;
     }
+    if on != c.archived_at.is_some() {
+        super::events::emit(pool, "cycle", "updated", id, "me");
+    }
     get(pool, id, today).await
 }
 
@@ -403,6 +416,7 @@ pub async fn delete(pool: &SqlitePool, id: &str, actor: &str, today: NaiveDate) 
     }
     sqlx::query("DELETE FROM pm_cycle WHERE id = ?").bind(id).execute(&mut *tx).await?;
     tx.commit().await?;
+    super::events::emit(pool, "cycle", "deleted", id, actor);
     Ok(())
 }
 
@@ -555,7 +569,7 @@ mod tests {
             // Completed now: the three open items move to Sprint 2 — once.
             assert!(transfer(&pool, &a.id, &b.id, "me", today).await.is_err(), "not completed yet");
             assert_eq!(complete_now(&pool, &a.id, today).await.unwrap().status, CycleStatus::Completed);
-            assert_eq!(update(&pool, &a.id, CyclePatch { name: Some("Sprint one".into()), start_date: a.start_date.clone(), end_date: Some(today.to_string()), ..CyclePatch::default() }, today).await.unwrap().name, "Sprint one", "a completed cycle is renamed, its dates as they are");
+            assert_eq!(update(&pool, &a.id, CyclePatch { name: Some("Sprint one".into()), start_date: a.start_date.clone(), end_date: Some(today.to_string()), ..CyclePatch::default() }, "me", today).await.unwrap().name, "Sprint one", "a completed cycle is renamed, its dates as they are");
             let six = items::create(&pool, ItemInput { project_id: p.id.clone(), name: "Task 6".into(), ..ItemInput::default() }, "me").await.unwrap();
             assert!(items::update(&pool, &six.id, ItemPatch { cycle_id: Some(a.id.clone()), ..ItemPatch::default() }, "me").await.is_err(), "a completed cycle takes nothing");
             assert_eq!(transfer(&pool, &a.id, &b.id, "me", today).await.unwrap(), 3);

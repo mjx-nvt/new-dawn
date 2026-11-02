@@ -48,13 +48,13 @@ pub async fn create_pm_project(hub: State<'_, WorkspaceHub>, slug: String, proje
 #[tauri::command]
 #[specta::specta]
 pub async fn update_pm_project(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: PmProjectPatch) -> Result<PmProject, AppError> {
-    Ok(pm::update(&hub.pool(&slug)?, &id, patch).await?)
+    Ok(pm::update(&hub.pool(&slug)?, &id, patch, ME).await?)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn archive_pm_project(hub: State<'_, WorkspaceHub>, slug: String, id: String, archived: bool) -> Result<PmProject, AppError> {
-    Ok(pm::archive(&hub.pool(&slug)?, &id, archived).await?)
+    Ok(pm::archive(&hub.pool(&slug)?, &id, archived, ME).await?)
 }
 
 #[tauri::command]
@@ -184,7 +184,7 @@ pub async fn archive_pm_item(hub: State<'_, WorkspaceHub>, slug: String, id: Str
 #[specta::specta]
 pub async fn delete_pm_item(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
     let folder = hub.workspace(&slug).await?.folder_path;
-    Ok(items::delete(&hub.pool(&slug)?, &folder, &id).await?)
+    Ok(items::delete(&hub.pool(&slug)?, &folder, &id, ME).await?)
 }
 
 #[tauri::command]
@@ -547,7 +547,7 @@ pub async fn create_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, input: 
 #[tauri::command]
 #[specta::specta]
 pub async fn update_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: CyclePatch) -> Result<PmCycle, AppError> {
-    Ok(cycles::update(&hub.pool(&slug)?, &id, patch, cycles::today()).await?)
+    Ok(cycles::update(&hub.pool(&slug)?, &id, patch, ME, cycles::today()).await?)
 }
 
 /// Plane's start now (an upcoming cycle) and complete now (an active one).
@@ -612,7 +612,7 @@ pub async fn create_pm_module(hub: State<'_, WorkspaceHub>, slug: String, input:
 #[tauri::command]
 #[specta::specta]
 pub async fn update_pm_module(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: ModulePatch) -> Result<PmModule, AppError> {
-    Ok(modules::update(&hub.pool(&slug)?, &id, patch).await?)
+    Ok(modules::update(&hub.pool(&slug)?, &id, patch, ME).await?)
 }
 
 #[tauri::command]

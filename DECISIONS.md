@@ -91,6 +91,54 @@ _2026-11-02_
 
 ---
 
+## D-084 — Plane's API on the local server: one key store for both path families, Plane's webhooks in the same table, events after commit
+_2026-11-02_
+
+**Context** (plan v4 §4.5 API, 0.11.11): Plane's REST API — `/api/v1/workspaces/{slug}/…` with `X-API-Key`; 60 requests a minute with `X-RateLimit-Remaining` and `X-RateLimit-Reset`; cursor pages (`per_page:page:is_prev`) in an envelope of `next_cursor`, `prev_cursor`, `next_page_results`, `count`, `total_pages`, `total_results`, `results`. Its personal access tokens have a title, a description and an expiry, and are shown once. Its workspace webhooks have a URL, all or some events (projects, work items, cycles, modules, comments), a secret that can be re-generated, and logs; each delivery is `{ event, action, webhook_id, workspace_id, data, activity }`, signed with `X-Plane-Signature` (the hex HMAC-SHA256 of the body).
+
+**Decision — Plane's paths on the server of D-071**: the same `127.0.0.1` server and its `this_mac_only` guard serve Plane's v1 paths beside Twenty's:
+- projects: list, create, get, PATCH, delete, archive and unarchive;
+- work items: `issues/` and Plane's newer `work-items/`, by id or by key (`VIFC-12`);
+- states, labels, cycles with `cycle-issues/`, and modules with `module-issues/`;
+- Intake's `intake-issues/`: create from `{ issue: {…} }`; PATCH `status` 1 accepts, -1 declines, 0 snoozes until `snoozed_till`, 2 marks a duplicate of `duplicate_to`.
+
+Answers are Plane's JSON: the fields the app keeps, and Plane's defaults (`null`, `{}`) for the rest. `workspace` is the workspace's id. Lists come in Plane's pages with `order_by` and `fields`, and paths work with or without Plane's trailing slash. Errors are Plane's: `{ "error" }`, or DRF's `{ "detail" }` for the key and the rate.
+
+Field handling:
+- A field that can be empty is cleared with `null`.
+- A description is read as HTML of its words; sent back unchanged, it keeps the rich document (pictures, tables and mentions aren't flattened).
+- A request waiting in Intake is read only through `intake-issues/`: the work items' paths and the states list don't show it or its Triage state.
+- Intake's PATCH checks the status and what it needs (the day, the duplicate, the state) before writing anything. The status a request already has is nothing to do.
+
+Writes go through the Projects module as "<token> (API)" — for projects, cycles, modules and deletes too — so the owner's Inbox and the webhooks name who did it. Colours stay the app's names, the owner is `me`, and `expand` isn't served (ids only). With the Projects module off in a workspace (D-059), its paths answer 404 and Workspace → Projects is hidden.
+
+**Decision — one key store**: Plane's token is a key of 0030's `api_key`, now with a description (0042). A key made in Workspace → CRM or in Workspace → Projects opens both path families of its workspace: `Authorization: Bearer` on Twenty's paths, `X-API-Key` on Plane's. Deleting a token revokes the key, and the CRM's list shows it as revoked. A token opens only its own workspace; another workspace's path answers 403. The rate is 60 requests a minute per key, in fixed minutes kept in memory; past it the answer is 429 with `Retry-After`.
+
+**Decision — Plane's webhooks in the same table**: a webhook has a format (0042): `twenty`, the default for every webhook made before, or `plane`. Each list shows its own. A Plane webhook:
+- takes all events or some of `project`, `issue`, `cycle`, `module`, `issue_comment`;
+- gets a new secret on demand, and the old one stops at once;
+- logs its deliveries beside Twenty's (the last 50).
+
+The Projects module tells a bus of its own (`pm/events.rs`: bounded channels, sent after the transaction commits). It announces:
+- a project, cycle or module made, changed, archived or deleted (a project renamed from its dossier too);
+- a work item made by hand, through the API or by an agent, and a request accepted out of Intake (as made then);
+- each field of a work item changed, one delivery a field as Plane's. Fields carry Plane's names (`name`, `state`, `priority`, `start_date`, `target_date`, `estimate_point`, `parent`, `cycles`), the values (`null` for none; a priority as its value), and the ids behind them;
+- one delivery for each label, assignee or module added or taken off, with its id;
+- a work item archived or deleted, with its sub-items;
+- a comment made, edited or deleted.
+
+Not announced:
+- an import's rows, links and comments: an import runs quietly, a task-local flag over its work, as Plane's bulk import;
+- a request still waiting in Intake (made, edited, commented on, deleted);
+- a description's autosave folded into the last one;
+- a star or a new place in a list.
+
+`data` is the thing as the API reads it: a work item with its state, labels and assignees as objects, as Plane's webhooks send it; `{ "id" }` once deleted. `workspace_id` is the workspace's id, found through the hub from the pool. "All events" is stored as `*`, so a kind added later reaches it too. A webhook can't point at the local API's own port. There are no retries (Plane retries five times, then turns the webhook off): a failed delivery is logged as failed.
+
+**Means for future work**: the Projects agent (0.11.12) writes through the same module functions, so its changes reach Plane's webhooks. An MCP server over both path families stays optional (plan §3.6).
+
+---
+
 ## D-083 — Plane's analytics, exports and CSV importer: read where the work lives, Plane's columns both ways, the history already kept
 _2026-11-02_
 

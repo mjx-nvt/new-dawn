@@ -493,6 +493,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::api::revoke_api_key,
             commands::api::list_webhooks,
             commands::api::save_webhook,
+            commands::api::regenerate_webhook_secret,
             commands::api::delete_webhook,
             commands::api::webhook_deliveries,
             commands::people::list_people,

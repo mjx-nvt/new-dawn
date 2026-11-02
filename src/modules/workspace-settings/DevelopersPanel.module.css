@@ -1,4 +1,4 @@
-/* Workspace → CRM → Developers (D-071). */
+/* Workspace → CRM → Developers (D-071) and Workspace → Projects → Developers (D-084). */
 .form {
   display: flex;
   flex-wrap: wrap;
@@ -35,3 +35,17 @@
 }
 .ok { background: var(--status-positive-tint); color: var(--status-positive); }
 .bad { background: var(--status-negative-tint); color: var(--status-negative); }
+/* Plane's individual webhook events, under the form. */
+.events {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  width: 100%;
+}
+.event {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}

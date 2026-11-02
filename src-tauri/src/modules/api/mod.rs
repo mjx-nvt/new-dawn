@@ -5,6 +5,7 @@
 pub mod docs;
 pub mod filter;
 pub mod keys;
+pub mod plane;
 pub mod rest;
 pub mod webhooks;
 
@@ -110,7 +111,7 @@ pub async fn set_enabled(app: &AppHandle, on: bool) -> Result<ApiStatus> {
 
 /// At launch: the webhooks' listener, and the API when it was on.
 pub fn spawn(app: &AppHandle) {
-    webhooks::spawn();
+    webhooks::spawn(app);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let on = app.state::<WorkspaceHub>().app_setting(ENABLED).await.ok().flatten().as_deref() == Some("1");
