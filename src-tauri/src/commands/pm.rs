@@ -11,6 +11,7 @@ use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
 use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
+use crate::modules::pm::home::{self, HomeWidget, MyActivity, PmArchives, PmHit, PmQuickLink, PmRecent, PmSticky, RecentKind};
 use crate::modules::pm::intake::{self, IntakeInput, PmIntakeItem};
 use crate::modules::pm::modules::{self, ModuleDetails, ModuleInput, ModulePatch, PmModule};
 use crate::modules::pm::pages::{self, PageInput, PagePatch, PmPage, PmPageDoc, PmPageVersion};
@@ -802,4 +803,106 @@ pub async fn duplicate_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id:
 pub async fn delete_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
     let folder = hub.workspace(&slug).await?.folder_path;
     Ok(intake::delete(&hub.pool(&slug)?, &folder, &id, cycles::today()).await?)
+}
+
+// ── 0.11.9 (D-082): Home, Your work, navigation, ⌘K ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_stickies(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<PmSticky>, AppError> {
+    Ok(home::stickies(&hub.pool(&slug)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_sticky(hub: State<'_, WorkspaceHub>, slug: String, color: String) -> Result<PmSticky, AppError> {
+    Ok(home::add_sticky(&hub.pool(&slug)?, &color).await?)
+}
+
+/// A sticky's words (the editor's JSON text) or its colour.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_pm_sticky(hub: State<'_, WorkspaceHub>, slug: String, id: String, description: Option<String>, color: Option<String>) -> Result<PmSticky, AppError> {
+    Ok(home::update_sticky(&hub.pool(&slug)?, &id, description.as_deref(), color.as_deref()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_sticky(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    Ok(home::delete_sticky(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_quick_links(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<PmQuickLink>, AppError> {
+    Ok(home::quick_links(&hub.pool(&slug)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_quick_link(hub: State<'_, WorkspaceHub>, slug: String, title: String, url: String) -> Result<PmQuickLink, AppError> {
+    Ok(home::add_quick_link(&hub.pool(&slug)?, &title, &url).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_quick_link(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    Ok(home::delete_quick_link(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_home_widgets(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<HomeWidget>, AppError> {
+    Ok(home::widgets(&hub.pool(&slug)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_pm_home_widgets(hub: State<'_, WorkspaceHub>, slug: String, widgets: Vec<HomeWidget>) -> Result<Vec<HomeWidget>, AppError> {
+    Ok(home::set_widgets(&hub.pool(&slug)?, &widgets).await?)
+}
+
+/// The Projects section's items that are hidden.
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_hidden_navigation(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<String>, AppError> {
+    Ok(home::hidden_navigation(&hub.pool(&slug)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_pm_navigation(hub: State<'_, WorkspaceHub>, slug: String, key: String, hidden: bool) -> Result<Vec<String>, AppError> {
+    Ok(home::set_navigation(&hub.pool(&slug)?, &key, hidden).await?)
+}
+
+/// Opened now: first in Recents.
+#[tauri::command]
+#[specta::specta]
+pub async fn visit_pm(hub: State<'_, WorkspaceHub>, slug: String, kind: RecentKind, id: String) -> Result<(), AppError> {
+    Ok(home::visit(&hub.pool(&slug)?, kind, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_recents(hub: State<'_, WorkspaceHub>, slug: String, kind: Option<RecentKind>) -> Result<Vec<PmRecent>, AppError> {
+    Ok(home::recents(&hub.pool(&slug)?, kind, 20).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_archives(hub: State<'_, WorkspaceHub>, slug: String) -> Result<PmArchives, AppError> {
+    Ok(home::archives(&hub.pool(&slug)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_my_activity(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<MyActivity>, AppError> {
+    Ok(home::my_activity(&hub.pool(&slug)?, 20).await?)
+}
+
+/// ⌘K: projects, cycles, modules and pages by name.
+#[tauri::command]
+#[specta::specta]
+pub async fn search_pm(hub: State<'_, WorkspaceHub>, slug: String, query: String) -> Result<Vec<PmHit>, AppError> {
+    Ok(home::search(&hub.pool(&slug)?, &query).await?)
 }

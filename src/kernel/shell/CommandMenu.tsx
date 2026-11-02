@@ -6,6 +6,10 @@ import { labelInput, useCreateRecord, useObject, useObjects, useSearchRecords } 
 import { openSettings } from "../bridge/settings";
 import { askAssistant } from "../bridge/assistant";
 import { useManualWorkflows, useRunWorkflow } from "../bridge/workflows";
+import { usePmProjects } from "../bridge/pm";
+import { useSearchPm } from "../bridge/pmHome";
+import { useSearchPmItems } from "../bridge/pmItems";
+import CreateItem from "../../modules/projects/items/CreateItem";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import styles from "./CommandMenu.module.css";
 import { SHORTCUTS } from "./useShortcuts";
@@ -41,11 +45,16 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
   const [creating, setCreating] = useState<string | null>(null); // an object's singular name
   const [keys, setKeys] = useState(false);
   const [trouble, setTrouble] = useState<string | null>(null);
+  // Power K's "Create a work item…" (D-082): the create sheet once the menu has closed.
+  const [making, setMaking] = useState<string | null>(null);
   const objects = useObjects(slug);
   const views = useAllViews(slug, open);
   const recents = useRecents(slug, open && !q);
   const hits = useSearchRecords(slug, open ? q : "");
   const modules = useModules(slug).data ?? ALL_MODULES;
+  const pmProjects = (usePmProjects(modules.projects ? slug : undefined).data ?? []).filter((p) => !p.archived_at);
+  const pmHits = useSearchPm(modules.projects && open ? slug : undefined, q);
+  const itemHits = useSearchPmItems(slug, q.trim(), "", modules.projects && open && q.trim().length > 1);
   const createDef = useObject(slug, creating ?? undefined);
   const create = useCreateRecord(slug, creating ?? undefined);
   // Manual workflows (D-068): the global ones run from here; on a record's page, those that
@@ -95,13 +104,39 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
     const quick = !!needle && recordObjects.some((o) => o.label_singular.toLowerCase().startsWith(needle) || o.label_plural.toLowerCase().startsWith(needle));
     if (quick) out.push(...creates);
     if (needle) for (const h of hits.data ?? []) out.push({ id: `hit:${h.record_id}`, section: "Records", label: h.label || "Unnamed", hint: h.object_plural, run: go(() => void navigate({ to: "/crm/$object/$recordId", params: { object: h.object_plural, recordId: h.record_id } })) });
+    // Plane's Power K (D-082): work items by key or title, then projects, cycles, modules and
+    // pages by name.
+    if (needle.length > 1 && modules.projects) {
+      for (const i of (itemHits.data ?? []).slice(0, 8))
+        out.push({ id: `item:${i.id}`, section: "Work items", label: `${i.key} ${i.name}`, hint: i.state_name, run: go(() => void navigate({ to: "/projects/$projectId", params: { projectId: i.project_id }, search: { tab: "items", peek: i.id } })) });
+      for (const h of pmHits.data ?? []) {
+        const search = h.kind === "cycle" ? { tab: "cycles", cycle: h.id } : h.kind === "module" ? { tab: "modules", module: h.id } : h.kind === "page" ? { tab: "pages", page: h.id } : {};
+        const kind = h.kind.charAt(0).toUpperCase() + h.kind.slice(1);
+        out.push({ id: `pm:${h.kind}:${h.id}`, section: "Projects", label: h.label, hint: h.kind === "project" ? "Project" : `${kind} · ${h.project_name}`, run: go(() => void navigate({ to: "/projects/$projectId", params: { projectId: h.project_id }, search })) });
+      }
+    }
     if (!quick) out.push(...creates);
+    // A new work item: in the project on screen, else the first open one — the menu closed first.
+    const here = /^\/projects\/([^/]+)/.exec(path)?.[1];
+    const target = pmProjects.find((p) => p.id === here)?.id ?? pmProjects[0]?.id;
+    if (modules.projects && target && (fits("Create a work item…") || fits("New work item"))) out.push({ id: "create:pm-item", section: "Create", label: "Create a work item…", hint: "Projects", run: () => (dialog.current?.close(), onClose(), setMaking(target)) });
     const pages: [string, () => void][] = [
       ["Today", () => void navigate({ to: "/today" })],
       ["Meetings", () => void navigate({ to: "/meetings", search: {} })],
       ["Live", () => void navigate({ to: "/live", search: {} })],
       ["Tasks", () => void navigate({ to: "/tasks" })],
-      ...(modules.projects ? [["Projects", () => void navigate({ to: "/projects" })] as [string, () => void], ["Inbox", () => void navigate({ to: "/inbox", search: {} })] as [string, () => void]] : []),
+      ...(modules.projects
+        ? ([
+            ["Home", () => void navigate({ to: "/projects/home" })],
+            ["Your work", () => void navigate({ to: "/projects/your-work", search: {} })],
+            ["Inbox", () => void navigate({ to: "/inbox", search: {} })],
+            ["Drafts", () => void navigate({ to: "/projects/drafts" })],
+            ["Work item views", () => void navigate({ to: "/projects/views", search: {} })],
+            ["Active cycles", () => void navigate({ to: "/projects/cycles" })],
+            ["Archives", () => void navigate({ to: "/projects/archives", search: {} })],
+            ["All projects", () => void navigate({ to: "/projects" })],
+          ] as [string, () => void][])
+        : []),
       ["Email", () => void navigate({ to: "/email" })],
       ["Workspace", () => void navigate({ to: "/workspace", search: { tab: "overview" } })],
       ["Settings", () => void openSettings("general")],
@@ -200,6 +235,8 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
   const picked = creating ? recordObjects.find((o) => o.name_singular === creating) : undefined;
 
   return (
+    <>
+    {making && slug && <CreateItem slug={slug} projectId={making} onClose={() => setMaking(null)} />}
     <dialog ref={dialog} className={`glass sheet ${styles.menu}`} aria-label="Command menu" onClose={onClose} onCancel={(e) => { e.preventDefault(); onClose(); }} onKeyDown={onKeyDown}>
       <div className={styles.inputRow}>
         {picked && <span className="chip chipPrimary">New {picked.label_singular.toLowerCase()}</span>}
@@ -255,5 +292,6 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
         </div>
       )}
     </dialog>
+    </>
   );
 }

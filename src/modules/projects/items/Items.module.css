@@ -1452,3 +1452,89 @@
 .intakeProps dd {
   margin: 0;
 }
+
+/* Home and Your work (0.11.9) */
+.widget {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.quickLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.quickLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 36px;
+  min-width: 160px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-control);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+
+.stickies {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.sticky {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-height: 160px;
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  border: 0.5px solid var(--hair);
+  border-top: 3px solid var(--chart-4);
+  background: var(--status-warning-tint);
+}
+
+/* The note on the sticky's colour, not on a card of its own. */
+.sticky > div:first-child {
+  background: transparent;
+}
+
+.sticky[data-color="green"] { border-top-color: var(--chart-3); background: var(--status-positive-tint); }
+.sticky[data-color="blue"] { border-top-color: var(--chart-1); background: var(--surface); }
+.sticky[data-color="purple"] { border-top-color: var(--chart-7); background: var(--surface); }
+.sticky[data-color="red"] { border-top-color: var(--chart-6); background: var(--status-negative-tint); }
+.sticky[data-color="gray"] { border-top-color: var(--chart-8); background: var(--surface-2); }
+
+.workCharts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.activityRow {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.activityRow:hover {
+  background: var(--surface-2);
+}
+
+.activityRow:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.widget .search {
+  width: 240px;
+}

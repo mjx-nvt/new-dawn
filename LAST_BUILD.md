@@ -1,3 +1,22 @@
+# Last Build — Home, Your work, Power K, navigation (Plane) · release 0.11.9
+_2026-11-02_
+
+## What changed
+- **The sidebar's Projects section** (D-082, Plane's): Home, Your work, **Inbox** (its unread count), Drafts, Views, Active cycles, Archives, All projects (with the updates waiting for you), then each open project — ▸ opens it onto its Work items, Cycles, Modules, Views, Pages and Intake. **✎ Customize navigation** shows or hides each item. Today, Meetings, Live, Tasks, CRM, Email and Workspace stay at the top.
+- **Home**: "Good evening, Tien" with the day, the date and the time; **Quick links** (an address and a title, opened in your browser), **Recents** (All, Work items, Pages, Projects — what you opened lately) and **Your stickies** (rich-text notes in six colours); **Manage widgets** turns each on or off and moves it up or down.
+- **Your work**: Assigned, Created and Subscribed with their counts across your open projects; the chosen tab's work by state group and by priority, a pie of the state groups, your recent activity, and the items themselves (each opens in the peek).
+- **Archives** (`g r`): what's archived across your projects — projects, work items, cycles, modules and pages — each restored there or opened where it lives.
+- **⌘K** also finds work items (by key or title), projects, cycles, modules and pages, goes to Home, Your work, Inbox, Drafts, the views, Active cycles and Archives, and **Create a work item…** opens the create sheet. New keys: `g h` Home, `g w` Your work, `g i` Inbox, `g v` Views, `g r` Archives, `g a` Active cycles, `g j` All projects.
+- Migration **0041** (`pm_sticky`, `pm_quick_link`, `pm_home_widget`, `pm_navigation`, `pm_recent`), reviewed by migration-safety (SAFE). No new dependency.
+- Seen in the dev app (light and dark): the dev workspace took 0041; a new VIFC Fintech Hub with three work items and two unread notices. The sidebar's Projects section read Home · Your work · **Inbox 2** · Drafts · Views · Active cycles · Archives · All projects 3, then Block B defects repair and VIFC Fintech Hub. `g` then `r` opened **Archives** (Projects · 0, Work items · 0, …). With Book the room done and archived, Archives → Work items listed "VIFC-3 Book the room"; Restore brought it back. **Home** read "Good evening, Tien · Monday, 2 Nov 2026 · 21:22"; a quick link (vifc.gov.vn/sandbox, "Sandbox rules") and a sticky added by hand; Recents listed VIFC Fintech Hub, opened a minute before. **Your work** read Assigned · 3, Created · 3, Subscribed · 3 with its charts. **⌘K** "VIFC" offered the project. **✎** with Drafts unticked took Drafts out of the section. The project, the sticky, the link and the setting were then removed from the dev workspace. After the review, on the project's Cycles tab only the project and its Cycles part were current in the sidebar, and Home greeted "Tien Nguyen".
+- Review: the architecture review found one must-fix, taken — every part of the open project lit up as current in the sidebar (now only the one on screen). Taken too: a visit is recorded each time something is opened, not by a cached query (Recents had kept an older order, and a window coming back to the front wrote visits); ⌘K shows no stale work items for one letter, and closes before Create a work item's sheet opens; "every widget is off" only once the widgets have loaded; the project on screen can be closed in the sidebar; a sticky has no Picture button and refuses a pasted picture, and deleting one asks first; the Recents tab is in the address; the ⌘K search returns the latest of each kind; Recents and Archives skip pages, cycles and modules of a project with that feature off; Your work's activity skips Intake requests; the go-to keys are read before a page's own; Archives says 500+ when it has that many work items; Home greets you by your whole name (a Vietnamese name's first word is the family's).
+- Checks: 212 Rust tests pass (one new: stickies newest first in the six colours, words kept; a quick link's address once; the widgets on by default, reordered and one off; a navigation item hidden, an unknown one refused; recents newest first by kind; ⌘K finds a cycle; your activity); clippy, tsc and the localhost check are clean.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+---
+
 # Last Build — Intake (Plane) · release 0.11.8
 _2026-11-02_
 

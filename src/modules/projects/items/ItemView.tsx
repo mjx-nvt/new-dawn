@@ -26,6 +26,7 @@ import {
   type PmItem,
   type Reaction,
 } from "../../../kernel/bridge/pmItems";
+import { useVisitPm } from "../../../kernel/bridge/pmHome";
 import Editor from "../../../kernel/editor/Editor";
 import { richPlain } from "../../../kernel/editor/plain";
 import { formatDateTime } from "../../../kernel/format/format";
@@ -326,6 +327,8 @@ function SubItems({ slug, item, onOpen }: { slug: string; item: PmItem; onOpen: 
 export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: { slug: string; itemId: string; tab?: string; onTab: (tab: string | undefined) => void; onOpen: (id: string, projectId?: string) => void; onGone: () => void }) {
   const query = usePmItem(slug, itemId);
   const item = query.data;
+  // Opened: first in the Home's Recents (D-082).
+  useVisitPm(slug, "item", itemId);
   const update = useUpdatePmItem(slug);
   const archive = useArchivePmItem(slug);
   const remove = useDeletePmItem(slug);

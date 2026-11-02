@@ -11,6 +11,7 @@ pub mod cycles;
 pub mod display;
 pub mod drafts;
 pub mod filters;
+pub mod home;
 pub mod inbox;
 pub mod intake;
 pub mod items;

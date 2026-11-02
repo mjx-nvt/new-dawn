@@ -111,3 +111,41 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-2) 0;
 }
+
+/* The Projects section (D-082): Customize navigation, the projects and their parts. */
+.customize {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+.projectRow {
+  display: flex;
+  align-items: center;
+}
+.disclosure {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+.disclosure:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); border-radius: var(--radius-control); }
+.project { flex: 1; min-width: 0; }
+.part { padding-left: 44px; }
+.partOn {
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+  font-weight: 500;
+}

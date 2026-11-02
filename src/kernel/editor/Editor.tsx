@@ -23,7 +23,8 @@ export interface EditorHome {
   /** The object's plural name (the record route) — also the attachment's link. */
   object: string;
   recordId: string;
-  files?: { add: (path: string) => Promise<Attached | null>; addBytes: (name: string, bytes: Uint8Array) => Promise<Attached | null> };
+  /** `null`: no pictures here (a sticky, D-082). */
+  files?: { add: (path: string) => Promise<Attached | null>; addBytes: (name: string, bytes: Uint8Array) => Promise<Attached | null> } | null;
 }
 
 /** A page's editor (D-080): its sub-pages — made from the `/` menu, named and opened. */
@@ -135,6 +136,10 @@ export default function Editor({ value, onChange, placeholder, readOnly, home, p
       handlePaste: (_view, event) => {
         const files = [...(event.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
         if (!files.length) return false;
+        if (home.files === null) {
+          setTrouble("Pictures go in pages and work items");
+          return true;
+        }
         for (const file of files) {
           if (file.size > PASTE_LIMIT) {
             setTrouble("A pasted picture can be up to 20 MB — add larger ones from Files.");
@@ -261,7 +266,7 @@ export default function Editor({ value, onChange, placeholder, readOnly, home, p
           {tool("Code block", editor.isActive("codeBlock"), () => editor.chain().focus().toggleCodeBlock().run(), "<>")}
           <span className={styles.gap} />
           {tool("Table", editor.isActive("table"), () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), "⊞")}
-          {tool("Picture", false, () => void pickPictures(), "🖼")}
+          {home.files !== null && tool("Picture", false, () => void pickPictures(), "🖼")}
           {page && (
             <>
               <span className={styles.gap} />

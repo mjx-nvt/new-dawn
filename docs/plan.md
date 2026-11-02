@@ -249,7 +249,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0038 | `pm_module`, `pm_module_item` (several modules an item), `pm_module_member`, `pm_module_link`; `favorite.pm_cycle_id` / `pm_module_id` (cycle stars copied; D-079) | 0.11.6 |
 | 0039 | `pm_page` (sub-pages, private and locked flags), `pm_page_label`, `pm_page_version` (merged snapshots); `favorite.pm_page_id` (D-080) | 0.11.7 |
 | 0040 | `pm_intake_item` (a request's status, snooze day, duplicate of, source, email; D-081) — requests are `pm_item` rows in a Triage state | 0.11.8 |
-| 0041 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
+| 0041 | `pm_sticky`, `pm_quick_link`, `pm_home_widget`, `pm_navigation`, `pm_recent` (visits; D-082) | 0.11.9 |
 | 0042 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
 | 0043 | `api_token`, `pm_webhook` | 0.11.11 |
 
@@ -419,7 +419,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.9 — Home, Your work, Power K, stickies, navigation, profile (3 sittings)
 - **Same as:** §4.1 (Home, Your work, Power K, shortcuts, customize navigation, profile settings, favorites, recents, stickies, quick links).
-- **Data:** 0041.
+- **Data:** 0041 (`pm_sticky`, `pm_quick_link`, `pm_home_widget`, `pm_navigation`, `pm_recent`).
 - **Screens and flows:** Home (greeting, Quick links, Recents with its filter, Stickies with colours and formatting, Manage widgets); Your work (summary, by state group, by priority, pie, recent activity, Assigned / Created / Subscribed tabs); Power K actions inside ⌘K (create work item, go to project / cycle / module / page, toggle sidebar, shortcuts…); the shortcut set; Customize navigation; Settings → Notifications preferences; the Projects section of the sidebar as Plane's (Home, Your work, Inbox, Drafts, Projects with their sub-items, Views, Archives, Favorites).
 - **Done when:** the sidebar matches Plane's with Inbox showing its unread count; `G` `R` opens Archives.
 

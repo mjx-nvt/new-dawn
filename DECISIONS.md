@@ -91,6 +91,21 @@ _2026-11-02_
 
 ---
 
+## D-082 — Plane's Home, Your work and navigation: a Projects section in the sidebar, recents as visits, Power K inside ⌘K
+_2026-11-02_
+
+**Context** (plan v4 §4.1, 0.11.9): Plane's Home (greeting with the day and time; Quick links, Recents — All, Work items, Pages, Projects —, Your stickies; Manage widgets), Your work (counts of what you're assigned, made and follow; workload by state group and priority; a pie; recent activity), Power K (search, actions and navigation in one palette), the documented shortcuts, Customize navigation, notification preferences, and the sidebar's shape: Home, Your work, Inbox, Drafts, Projects with their parts, Views, Archives, Favorites.
+
+**Decision — the sidebar gets Plane's Projects section**: when the Projects module is on, the sidebar's top section keeps the app (Today, Meetings, Live, Tasks, CRM, Email, Workspace) and a **Projects** section follows — Home, Your work, Inbox (its unread count), Drafts, Views, Active cycles, Archives, All projects (with the updates waiting for you), then each open project, which opens onto its parts as its features say (Work items, Cycles, Modules, Views, Pages, Intake). Twenty's CRM section (with the Favorites) stays below it. **Customize navigation** (✎ on the section) shows or hides each of the section's items (0041 `pm_navigation`); the projects always show.
+
+**Decision — Home and Your work are pages of the module**: Home's widgets (0041 `pm_home_widget`: on or off, in order — Manage widgets) are Quick links (`pm_quick_link`: an address once, opened in the browser), Recents and Your stickies (`pm_sticky`: rich text and a colour name). Recents are visits (`pm_recent`: a work item, page or project opened, its time moved on each visit, read joined to what still exists — nothing archived, no Intake request, no archived project — and the newest 100 kept). Your work reads the same filters as views (`assignees`, `created_by`, `subscribers` = you, D-077) across the open projects; its bars and pie are drawn from that list, and its recent activity is the owner's own activity rows. Notification preferences per kind already lived in Settings → General (D-075).
+
+**Decision — Power K is in ⌘K**: the one command menu (D-064) also finds work items by key or title, projects, cycles, modules and pages by name (a few of each, open projects and features that are on), goes to the Projects pages, and creates a work item (in the project on screen, else the first) through the create sheet once the menu has closed. Plane's go-to keys take the letters Twenty left: `g h` Home, `g w` Your work, `g i` Inbox, `g v` Views, `g r` Archives, `g a` Active cycles, `g j` All projects (`g p` stays People). **Archives** (`g r`) lists what's archived across the projects — projects, and the open ones' work items, cycles, modules and pages (a sub-page under its archived page is reached through it) — each restored there or opened where it lives.
+
+**Means for future work**: analytics (0.11.10) read the same filters as Your work; the Projects agent (0.11.12) can file its proposals into the Inbox the sidebar counts.
+
+---
+
 ## D-081 — Plane's intake: requests are numbered items in a Triage state, statuses read on the day, the Email reading agent files requests
 _2026-11-02_
 

@@ -5,10 +5,9 @@ import { useOpenTaskCount } from "../bridge/tasks";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import { useWaitingCommitments } from "../bridge/crm";
 import { ALL_MODULES, useModules } from "../bridge/modules";
-import { useNoticeCounts } from "../bridge/notices";
-import { useProjects } from "../bridge/projects";
 import CrmNav from "./CrmNav";
-import { CodeIcon, CollapseIcon, InboxIcon, LiveIcon, MailIcon, MeetingsIcon, PeopleIcon, ProjectsIcon, SettingsIcon, TasksIcon, TodayIcon, WorkspaceIcon } from "./icons";
+import { CodeIcon, CollapseIcon, LiveIcon, MailIcon, MeetingsIcon, PeopleIcon, SettingsIcon, TasksIcon, TodayIcon, WorkspaceIcon } from "./icons";
+import PmNav from "./PmNav";
 import styles from "./Sidebar.module.css";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 
@@ -33,12 +32,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
   const tip = (text: string) => (iconsOnly ? text : undefined);
   const { data: workspace } = useCurrentWorkspace();
   const { data: due = 0 } = useOpenTaskCount(workspace?.slug); // due today or overdue
-  const projects = useProjects(workspace?.slug);
-  const waiting = (projects.data ?? []).reduce((n, p) => n + p.waiting, 0); // updates waiting for you
   const owed = useWaitingCommitments(workspace?.slug).data?.length ?? 0; // commitments waiting for you
   const modules = useModules(workspace?.slug).data ?? ALL_MODULES; // which modules this workspace has on (D-059)
-  const notices = useNoticeCounts(modules.projects ? workspace?.slug : undefined).data; // the Inbox's unread (D-075)
-  const unread = (notices?.all ?? 0) + (notices?.mentions ?? 0);
 
   return (
     <nav className={iconsOnly ? `${styles.sidebar} ${styles.rail}` : styles.sidebar} inert={hidden} aria-label="Sidebar">
@@ -66,24 +61,6 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
           {label("Tasks", <TasksIcon />)}
           {due > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{due}</span>)}
         </Link>
-        {modules.projects && (
-          <Link
-            to="/projects"
-            className={styles.item}
-            activeProps={{ className: styles.active }}
-            title={tip(waiting ? `Projects · ${waiting} updates waiting` : "Projects")}
-            aria-label={waiting ? `Projects, ${waiting} updates waiting` : undefined}
-          >
-            {label("Projects", <ProjectsIcon />)}
-            {waiting > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{waiting}</span>)}
-          </Link>
-        )}
-        {modules.projects && (
-          <Link to="/inbox" search={{}} activeOptions={{ includeSearch: false }} className={styles.item} activeProps={{ className: styles.active }} title={tip(unread ? `Inbox · ${unread} unread` : "Inbox")} aria-label={unread ? `Inbox, ${unread} unread` : undefined}>
-            {label("Inbox", <InboxIcon />)}
-            {unread > 0 && (iconsOnly ? <span className={styles.dot} /> : <span className={styles.count}>{unread}</span>)}
-          </Link>
-        )}
         {modules.crm && (
           <Link
             to="/crm"
@@ -113,6 +90,8 @@ export default function Sidebar({ hidden, iconsOnly, onToggleIcons, switcherOpen
         </Link>
       </div>
 
+      {/* Plane's Projects section (D-082), then Twenty's CRM section. */}
+      {modules.projects && <PmNav slug={workspace?.slug} iconsOnly={iconsOnly} />}
       {modules.crm && <CrmNav slug={workspace?.slug} iconsOnly={iconsOnly} />}
 
       {import.meta.env.DEV && (

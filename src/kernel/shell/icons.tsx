@@ -77,6 +77,53 @@ export const InboxIcon = () => (
   </Icon>
 );
 
+/** The Projects section (Plane's, D-082): Home, Your work, Drafts, Views, Active cycles, Archives. */
+export const HomeIcon = () => (
+  <Icon>
+    <path d="M2.5 7.5 8 3l5.5 4.5" />
+    <path d="M4 6.5v6.5h3v-3.5h2v3.5h3V6.5" />
+  </Icon>
+);
+
+export const YourWorkIcon = () => (
+  <Icon>
+    <rect x="2" y="5" width="12" height="8.5" rx="1.5" />
+    <path d="M6 5V3.5h4V5" />
+  </Icon>
+);
+
+export const DraftsIcon = () => (
+  <Icon>
+    <path d="M9.5 2.5H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6z" />
+    <path d="M9.5 2.5V6H13" />
+  </Icon>
+);
+
+export const ViewsIcon = () => (
+  <Icon>
+    <path d="M8 2.5 14 5.5 8 8.5 2 5.5z" />
+    <path d="M2 8.5l6 3 6-3" />
+    <path d="M2 11l6 3 6-3" />
+  </Icon>
+);
+
+export const CyclesIcon = () => (
+  <Icon>
+    <path d="M13 8a5 5 0 0 1-8.5 3.5" />
+    <path d="M3 8a5 5 0 0 1 8.5-3.5" />
+    <path d="M11.5 2v2.5H9" />
+    <path d="M4.5 14v-2.5H7" />
+  </Icon>
+);
+
+export const ArchivesIcon = () => (
+  <Icon>
+    <rect x="2" y="3" width="12" height="3" rx="0.75" />
+    <path d="M3 6v6.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V6" />
+    <path d="M6.5 9h3" />
+  </Icon>
+);
+
 /** A tick ("In Tasks"). */
 export const CheckIcon = () => (
   <Icon>

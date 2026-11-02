@@ -322,6 +322,26 @@ export const commands = {
 	snoozePmIntake: (slug: string, id: string, until: string) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("snooze_pm_intake", { slug, id, until })),
 	duplicatePmIntake: (slug: string, id: string, of: string) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("duplicate_pm_intake", { slug, id, of })),
 	deletePmIntake: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_intake", { slug, id })),
+	listPmStickies: (slug: string) => typedError<PmSticky_Serialize[], AppError>(__TAURI_INVOKE("list_pm_stickies", { slug })),
+	addPmSticky: (slug: string, color: string) => typedError<PmSticky_Serialize, AppError>(__TAURI_INVOKE("add_pm_sticky", { slug, color })),
+	/**  A sticky's words (the editor's JSON text) or its colour. */
+	updatePmSticky: (slug: string, id: string, description: string | null, color: string | null) => typedError<PmSticky_Serialize, AppError>(__TAURI_INVOKE("update_pm_sticky", { slug, id, description, color })),
+	deletePmSticky: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_sticky", { slug, id })),
+	listPmQuickLinks: (slug: string) => typedError<PmQuickLink[], AppError>(__TAURI_INVOKE("list_pm_quick_links", { slug })),
+	addPmQuickLink: (slug: string, title: string, url: string) => typedError<PmQuickLink, AppError>(__TAURI_INVOKE("add_pm_quick_link", { slug, title, url })),
+	deletePmQuickLink: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_quick_link", { slug, id })),
+	pmHomeWidgets: (slug: string) => typedError<HomeWidget[], AppError>(__TAURI_INVOKE("pm_home_widgets", { slug })),
+	setPmHomeWidgets: (slug: string, widgets: HomeWidget[]) => typedError<HomeWidget[], AppError>(__TAURI_INVOKE("set_pm_home_widgets", { slug, widgets })),
+	/**  The Projects section's items that are hidden. */
+	pmHiddenNavigation: (slug: string) => typedError<string[], AppError>(__TAURI_INVOKE("pm_hidden_navigation", { slug })),
+	setPmNavigation: (slug: string, key: string, hidden: boolean) => typedError<string[], AppError>(__TAURI_INVOKE("set_pm_navigation", { slug, key, hidden })),
+	/**  Opened now: first in Recents. */
+	visitPm: (slug: string, kind: RecentKind, id: string) => typedError<null, AppError>(__TAURI_INVOKE("visit_pm", { slug, kind, id })),
+	listPmRecents: (slug: string, kind: RecentKind | null) => typedError<PmRecent[], AppError>(__TAURI_INVOKE("list_pm_recents", { slug, kind })),
+	pmArchives: (slug: string) => typedError<PmArchives, AppError>(__TAURI_INVOKE("pm_archives", { slug })),
+	pmMyActivity: (slug: string) => typedError<MyActivity[], AppError>(__TAURI_INVOKE("pm_my_activity", { slug })),
+	/**  ⌘K: projects, cycles, modules and pages by name. */
+	searchPm: (slug: string, query: string) => typedError<PmHit[], AppError>(__TAURI_INVOKE("search_pm", { slug, query })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -2190,6 +2210,11 @@ export type Hit = {
 	label: string,
 };
 
+export type HomeWidget = {
+	key: string,
+	is_enabled: boolean,
+};
+
 /**
  *  What the Select file step hands the sheet: the table, a first mapping, the identifier that
  *  updates existing records, and the choices.
@@ -2967,6 +2992,20 @@ export type Modules = {
 	crm: boolean,
 };
 
+export type MyActivity = {
+	id: string,
+	item_id: string,
+	project_id: string,
+	key: string,
+	name: string,
+	kind: string,
+	field: string,
+	old_value: string,
+	new_value: string,
+	actor: string,
+	created_at: string,
+};
+
 /**  What the owner decided for one suspect. */
 export type NameDecision = {
 	heard_as: string,
@@ -3513,6 +3552,26 @@ export type PmActivity_Serialize = {
 	created_at: string,
 };
 
+export type PmArchived = {
+	id: string,
+	project_id: string,
+	label: string,
+	project_name: string,
+	archived_at: string,
+};
+
+/**
+ *  What's archived across the projects (Plane's Archives): projects, and the work items, cycles,
+ *  modules and pages of the open ones.
+ */
+export type PmArchives = {
+	projects: PmArchived[],
+	items: PmArchived[],
+	cycles: PmArchived[],
+	modules: PmArchived[],
+	pages: PmArchived[],
+};
+
 export type PmAttachment = {
 	id: string,
 	item_id: string,
@@ -3654,6 +3713,15 @@ export type PmEstimate_Serialize = {
 	active: boolean,
 	archived_at: string | null,
 	created_at: string,
+};
+
+export type PmHit = {
+	/**  "project", "cycle", "module" or "page". */
+	kind: string,
+	id: string,
+	project_id: string,
+	label: string,
+	project_name: string,
 };
 
 export type PmIntakeItem = PmIntakeItem_Serialize | PmIntakeItem_Deserialize;
@@ -4067,6 +4135,25 @@ export type PmProject_Serialize = {
 	updated_at: string,
 };
 
+export type PmQuickLink = {
+	id: string,
+	title: string,
+	url: string,
+	sort_order: number | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmRecent = {
+	kind: RecentKind,
+	ref_id: string,
+	project_id: string,
+	/**  "VIFC-12 Draft the rules", a page's name, a project's. */
+	label: string,
+	project_name: string,
+	visited_at: string,
+};
+
 export type PmRelation = {
 	id: string,
 	/**  As seen from the item asked about. */
@@ -4093,6 +4180,28 @@ export type PmState = {
 	group: StateGroup,
 	sequence: number | null,
 	is_default: boolean,
+};
+
+export type PmSticky = PmSticky_Serialize | PmSticky_Deserialize;
+
+export type PmSticky_Deserialize = {
+	id: string,
+	description?: Json | null,
+	description_text: string,
+	color: string,
+	sort_order: number | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmSticky_Serialize = {
+	id: string,
+	description: Json | null,
+	description_text: string,
+	color: string,
+	sort_order: number | null,
+	created_at: string,
+	updated_at: string,
 };
 
 export type PmVersion = PmVersion_Serialize | PmVersion_Deserialize;
@@ -4469,6 +4578,8 @@ export type Recent = {
 	label: string,
 	visited_at: string,
 };
+
+export type RecentKind = "item" | "page" | "project";
 
 export type RecordRef = {
 	/**  The object's plural name (the route) and the record. */

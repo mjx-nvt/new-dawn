@@ -1,6 +1,7 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useArchivePmProject, usePmProject } from "../../kernel/bridge/pm";
+import { useVisitPm } from "../../kernel/bridge/pmHome";
 import { usePmIntakeCount } from "../../kernel/bridge/pmIntake";
 import { useDecideUpdate, useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
@@ -39,6 +40,7 @@ export default function ProjectPage() {
   const archive = useArchivePmProject(slug);
   const f = pm?.features;
   const intakeCount = usePmIntakeCount(slug, projectId, !!f?.intake);
+  useVisitPm(pm ? slug : undefined, "project", projectId);
   const tabs: [string, string][] = [
     ["overview", "Overview"],
     ["items", "Work items"],

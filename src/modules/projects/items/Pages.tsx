@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePmLabels, type PmProject } from "../../../kernel/bridge/pm";
 import { exportPageMarkdown, pageFiles, printWindow, searchItemMentions, usePageMutations, usePmPage, usePmPageVersions, usePmPages, type PmPage } from "../../../kernel/bridge/pmPages";
 import { usePeople } from "../../../kernel/bridge/people";
+import { useVisitPm } from "../../../kernel/bridge/pmHome";
 import Editor from "../../../kernel/editor/Editor";
 import { formatDateTime } from "../../../kernel/format/format";
 import DangerButton from "../../../kernel/shell/DangerButton";
@@ -129,6 +130,7 @@ function PageView({ slug, project, page: p, pages, full, onOpen, onPeek, onFull,
   const doc = usePmPage(slug, p.id);
   const m = usePageMutations(slug);
   const people = usePeople(slug).data ?? [];
+  useVisitPm(slug, "page", p.id);
   const [name, setName] = useState(p.name);
   const [emoji, setEmoji] = useState(p.emoji);
   const [live, setLive] = useState<unknown>(null);

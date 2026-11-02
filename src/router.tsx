@@ -18,6 +18,9 @@ import ItemPage from "./modules/projects/items/ItemPage";
 import InboxPage from "./modules/projects/InboxPage";
 import WorkspaceViews from "./modules/projects/WorkspaceViews";
 import ActiveCycles from "./modules/projects/ActiveCycles";
+import ArchivesPage from "./modules/projects/ArchivesPage";
+import HomePage from "./modules/projects/HomePage";
+import YourWorkPage from "./modules/projects/YourWorkPage";
 import CrmPage from "./modules/crm/CrmPage";
 import RecordPage from "./modules/crm/record/RecordPage";
 import EmailPage from "./modules/email/EmailPage";
@@ -193,6 +196,49 @@ const activeCyclesRoute = createRoute({
   staticData: { title: "Active cycles", breadcrumb: "Projects" },
 });
 
+// Plane's Home (D-082): the greeting, quick links, recents, stickies.
+const pmHomeRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/home",
+  // The Recents tab.
+  validateSearch: (search: Record<string, unknown>): { rtab?: string } => (typeof search.rtab === "string" && search.rtab ? { rtab: search.rtab } : {}),
+  component: () => (
+    <ModuleGate module="projects">
+      <HomePage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Home", breadcrumb: "Projects" },
+});
+
+// Your work (D-082): the tab and the peek.
+const yourWorkRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/your-work",
+  validateSearch: (search: Record<string, unknown>): { ytab?: string; peek?: string; mode?: string; activity?: string } => {
+    const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
+    return { ...text("ytab"), ...text("peek"), ...text("mode"), ...text("activity") };
+  },
+  component: () => (
+    <ModuleGate module="projects">
+      <YourWorkPage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Your work", breadcrumb: "Projects" },
+});
+
+// Archives across the projects (D-082, `g r`): which kind.
+const archivesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/archives",
+  validateSearch: (search: Record<string, unknown>): { atab?: string } => (typeof search.atab === "string" && search.atab ? { atab: search.atab } : {}),
+  component: () => (
+    <ModuleGate module="projects">
+      <ArchivesPage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Archives", breadcrumb: "Projects" },
+});
+
 // The Inbox (D-075): Plane's notifications — the tab, what it shows, the type filters, the work
 // item open beside the list and its activity tab.
 const inboxRoute = createRoute({
@@ -320,7 +366,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, pmHomeRoute, yourWorkRoute, archivesRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

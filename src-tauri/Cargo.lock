@@ -3108,7 +3108,7 @@ dependencies = [
 
 [[package]]
 name = "new-dawn"
-version = "0.11.8"
+version = "0.11.9"
 dependencies = [
  "anyhow",
  "axum",
