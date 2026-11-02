@@ -12,6 +12,7 @@ import "./styles/components.css";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
+import FormatsRoot from "./kernel/format/FormatsRoot";
 import CrashScreen from "./kernel/shell/CrashScreen";
 import { router } from "./router";
 
@@ -21,7 +22,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <CrashScreen>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <FormatsRoot>
+          <RouterProvider router={router} />
+        </FormatsRoot>
       </QueryClientProvider>
     </CrashScreen>
   </React.StrictMode>,

@@ -16,6 +16,7 @@ import {
 import { useSetMeetingReference } from "../../kernel/bridge/activity";
 import { ALL_MODULES, useModules } from "../../kernel/bridge/modules";
 import { useFindProjectUpdates } from "../../kernel/bridge/projects";
+import { useFindCrmProposals } from "../../kernel/bridge/crmAgent";
 import { useOllamaStatus, useSummarise } from "../../kernel/bridge/summary";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SparkleIcon } from "../../kernel/shell/icons";
@@ -57,6 +58,7 @@ export default function MeetingPage() {
   const [confirmRetranscribe, setConfirmRetranscribe] = useState(false);
   const setReference = useSetMeetingReference(workspace?.slug);
   const findUpdates = useFindProjectUpdates(workspace?.slug);
+  const findCrm = useFindCrmProposals(workspace?.slug);
   const modules = useModules(workspace?.slug).data ?? ALL_MODULES; // a paused module has no menu item (D-059)
 
   if (meeting.error) {
@@ -166,6 +168,16 @@ export default function MeetingPage() {
                       },
                     ]
                   : []),
+                ...(modules.crm
+                  ? [
+                      {
+                        label: findCrm.isPending ? "Finding CRM proposals…" : "Find CRM proposals",
+                        onSelect: () => findCrm.mutate(meetingId),
+                        disabled: m.status !== "summarised" || findCrm.isPending,
+                        separator: !modules.projects,
+                      },
+                    ]
+                  : []),
                 {
                   label: m.reference ? "Stop using as a reference" : "Use as a reference",
                   onSelect: () => setReference.mutate({ meetingId, on: !m.reference }),
@@ -191,6 +203,26 @@ export default function MeetingPage() {
             {!findUpdates.isPending && !!findUpdates.data && (
               <Link to="/projects" search={{}}>
                 Projects
+              </Link>
+            )}
+          </p>
+        </div>
+      )}
+
+      {(findCrm.isPending || findCrm.data != null || findCrm.error) && (
+        <div className={`card ${styles.notice}`} role="status">
+          <p className="fieldHint aiMark">
+            <SparkleIcon />{" "}
+            {findCrm.isPending
+              ? "Reading this summary for the CRM…"
+              : findCrm.error
+                ? findCrm.error.message
+                : findCrm.data
+                  ? `${findCrm.data} CRM proposal${findCrm.data === 1 ? "" : "s"} from this meeting wait${findCrm.data === 1 ? "s" : ""} for you — `
+                  : "Nothing from this meeting waits for the CRM."}
+            {!findCrm.isPending && !!findCrm.data && (
+              <Link to="/crm" search={{ tab: "waiting" }}>
+                CRM → Waiting for you
               </Link>
             )}
           </p>

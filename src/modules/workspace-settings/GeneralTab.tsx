@@ -4,6 +4,7 @@ import { useProfile, useSetProfile } from "../../kernel/bridge/profile";
 import { openPrivacySettings, useMicrophonePermission, useRequestMicrophone, type PermissionState } from "../../kernel/bridge/recorder";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SUMMARY_LANGS } from "../meetings/format";
+import FormatsGroup from "./FormatsGroup";
 import styles from "./Settings.module.css";
 
 const MIC_LABEL: Record<PermissionState, string> = {
@@ -108,6 +109,8 @@ export default function GeneralTab() {
           {setProfile.error.message}
         </p>
       )}
+
+      <FormatsGroup />
 
       <p className="groupTitle">Workspace</p>
       <div className="group">

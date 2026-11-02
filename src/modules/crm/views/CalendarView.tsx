@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { useState, type KeyboardEvent } from "react";
 import { asRecord, labelInput, recordId, recordLabel, useCreateRecord, useRecords, useUpdateRecord, type FieldMeta, type Json, type ObjectDef, type Query, type RecordJson } from "../../../kernel/bridge/records";
+import { dayKeyIn, daysIntoWeek, formatTime, weekStartDay } from "../../../kernel/format/format";
 import styles from "./Boards.module.css";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SUNDAY_FIRST = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const EVENTS = 1_000;
 
 interface Props {
@@ -26,7 +27,9 @@ export default function CalendarView({ slug, object, field, query, deleted, onOp
   const [dragging, setDragging] = useState<string | null>(null);
   const update = useUpdateRecord(slug, name);
   const create = useCreateRecord(slug, name);
-  const first = mode === "month" ? mondayOnOrBefore(new Date(anchor.getFullYear(), anchor.getMonth(), 1)) : mondayOnOrBefore(anchor);
+  const first = mode === "month" ? firstOnOrBefore(new Date(anchor.getFullYear(), anchor.getMonth(), 1)) : firstOnOrBefore(anchor);
+  // The week's days from its first (Formats, D-072).
+  const weekdays = Array.from({ length: 7 }, (_, i) => SUNDAY_FIRST[(weekStartDay() + i) % 7]);
   const days = Array.from({ length: mode === "month" ? 42 : 7 }, (_, i) => addDays(first, i));
   // A date-time is an instant: the grid's bounds are the Mac's midnights, sent as instants.
   const from = field.type === "DATE" ? dayKey(first) : first.toISOString();
@@ -43,10 +46,11 @@ export default function CalendarView({ slug, object, field, query, deleted, onOp
   for (const r of records) {
     const value = r[field.name];
     if (typeof value !== "string" || !value) continue;
-    const key = field.type === "DATE" ? value.slice(0, 10) : dayKey(new Date(value));
+    // A date-time sits on its day in the owner's zone (Formats, D-072).
+    const key = field.type === "DATE" ? value.slice(0, 10) : dayKeyIn(value);
     byDay.set(key, [...(byDay.get(key) ?? []), r]);
   }
-  const today = dayKey(new Date());
+  const today = dayKeyIn(new Date());
   const title = mode === "month" ? anchor.toLocaleDateString("en-GB", { month: "long", year: "numeric" }) : `${first.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${addDays(first, 6).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
   const step = (n: number) => setAnchor(mode === "month" ? new Date(anchor.getFullYear(), anchor.getMonth() + n, 1) : addDays(anchor, 7 * n));
 
@@ -92,7 +96,7 @@ export default function CalendarView({ slug, object, field, query, deleted, onOp
         </p>
       )}
       <div className={styles.grid} aria-label={`${object.meta.label_plural} by ${field.label}`}>
-        {WEEKDAYS.map((d) => (
+        {weekdays.map((d) => (
           <div key={d} className={styles.weekday}>
             {d}
           </div>
@@ -113,7 +117,7 @@ export default function CalendarView({ slug, object, field, query, deleted, onOp
               object={object}
               deleted={deleted}
               dragging={dragging}
-              timeOf={(r) => (field.type === "DATE_TIME" && typeof r[field.name] === "string" ? new Date(r[field.name] as string).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "")}
+              timeOf={(r) => (field.type === "DATE_TIME" && typeof r[field.name] === "string" ? formatTime(r[field.name] as string) : "")}
               onDragStart={setDragging}
               onDragEnd={() => setDragging(null)}
               onDrop={() => {
@@ -224,11 +228,10 @@ function addDays(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 }
 
-/** The Monday on or before the day. */
-function mondayOnOrBefore(d: Date): Date {
+/** The week's first day (Monday, Sunday or Saturday) on or before the day. */
+function firstOnOrBefore(d: Date): Date {
   const day = startOfDay(d);
-  const back = (day.getDay() + 6) % 7;
-  return addDays(day, -back);
+  return addDays(day, -daysIntoWeek(day));
 }
 
 /** YYYY-MM-DD in the Mac's time zone. */

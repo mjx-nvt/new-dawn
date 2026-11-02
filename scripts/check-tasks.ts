@@ -3,6 +3,7 @@
 // Run it under a time zone with daylight saving too: `TZ=Europe/London node …`.
 import assert from "node:assert/strict";
 import { dueLabel, isPast, quickDue, shortDate } from "../src/modules/tasks/due.ts";
+import { DEFAULT_FORMATS, setFormats } from "../src/kernel/format/format.ts";
 
 const now = new Date(2026, 9, 26, 15, 0); // Mon 26 Oct 2026, 15:00 local (London's clocks went back the day before)
 
@@ -27,6 +28,14 @@ assert.equal(quickDue("next_week", now), "2026-11-06", "next week's Friday");
 assert.equal(quickDue("next_week", new Date(2026, 9, 30)), "2026-11-06", "on a Friday: next week's");
 assert.equal(quickDue("next_week", new Date(2026, 10, 1)), "2026-11-06", "on a Sunday: the week from Monday");
 assert.equal(quickDue("tomorrow", new Date(2026, 11, 31, 23, 0)), "2027-01-01");
+// "Next week" is next week's Friday whichever day the week starts on (Formats, D-072).
+setFormats({ ...DEFAULT_FORMATS, weekStart: "sunday" });
+assert.equal(quickDue("next_week", new Date(2026, 10, 4)), "2026-11-13", "Sunday start, from a Wednesday");
+assert.equal(quickDue("next_week", new Date(2026, 10, 1)), "2026-11-13", "Sunday start, on the week's first day");
+setFormats({ ...DEFAULT_FORMATS, weekStart: "saturday" });
+assert.equal(quickDue("next_week", new Date(2026, 10, 4)), "2026-11-13", "Saturday start, from a Wednesday");
+assert.equal(quickDue("next_week", new Date(2026, 9, 31)), "2026-11-13", "Saturday start, on the week's first day");
+setFormats(DEFAULT_FORMATS);
 assert.equal(quickDue("tomorrow", new Date(2026, 9, 24, 23, 30)), "2026-10-25", "the night the clocks change");
 
 assert.equal(shortDate(new Date(2026, 9, 24, 9), now), "24 Oct");

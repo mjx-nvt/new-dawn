@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChartData } from "../bridge/dashboards";
+import { formatNumber as numeral } from "../format/format";
 import styles from "./Charts.module.css";
 
 /** Charts (D-067, 0.10.10): bars, lines, a pie and a single value as inline SVG in the Majoris
@@ -65,7 +66,8 @@ function useSize<T extends HTMLElement>(): [React.RefObject<T | null>, { width: 
 /** 1234.5 → "1,234.5"; 1 250 000 → "1.25M"; a share → "33.3". */
 export function formatNumber(n: number, prefix = "", suffix = ""): string {
   const abs = Math.abs(n);
-  const text = abs >= 1_000_000 ? `${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2).replace(/\.?0+$/, "")}M` : abs >= 10_000 ? `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k` : Number.isInteger(n) ? n.toLocaleString("en-GB") : n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
+  // The owner's separators (D-072); maximumFractionDigits drops trailing zeros.
+  const text = abs >= 1_000_000 ? `${numeral(n / 1_000_000, abs >= 10_000_000 ? 1 : 2)}M` : abs >= 10_000 ? `${numeral(n / 1_000, 1)}k` : numeral(n, 2);
   return `${prefix}${text}${suffix}`;
 }
 

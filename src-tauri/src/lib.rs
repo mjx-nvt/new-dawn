@@ -42,6 +42,7 @@ mod kernel {
     pub mod permissions;
     pub mod profile;
     pub mod csv;
+    pub mod formats;
     pub mod records;
     pub mod text;
     pub mod registry;
@@ -55,6 +56,7 @@ mod modules {
     pub mod brand;
     pub mod cockpit;
     pub mod crm;
+    pub mod crm_agent;
     pub mod eml;
     pub mod feedback;
     pub mod inbox;
@@ -226,6 +228,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::crm::collect_commitments,
             commands::crm::list_unlinked_commitments,
             commands::crm::list_dismissed_commitments,
+            commands::crm::list_crm_proposals,
+            commands::crm::apply_crm_proposal,
+            commands::crm::dismiss_crm_proposal,
+            commands::crm::find_crm_proposals,
             commands::inbox::list_emails,
             commands::inbox::read_email_file,
             commands::inbox::read_mail_selection,
@@ -362,6 +368,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::onboarding::set_onboarding_done,
             commands::profile::get_profile,
             commands::profile::set_profile,
+            commands::profile::get_formats,
+            commands::profile::set_formats,
             commands::onboarding::test_notification,
             commands::minutes::export_minutes_docx,
             commands::minutes::export_minutes_pdf,
@@ -412,6 +420,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             events::OllamaPullProgress,
             events::OllamaPullFinished,
             events::BrandChanged,
+            events::FormatsChanged,
             events::SummaryFinished,
         ])
 }

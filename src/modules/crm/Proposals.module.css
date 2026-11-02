@@ -1,0 +1,85 @@
+.list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+
+.detail {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.detailLabel {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.body {
+  margin: 0;
+  max-width: 76ch;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+}
+
+.quote {
+  margin: 0;
+  max-width: 76ch;
+  font-size: var(--t-sm);
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+}
+
+.link {
+  color: var(--primary-text);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+/* Under the CRM's tabs: their 24 below. */
+.onTab {
+  margin-top: var(--space-5);
+}
+
+/* On a record's page: apart from the header; the tabs below keep their own space. */
+.onRecord {
+  margin-top: var(--space-6);
+}

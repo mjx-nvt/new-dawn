@@ -2,6 +2,8 @@
  *  functions over the meetings the list already has (personal use: hundreds at most), so no
  *  backend involvement. Dates are local time. */
 
+import { currentFormats, dayIn, dayString, daysIntoWeek, formatDay } from "../../kernel/format/format.ts";
+
 export const STATUS_FILTERS = ["all", "needs_transcript", "needs_summary", "done", "failed"] as const;
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
 export const STATUS_FILTER_LABEL: Record<StatusFilter, string> = {
@@ -47,8 +49,8 @@ export interface DateRange {
 const DAY = 86_400_000;
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY);
-/** Monday-first week start. */
-const startOfWeek = (d: Date) => addDays(startOfDay(d), -((d.getDay() + 6) % 7));
+/** The week starts on the owner's first day (Formats, D-072). */
+const startOfWeek = (d: Date) => addDays(startOfDay(d), -daysIntoWeek(d));
 const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
 const monthName = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
@@ -93,18 +95,18 @@ export function parseDateQuery(query: string, now = new Date()): { range: DateRa
       const [y, mo] = [Number(m[1]), Number(m[2]) - 1];
       if (m[3]) {
         const d = new Date(y, mo, Number(m[3]));
-        if (valid(y, mo, Number(m[3]))) return { range: day(d, d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })), rest: take(1, i) };
+        if (valid(y, mo, Number(m[3]))) return { range: day(d, formatDay(dayString(d))), rest: take(1, i) };
       } else if (mo >= 0 && mo < 12) {
         return { range: { from: new Date(y, mo, 1), to: new Date(y, mo + 1, 1), label: monthName(new Date(y, mo, 1)) }, rest: take(1, i) };
       }
     }
-    // 24/10/2026 · 24/10
+    // 24/10/2026 · 24/10 (10/24 when dates are written month first)
     if ((m = t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/))) {
-      const [d, mo] = [Number(m[1]), Number(m[2]) - 1];
+      const [d, mo] = currentFormats().date === "monthFirst" ? [Number(m[2]), Number(m[1]) - 1] : [Number(m[1]), Number(m[2]) - 1];
       const y = m[3] ? year(Number(m[3])) : today.getFullYear();
       if (valid(y, mo, d)) {
         const date = new Date(y, mo, d);
-        return { range: day(date, date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })), rest: take(1, i) };
+        return { range: day(date, formatDay(dayString(date))), rest: take(1, i) };
       }
     }
     // 24 Oct (2026)
@@ -115,7 +117,7 @@ export function parseDateQuery(query: string, now = new Date()): { range: DateRa
       const y = hasYear ? Number(next) : today.getFullYear();
       if (valid(y, mo, Number(t))) {
         const date = new Date(y, mo, Number(t));
-        return { range: day(date, date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })), rest: take(hasYear ? 3 : 2, i) };
+        return { range: day(date, formatDay(dayString(date))), rest: take(hasYear ? 3 : 2, i) };
       }
     }
     // Oct 2026 · October
@@ -190,9 +192,9 @@ export function applyFilters<M extends Listed>(meetings: M[], filters: Filters, 
 
 /** "Today", "Yesterday", "This week", "Last week", "Earlier this month", then "September 2026"… */
 export function groupLabel(heldOn: string, now = new Date()): string {
-  const d = new Date(heldOn);
-  const today = startOfDay(now);
-  const day = startOfDay(d);
+  // Days as they fall in the owner's zone (Formats, D-072).
+  const today = dayIn(now);
+  const day = dayIn(heldOn);
   if (day.getTime() === today.getTime()) return "Today";
   if (day.getTime() === addDays(today, -1).getTime()) return "Yesterday";
   if (day > today) return "Upcoming";
@@ -200,7 +202,7 @@ export function groupLabel(heldOn: string, now = new Date()): string {
   if (day >= week) return "This week";
   if (day >= addDays(week, -7)) return "Last week";
   if (day >= startOfMonth(today)) return "Earlier this month";
-  return monthName(d);
+  return monthName(day);
 }
 
 /** Consecutive runs of the same group, in list order. */

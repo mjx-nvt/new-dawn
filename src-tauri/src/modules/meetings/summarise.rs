@@ -1389,6 +1389,7 @@ pub async fn start(
         if result.is_ok() {
             crate::modules::projects::follow(&app, &slug, &meeting_id);
             crate::modules::crm::follow(&app, &slug, &meeting_id);
+            crate::modules::crm_agent::follow(&app, &slug, &meeting_id);
         }
         let error = result.err().map(AppError::from);
         let _ = SummaryFinished {

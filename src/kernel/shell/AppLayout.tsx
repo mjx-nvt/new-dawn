@@ -1,6 +1,7 @@
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useBrandSync } from "../bridge/brand";
+import { useFormats } from "../bridge/formats";
 import { openSettings } from "../bridge/settings";
 import { useUpdateCheckAtLaunch } from "../bridge/updater";
 import { useMenuAction, useWorkspacesSync } from "../bridge/events";
@@ -53,6 +54,7 @@ function savePref(pref: SidebarPref) {
 
 /** Golden Gate shape: edge-to-edge sidebar, unified toolbar over the content column. */
 export default function AppLayout() {
+  const formats = useFormats().data;
   const [collapsed, setCollapsed] = useState(false); // hidden entirely (⌥⌘S)
   const [pref, setPref] = useState<SidebarPref>(readPref);
   // "Auto" shows the icon rail below 1280 pt so the summary keeps two roomy columns (D-036).
@@ -172,7 +174,8 @@ export default function AppLayout() {
             </div>
           )}
           <RecorderBanner />
-          <Outlet />
+          {/* A change of formats draws the page again (D-072). */}
+          <Outlet key={JSON.stringify(formats ?? null)} />
         </ContentRoot>
       </div>
       {startOpen && <StartRecordingDialog onClose={() => setStartOpen(false)} />}

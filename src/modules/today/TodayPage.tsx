@@ -3,6 +3,7 @@ import { useState, type MouseEvent, type ReactNode } from "react";
 import { useToday, type Day } from "../../kernel/bridge/cockpit";
 import { useCurrentWorkspace, useSetCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import StatusChip from "../meetings/StatusChip";
+import { currentFormats, formatNumber, formatTime } from "../../kernel/format/format";
 import { formatDay } from "../projects/format";
 import { dueLabel, isPast } from "../tasks/due";
 import styles from "./Today.module.css";
@@ -21,9 +22,16 @@ export default function TodayPage() {
   const all = <T,>(pick: (d: Day) => T[]): In<T>[] => days.flatMap((day) => pick(day).map((item) => ({ day, item })));
   const tasks = all((d) => d.tasks);
   const projects = all((d) => d.projects);
+  // The ones to come first (soonest first), then those past their date (latest first), as each
+  // workspace sends them (D-072).
+  const opportunities = all((d) => d.opportunities).sort((a, b) => {
+    const [pa, pb] = [isPast(a.item.close_date), isPast(b.item.close_date)];
+    return pa !== pb ? Number(pa) - Number(pb) : pa ? b.item.close_date.localeCompare(a.item.close_date) : a.item.close_date.localeCompare(b.item.close_date);
+  });
   const commitments = all((d) => d.commitments);
   const meetings = all((d) => d.meetings).sort((a, b) => a.item.held_on.localeCompare(b.item.held_on));
-  const waiting = days.filter((d) => d.waiting.updates + d.waiting.commitments + d.waiting.email_tasks > 0);
+  const waiting = days.filter((d) => d.waiting.updates + d.waiting.commitments + d.waiting.email_tasks + d.waiting.crm > 0);
+  const week = { monday: "Monday to Sunday", sunday: "Sunday to Saturday", saturday: "Saturday to Friday" }[currentFormats().weekStart];
   const more = days.reduce((n, d) => n + d.open_commitments - d.commitments.length, 0);
   // A section's line when it has nothing: only once the page was read.
   const empty = (none: string) => (today.isSuccess ? none : today.isError ? "Couldn't be read" : "Loading…");
@@ -77,6 +85,11 @@ export default function TodayPage() {
                 {plural(d.waiting.email_tasks, "task from an email", "tasks from emails")}
               </Link>
             )}
+            {d.waiting.crm > 0 && (
+              <Link to="/crm" search={{ tab: "waiting" }} className={styles.link} aria-label={many ? `${plural(d.waiting.crm, "CRM proposal")} in ${d.name}` : undefined} onClick={via(d.slug)}>
+                {plural(d.waiting.crm, "CRM proposal")}
+              </Link>
+            )}
           </div>
         ))}
       </Section>
@@ -86,6 +99,16 @@ export default function TodayPage() {
           <Link key={p.id} to="/projects/$projectId" params={{ projectId: p.id }} className={styles.row} onClick={via(day.slug)}>
             <Row day={day} many={many} title={p.name} meta={`${p.next_milestone || "Next milestone"}${p.waiting > 0 ? ` · ${plural(p.waiting, "update")} waiting` : ""}`}>
               <span className={p.milestone_due && isPast(p.milestone_due) ? `${styles.side} ${styles.late}` : styles.side}>{p.milestone_due ? milestoneWhen(p.milestone_due) : ""}</span>
+            </Row>
+          </Link>
+        ))}
+      </Section>
+
+      <Section title="Opportunities to close" subtitle="Not won yet, closing in the next 30 days — or past their date in the last 90" empty={empty("No opportunity closing in the next 30 days")} count={opportunities.length}>
+        {opportunities.map(({ day, item: o }) => (
+          <Link key={o.id} to="/crm/$object/$recordId" params={{ object: "opportunities", recordId: o.id }} className={styles.row} onClick={via(day.slug)}>
+            <Row day={day} many={many} title={o.name} meta={[o.company, o.stage_label, o.amount != null ? `${formatNumber(o.amount)} ${o.currency}`.trim() : ""].filter(Boolean).join(" · ")}>
+              <span className={isPast(o.close_date) ? `${styles.side} ${styles.late}` : styles.side}>{isPast(o.close_date) ? `Overdue since ${formatDay(o.close_date)}` : `Closes ${dueLabel(o.close_date).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`}</span>
             </Row>
           </Link>
         ))}
@@ -116,7 +139,7 @@ export default function TodayPage() {
         )}
       </Section>
 
-      <Section title="This week's meetings" subtitle="Monday to Sunday" empty={empty("No meetings this week")} count={meetings.length}>
+      <Section title="This week's meetings" subtitle={week} empty={empty("No meetings this week")} count={meetings.length}>
         {meetings.map(({ day, item: m }) => (
           <Link key={m.id} to="/meetings/$meetingId" params={{ meetingId: m.id }} search={{ tab: "summary" }} className={styles.row} onClick={via(day.slug)}>
             <Row day={day} many={many} title={m.title} meta={meetingWhen(m)}>
@@ -205,6 +228,6 @@ function milestoneWhen(day: string): string {
 /** "Thu 29 Oct · 09:38" in the Mac's time. */
 function meetingWhen(m: Meeting): string {
   const at = new Date(m.held_on);
-  return `${at.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} · ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  return `${at.toLocaleDateString("en-GB", { timeZone: currentFormats().timeZone || undefined, weekday: "short", day: "numeric", month: "short" })} · ${formatTime(at)}`;
 }
 

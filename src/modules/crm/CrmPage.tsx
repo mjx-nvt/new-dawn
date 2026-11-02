@@ -3,9 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
 import { useCreateView, useSaveView, useUpdateView, useView, useViews, type ViewDef } from "../../kernel/bridge/views";
 import { revealFile, type ExportReport } from "../../kernel/bridge/transfer";
+import { useCrmProposals } from "../../kernel/bridge/crmAgent";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import PeoplePage from "../people/PeoplePage";
 import styles from "./Crm.module.css";
+import ProposalCards from "./ProposalCards";
 import RecordSidePanel from "./record/RecordSidePanel";
 import RecordTable, { groupsOf, type Column } from "./RecordTable";
 import { exportCurrentView } from "./transfer/exportView";
@@ -27,7 +29,10 @@ export default function CrmPage() {
   const slug = workspace?.slug;
   const objects = useObjects(slug);
   const shown = (objects.data ?? []).filter((o) => !o.is_system && o.is_active);
-  const current = tab === "commitments" ? undefined : (shown.find((o) => o.name_plural === tab) ?? shown[0]);
+  // New Dawn's own tabs beside Twenty's objects: Commitments (D-055), Waiting for you (D-072).
+  const own = tab === "commitments" || tab === "waiting";
+  const current = own ? undefined : (shown.find((o) => o.name_plural === tab) ?? shown[0]);
+  const waiting = useCrmProposals(slug).data?.length ?? 0;
   const object = useObject(slug, current?.name_singular);
   const [search, setSearch] = useState("");
   const [deleted, setDeleted] = useState(false);
@@ -48,7 +53,7 @@ export default function CrmPage() {
   }, [wantImport, clearFlags]);
   const show = (next: string) => void navigate({ to: "/crm", search: { tab: next }, replace: true });
   const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id }, replace: true });
-  const title = tab === "commitments" ? "Commitments" : (current?.label_plural ?? "CRM");
+  const title = tab === "commitments" ? "Commitments" : tab === "waiting" ? "Waiting for you" : (current?.label_plural ?? "CRM");
 
   return (
     <div className="page">
@@ -61,7 +66,7 @@ export default function CrmPage() {
           <Link to="/workspace" search={{ tab: "people" }} className="btn btnGhost">
             Names and spellings
           </Link>
-        ) : (
+        ) : tab === "waiting" ? null : (
           <div className={styles.tools}>
             <input className={`input ${styles.search}`} type="search" placeholder={`Search ${title.toLowerCase()}…`} aria-label={`Search ${title.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
             <button type="button" className={deleted ? "btn btnSecondary btnCompact" : "btn btnGhost btnCompact"} aria-pressed={deleted} onClick={() => setDeleted(!deleted)}>
@@ -73,18 +78,23 @@ export default function CrmPage() {
 
       <div className={`segmented ${styles.tabs}`} role="tablist" aria-label="CRM">
         {shown.map((o) => (
-          <button key={o.id} type="button" role="tab" aria-selected={tab !== "commitments" && o.id === current?.id} onClick={() => show(o.name_plural)}>
+          <button key={o.id} type="button" role="tab" aria-selected={!own && o.id === current?.id} onClick={() => show(o.name_plural)}>
             {o.label_plural}
           </button>
         ))}
         <button type="button" role="tab" aria-selected={tab === "commitments"} onClick={() => show("commitments")}>
           Commitments
         </button>
+        <button type="button" role="tab" aria-selected={tab === "waiting"} onClick={() => show("waiting")}>
+          Waiting for you{waiting ? ` (${waiting >= 200 ? "200+" : waiting})` : ""}
+        </button>
       </div>
 
       <div role="tabpanel">
         {tab === "commitments" ? (
           <PeoplePage embedded />
+        ) : tab === "waiting" ? (
+          slug && <ProposalCards slug={slug} />
         ) : slug && object.data ? (
           <ObjectViews key={object.data.meta.id} slug={slug} object={object.data} viewId={view} search={search} deleted={deleted} onPickView={showView} exportNow={!!wantExport} onExportDone={clearFlags} />
         ) : (

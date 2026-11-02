@@ -1,8 +1,36 @@
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::error::AppError;
 use crate::kernel::hub::WorkspaceHub;
 use crate::modules::crm::{self, Commitment, CommitmentStatus, PersonCard, PersonDossier};
+use crate::modules::crm_agent::{self, CrmProposal};
+
+/// The CRM agent's proposals waiting for the owner — all, or those about one record (D-072).
+#[tauri::command]
+#[specta::specta]
+pub async fn list_crm_proposals(hub: State<'_, WorkspaceHub>, slug: String, about: Option<String>) -> Result<Vec<CrmProposal>, AppError> {
+    Ok(crm_agent::waiting(&hub.pool(&slug)?, about.as_deref()).await?)
+}
+
+/// Writes a proposal into the CRM, as the agent (once).
+#[tauri::command]
+#[specta::specta]
+pub async fn apply_crm_proposal(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<CrmProposal, AppError> {
+    Ok(crm_agent::apply(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn dismiss_crm_proposal(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<CrmProposal, AppError> {
+    Ok(crm_agent::dismiss(&hub.pool(&slug)?, &id).await?)
+}
+
+/// A meeting's ⋯ → Find CRM proposals: reads its summary now. How many it proposed.
+#[tauri::command]
+#[specta::specta]
+pub async fn find_crm_proposals(app: AppHandle, slug: String, meeting_id: String) -> Result<u32, AppError> {
+    Ok(crm_agent::propose(&app, &slug, &meeting_id, true).await?)
+}
 
 /// The People page: everyone in the people memory, with last contact and commitments.
 #[tauri::command]

@@ -131,6 +131,13 @@ pub struct OllamaPullFinished {
     pub error: Option<AppError>,
 }
 
+/// The owner's formats changed (Settings → General → Formats): every window shows its dates and
+/// numbers with them (D-072).
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct FormatsChanged {
+    pub formats: crate::kernel::formats::Formats,
+}
+
 /// A workspace's brand pack changed (colours, logo, reset): every window re-applies it.
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct BrandChanged {

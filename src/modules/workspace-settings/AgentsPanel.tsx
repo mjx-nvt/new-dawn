@@ -34,6 +34,8 @@ function verdict(agent: AgentGuide["agent"], n: Judged): string {
       return `${model}: ${stood} of ${n.judged} tasks it added kept as written (${n.changed} reworded, ${n.dropped} deleted)`;
     case "projects":
       return `${model}: ${stood} of ${n.judged} proposed updates applied`;
+    case "crm":
+      return `${model}: ${stood} of ${n.judged} CRM proposals applied`;
     default:
       return "";
   }

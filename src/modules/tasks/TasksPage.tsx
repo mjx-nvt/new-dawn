@@ -191,7 +191,7 @@ function Row({ slug, task }: { slug: string; task: TaskView }) {
           <p className={styles.meta}>
             {task.meeting && (
               <Link to="/meetings/$meetingId" params={{ meetingId: task.meeting.id }} search={{ tab: "summary" }} className={styles.meeting}>
-                {task.meeting.title} · {shortDate(new Date(task.meeting.held_on))}
+                {task.meeting.title} · {shortDate(task.meeting.held_on)}
               </Link>
             )}
             {fromEmail && (

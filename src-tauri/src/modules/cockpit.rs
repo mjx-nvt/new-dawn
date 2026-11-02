@@ -9,7 +9,9 @@ use serde::Serialize;
 use specta::Type;
 use sqlx::SqlitePool;
 
+use crate::kernel::formats::{self, WeekStart};
 use crate::kernel::hub::WorkspaceHub;
+use crate::kernel::records;
 use crate::modules::crm::{self, Commitment};
 use crate::modules::meetings::MeetingStatus;
 use crate::modules::projects::{self, Project, ProjectStatus};
@@ -19,6 +21,12 @@ use crate::modules::tasks::{self, TaskView};
 const WATCH_DAYS: i64 = 7;
 /// Commitments shown per workspace; the rest are counted.
 const COMMITMENTS: usize = 8;
+/// An opportunity shows when it is to close within this many days, or its date passed within
+/// the last STALE_DAYS (older ones are left to the CRM: a pipeline without a Lost stage keeps
+/// them open for good).
+const CLOSE_DAYS: i64 = 30;
+const STALE_DAYS: i64 = 90;
+const OPPORTUNITIES: i64 = 20;
 
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct Today {
@@ -43,8 +51,11 @@ pub struct Day {
     pub commitments: Vec<Commitment>,
     /// How many there are in all.
     pub open_commitments: u32,
-    /// This week's meetings, Monday to Sunday, in order.
+    /// This week's meetings (from the week's first day, as Formats sets it), in order.
     pub meetings: Vec<WeekMeeting>,
+    /// Open opportunities to close within 30 days (soonest first), then those past their date in
+    /// the last 90 (latest first) (D-072).
+    pub opportunities: Vec<ToClose>,
     /// Proposals waiting for the owner.
     pub waiting: Waiting,
 }
@@ -57,6 +68,22 @@ pub struct WeekMeeting {
     pub status: MeetingStatus,
 }
 
+#[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
+pub struct ToClose {
+    pub id: String,
+    pub name: String,
+    /// YYYY-MM-DD.
+    pub close_date: String,
+    pub stage: String,
+    /// The stage as the opportunities' select names it.
+    #[sqlx(default)]
+    pub stage_label: String,
+    pub company: String,
+    /// In units (the engine keeps micros).
+    pub amount: Option<f64>,
+    pub currency: String,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Type, sqlx::FromRow)]
 pub struct Waiting {
     /// Project updates.
@@ -64,17 +91,20 @@ pub struct Waiting {
     pub commitments: u32,
     /// Tasks proposed from emails.
     pub email_tasks: u32,
+    /// The CRM agent's proposals (D-072).
+    pub crm: u32,
 }
 
 pub async fn today(hub: &WorkspaceHub) -> Result<Today> {
     let day = Local::now().date_naive();
+    let start = formats::get(hub).await.map(|f| f.week_start).unwrap_or_default();
     let current = hub.current_workspace().await?.map(|w| w.slug);
     let (mut workspaces, mut unread) = (Vec::new(), Vec::new());
     // Each active workspace from its own pool in the hub. One that can't be read (it failed to
     // open at launch, or a query failed) is named; the others still show.
     for w in hub.list().await?.into_iter().filter(|w| !w.archived) {
         let day = match hub.pool(&w.slug) {
-            Ok(pool) => read(&pool, day, w.slug.clone(), w.name.clone()).await,
+            Ok(pool) => read(&pool, day, start, w.slug.clone(), w.name.clone()).await,
             Err(err) => Err(err),
         };
         match day {
@@ -94,7 +124,7 @@ pub async fn today(hub: &WorkspaceHub) -> Result<Today> {
     })
 }
 
-async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> Result<Day> {
+async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, slug: String, name: String) -> Result<Day> {
     let tasks = tasks::list(pool).await?.today;
     let soon = (day + Duration::days(WATCH_DAYS)).to_string();
     let mut projects: Vec<Project> = projects::list(pool)
@@ -111,7 +141,7 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
     let mut commitments = crm::open(pool).await?;
     let mut open_commitments = commitments.len() as u32;
     commitments.truncate(COMMITMENTS);
-    let (from, to) = week(day);
+    let (from, to) = week(day, start);
     let meetings = sqlx::query_as(
         "SELECT id, title, held_on, status FROM meeting WHERE held_on >= ? AND held_on < ? \
          ORDER BY held_on",
@@ -123,7 +153,8 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
     let mut waiting: Waiting = sqlx::query_as(
         "SELECT (SELECT count(*) FROM project_update WHERE status = 'proposed') AS updates, \
          (SELECT count(*) FROM commitment WHERE status = 'proposed') AS commitments, \
-         (SELECT count(*) FROM email_task WHERE status = 'proposed') AS email_tasks",
+         (SELECT count(*) FROM email_task WHERE status = 'proposed') AS email_tasks, \
+         (SELECT count(*) FROM crm_proposal WHERE status = 'proposed') AS crm",
     )
     .fetch_one(pool)
     .await?;
@@ -133,10 +164,33 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
         projects.clear();
         waiting.updates = 0;
     }
+    // Not won yet (the stages' last option is "won", Twenty's Customer — the owner may rename
+    // it), to close within 30 days, or past its date within 90; the ones to come first.
+    let stages = records::object(pool, "opportunity").await?.field("stage").map(|f| f.options.select.clone()).unwrap_or_default();
+    let won = stages.last().map(|s| s.value.clone()).unwrap_or_default();
+    let today = day.to_string();
+    let mut opportunities: Vec<ToClose> = sqlx::query_as(
+        "SELECT o.id, o.name, o.close_date, o.stage, coalesce(c.name, '') AS company, o.amount_micros / 1000000.0 AS amount, coalesce(o.amount_code, '') AS currency \
+         FROM opportunity o LEFT JOIN company c ON c.id = o.company_id AND c.deleted_at IS NULL \
+         WHERE o.deleted_at IS NULL AND coalesce(o.close_date, '') <> '' AND o.close_date <= ?1 AND o.close_date >= ?2 AND o.stage <> ?3 \
+         ORDER BY o.close_date < ?4, CASE WHEN o.close_date >= ?4 THEN o.close_date END, o.close_date DESC, o.name LIMIT ?5",
+    )
+    .bind((day + Duration::days(CLOSE_DAYS)).to_string())
+    .bind((day - Duration::days(STALE_DAYS)).to_string())
+    .bind(&won)
+    .bind(&today)
+    .bind(OPPORTUNITIES)
+    .fetch_all(pool)
+    .await?;
+    for o in &mut opportunities {
+        o.stage_label = stages.iter().find(|s| s.value == o.stage).map_or_else(|| o.stage.clone(), |s| s.label.clone());
+    }
     if !modules.crm {
         commitments.clear();
         open_commitments = 0;
         waiting.commitments = 0;
+        waiting.crm = 0;
+        opportunities.clear();
     }
     Ok(Day {
         slug,
@@ -146,13 +200,20 @@ async fn read(pool: &SqlitePool, day: NaiveDate, slug: String, name: String) -> 
         commitments,
         open_commitments,
         meetings,
+        opportunities,
         waiting,
     })
 }
 
-/// This week on this Mac — Monday 00:00 to the next Monday — as the UTC times `held_on` holds.
-fn week(day: NaiveDate) -> (String, String) {
-    let monday = day - Duration::days(i64::from(day.weekday().num_days_from_monday()));
+/// This week on this Mac — its first day (Monday, Sunday or Saturday) 00:00 to the next — as the
+/// UTC times `held_on` holds.
+fn week(day: NaiveDate, start: WeekStart) -> (String, String) {
+    let back = match start {
+        WeekStart::Monday => day.weekday().num_days_from_monday(),
+        WeekStart::Sunday => day.weekday().num_days_from_sunday(),
+        WeekStart::Saturday => (day.weekday().num_days_from_sunday() + 1) % 7,
+    };
+    let monday = day - Duration::days(i64::from(back));
     let utc = |d: NaiveDate| {
         Local
             .from_local_datetime(&d.and_time(NaiveTime::MIN))
@@ -214,7 +275,30 @@ mod tests {
                 .await
                 .unwrap();
             }
-            let (monday, next_monday) = week(day);
+            let (monday, next_monday) = week(day, WeekStart::Monday);
+            let (sunday, _) = week(day, WeekStart::Sunday);
+            let (saturday, _) = week(day, WeekStart::Saturday);
+            let first = |utc: &str| chrono::DateTime::parse_from_rfc3339(utc).unwrap().with_timezone(&Local).weekday();
+            assert_eq!((first(&monday), first(&sunday), first(&saturday)), (chrono::Weekday::Mon, chrono::Weekday::Sun, chrono::Weekday::Sat));
+            for (name, close, stage) in [
+                ("Closing soon", Some(day + Duration::days(10)), "PROPOSAL"),
+                ("Closing first", Some(day + Duration::days(2)), "NEW"),
+                ("Overdue deal", Some(day - Duration::days(3)), "MEETING"),
+                ("Long overdue", Some(day - Duration::days(40)), "MEETING"),
+                ("Stale", Some(day - Duration::days(120)), "SCREENING"),
+                ("Won", Some(day + Duration::days(5)), "CUSTOMER"),
+                ("Far", Some(day + Duration::days(45)), "NEW"),
+                ("No date", None, "NEW"),
+            ] {
+                sqlx::query("INSERT INTO opportunity (id, name, close_date, stage) VALUES (?, ?, ?, ?)")
+                    .bind(uuid::Uuid::now_v7().to_string())
+                    .bind(name)
+                    .bind(close.map(at))
+                    .bind(stage)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
             for (id, held_on) in [
                 ("this", monday.clone()),
                 ("before", "2000-01-01T00:00:00.000Z".into()),
@@ -246,6 +330,12 @@ mod tests {
             );
             let meetings: Vec<&str> = d.meetings.iter().map(|m| m.id.as_str()).collect();
             assert_eq!(meetings, ["this"], "Monday counts; next Monday doesn't");
+            let deals: Vec<(&str, &str)> = d.opportunities.iter().map(|o| (o.name.as_str(), o.stage_label.as_str())).collect();
+            assert_eq!(
+                deals,
+                [("Closing first", "New"), ("Closing soon", "Proposal"), ("Overdue deal", "Meeting"), ("Long overdue", "Meeting")],
+                "not won; the ones to come soonest first, then those past their date within 90 days, latest first"
+            );
             hub.close_all().await;
         });
         let _ = std::fs::remove_dir_all(root);

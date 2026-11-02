@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState, type KeyboardEvent } from "react";
 import { asRecord, labelInput, recordId, recordLabel, useCreateRecord, useRecords, useUpdateRecord, type FieldMeta, type Json, type ObjectDef, type Query, type RecordJson } from "../../../kernel/bridge/records";
 import { useAggregates, useGroupCounts } from "../../../kernel/bridge/views";
+import { formatNumber } from "../../../kernel/format/format";
 import { CellView, chipClass } from "../cells";
 import crm from "../Crm.module.css";
 import type { Column } from "../RecordTable";
@@ -225,5 +226,5 @@ function formatTotal(aggregate: { field: FieldMeta; op: string }, value: Json | 
   if (value == null) return "—";
   if (typeof value !== "number") return String(value);
   const n = aggregate.field.type === "CURRENCY" && ["SUM", "AVG", "MIN", "MAX"].includes(aggregate.op) ? value / 1_000_000 : value;
-  return n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
+  return formatNumber(n);
 }

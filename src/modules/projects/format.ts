@@ -1,4 +1,5 @@
 import type { Project, ProjectStatus, UpdateField } from "../../kernel/bridge/projects";
+import { formatDay as formatDate } from "../../kernel/format/format";
 
 export const STATUSES: ProjectStatus[] = ["active", "on_hold", "done"];
 
@@ -13,10 +14,9 @@ export const FIELD_LABEL: Record<UpdateField, string> = {
   note: "Note",
 };
 
-/** "15 Nov 2026" for a YYYY-MM-DD calendar day (no time zone shift). */
+/** "15 Nov 2026" (or the owner's date format) for a YYYY-MM-DD calendar day (no time zone shift). */
 export function formatDay(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(day);
 }
 
 /** "Audit visit · by 15 Nov 2026", or "" when there's no milestone. */

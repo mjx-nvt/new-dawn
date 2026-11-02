@@ -1,6 +1,7 @@
 import type { Language, MeetingStatus, Stage } from "../../kernel/bridge/meetings";
 import type { SummaryLang } from "../../kernel/bridge/summary";
 import type { LiveStatus } from "../../kernel/bridge/recorder";
+import { formatDateTime } from "../../kernel/format/format";
 
 /** 754_000 → "12:34"; 3_723_000 → "1:02:03". */
 export function formatClock(ms: number): string {
@@ -12,9 +13,9 @@ export function formatClock(ms: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-/** ISO-8601 UTC → "24 Oct 2026, 14:05" in the user's time zone. */
+/** ISO-8601 UTC → "24 Oct 2026, 14:05", as the owner's formats read it (D-072). */
 export function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return formatDateTime(iso);
 }
 
 /** "Nguyễn Văn Tiến" → "nguyen van tien": case, accents and đ don't matter. */

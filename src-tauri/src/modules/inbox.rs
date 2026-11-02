@@ -503,6 +503,8 @@ async fn read(app: &AppHandle, slug: &str, email: Email, source: EmailSource) ->
     .bind(&id)
     .execute(&pool)
     .await?;
+    // Then, in the background, what the email says for the CRM (D-072).
+    crate::modules::crm_agent::follow_email(app, slug, &id);
     one(&pool, &id).await
 }
 

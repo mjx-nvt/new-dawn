@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ICONS, useCreateObject } from "../../kernel/bridge/datamodel";
 import { useObjects, type ObjectMeta } from "../../kernel/bridge/records";
 import { revealFile, useTransferJobs } from "../../kernel/bridge/transfer";
+import { formatDateTime } from "../../kernel/format/format";
 import styles from "./DataModel.module.css";
 import DataModelObject from "./DataModelObject";
 import OnOff from "./OnOff";
@@ -17,7 +18,7 @@ export default function DataModelPanel({ slug, objectName, onOpen, onBack }: { s
   if (objectName) return <DataModelObject slug={slug} objectName={objectName} onBack={onBack} />;
   const shown = (objects.data ?? []).filter((o) => !o.is_system && (filter === "all" || (filter === "active") === o.is_active));
   const labelOf = (singular: string) => (objects.data ?? []).find((o) => o.name_singular === singular)?.label_plural ?? singular;
-  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const when = (iso: string) => formatDateTime(iso);
   return (
     <section className="section">
       <div className={styles.head}>

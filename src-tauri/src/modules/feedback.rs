@@ -25,6 +25,8 @@ pub enum Source {
     Projects,
     /// The Email reading agent (D-056).
     Inbox,
+    /// The CRM agent (D-072).
+    Crm,
 }
 
 /// The owner's decision.
@@ -155,6 +157,12 @@ pub async fn numbers(pool: &SqlitePool, agent: Agent) -> Result<Vec<Judged>> {
              coalesce(sum(status = 'dismissed'), 0) AS dropped FROM project_update \
              WHERE status IN ('applied', 'dismissed') AND meeting_id IS NOT NULL \
              GROUP BY 1 ORDER BY judged DESC"
+        }
+        // Its proposals the owner decided, from meetings and emails alike (D-072).
+        Agent::Crm => {
+            "SELECT coalesce(model, '') AS model, count(*) AS judged, 0 AS changed, \
+             coalesce(sum(status = 'dismissed'), 0) AS dropped FROM crm_proposal \
+             WHERE status IN ('applied', 'dismissed') GROUP BY 1 ORDER BY judged DESC"
         }
         _ => return Ok(Vec::new()),
     };

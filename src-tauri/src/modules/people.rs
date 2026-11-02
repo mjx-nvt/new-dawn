@@ -273,6 +273,12 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
+    // And the CRM agent's proposals about them (D-072).
+    sqlx::query("UPDATE crm_proposal SET about_id = ?1 WHERE about_id = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(
         "UPDATE person SET notes = trim(notes || char(10) || char(10) || \
          (SELECT notes FROM person WHERE id = ?2), char(10)) WHERE id = ?1",

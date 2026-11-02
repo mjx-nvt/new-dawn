@@ -239,17 +239,19 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0028 | `workflow`, `workflow_version`, `workflow_run`, `workflow_automated_trigger` | 0.10.11 |
 | 0029 | `agent`, `agent_chat_thread`, `agent_chat_message` | 0.10.13 |
 | 0030 | `api_key`, `webhook`, `webhook_delivery` | 0.10.14 |
-| 0031 | `pm_project` (Plane's columns, linked to `project`), `pm_state`, `pm_label`, `pm_estimate`, `pm_estimate_point`, `pm_project_feature`, `pm_automation` | 0.11.0 |
-| 0032 | `issue`, `issue_assignee`, `issue_label`, `issue_sequence`, `issue_comment`, `issue_comment_reaction`, `issue_reaction`, `issue_activity`, `issue_subscriber`, `issue_mention`, `issue_vote`, `issue_description_version`, `draft_issue` | 0.11.1 |
-| 0033 | `issue_relation`, `issue_link`, `issue_attachment`, `notification`, `notification_preference` | 0.11.2 |
-| 0034 | `user_display_property`, `issue_view`, `workspace_view` | 0.11.3–0.11.4 |
-| 0035 | `cycle`, `cycle_issue` | 0.11.5 |
-| 0036 | `module`, `module_issue`, `module_link`, `module_member` | 0.11.6 |
-| 0037 | `page`, `page_label`, `page_version` | 0.11.7 |
-| 0038 | `intake`, `intake_issue` | 0.11.8 |
-| 0039 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
-| 0040 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
-| 0041 | `api_token`, `pm_webhook` | 0.11.11 |
+| 0031 | `crm_proposal` (the CRM agent's proposals, D-072) | 0.10.15 |
+| 0032 | `pm_project` (Plane's columns, linked to `project`), `pm_state`, `pm_label`, `pm_estimate`, `pm_estimate_point`, `pm_project_feature`, `pm_automation` | 0.11.0 |
+| 0033 | `issue`, `issue_assignee`, `issue_label`, `issue_sequence`, `issue_comment`, `issue_comment_reaction`, `issue_reaction`, `issue_activity`, `issue_subscriber`, `issue_mention`, `issue_vote`, `issue_description_version`, `draft_issue` | 0.11.1 |
+| 0034 | `issue_relation`, `issue_link`, `issue_attachment`, `notification`, `notification_preference` | 0.11.2 |
+| 0035 | `user_display_property` | 0.11.3 |
+| 0036 | `issue_view`, `workspace_view` | 0.11.4 |
+| 0037 | `cycle`, `cycle_issue` | 0.11.5 |
+| 0038 | `module`, `module_issue`, `module_link`, `module_member` | 0.11.6 |
+| 0039 | `page`, `page_label`, `page_version` | 0.11.7 |
+| 0040 | `intake`, `intake_issue` | 0.11.8 |
+| 0041 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
+| 0042 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
+| 0043 | `api_token`, `pm_webhook` | 0.11.11 |
 
 Conventions as before (UUID v7 ids, `created_at` / `updated_at`, enumerations checked in Rust, BEFORE triggers for meeting deletes). Custom objects and fields are run-time DDL (§5.2), not migrations. Registry: nothing.
 
@@ -363,73 +365,73 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.0 — Projects and their settings (3 sittings)
 - **Same as:** §4.2.
-- **Data:** 0031; existing `project` rows get a `pm_project` with an identifier from the name.
+- **Data:** 0032; existing `project` rows get a `pm_project` with an identifier from the name.
 - **Screens and flows:** Projects list (cards / list, search, sort, filter, favorites, Archived); create modal (name, identifier, description, cover, logo / emoji, network label, lead, then the features step); project sidebar (Work items, Cycles, Modules, Views, Pages, Intake when on; Settings; Archives; the Overview tab for New Dawn's dossier); Settings: General, Members (lead, default assignee, default subscribers from you + people), Features (five switches), States (groups, add / rename / reorder / colour / description / default), Labels (groups), Estimates (points / categories, ≤ 6 values, one active, archive), Automations (auto-archive N months, auto-close N months into a cancelled state, due-date reminders), Archive / Delete.
 - **Done when:** a project created with cycles and intake on shows those sidebar items; a state can't be the last of its group; `VIFC` is refused as a duplicate identifier.
 
 ### 0.11.1 — Work items I: model, create, list, peek, comments, drafts, archives (5 sittings)
 - **Same as:** §4.3 (properties, create modal, quick add, peek modes, header actions, sub-items, comments, activity, archive / restore / delete, drafts), List layout of §4.4.
-- **Data:** 0032.
+- **Data:** 0033.
 - **Screens and flows:** the create modal (every property, Create more, Save as draft prompt, `N` `I`); List layout with group by / order by (incl. manual drag) / display properties / display filters; quick add per group; peek (side / modal / full) and full page: title, description (editor + version history), meta row and properties sidebar (state, priority, assignees, dates, labels, estimate, parent, cycle, modules), sub-work items with progress, comments (editor, images, mentions, reactions, edit / delete, one-level replies), activity tabs All · Activity · Comments · History · Transition, subscribe, copy link, copy as prompt, make a copy, open in new window, archive (completed / cancelled only), restore, delete (with sub-items), Drafts page (edit, copy, move to project, delete), Archives page.
 - **Done when:** `VIFC-1` is created from a draft, gets two sub-items whose progress shows 50 % after one is Done, a comment with a reaction, and the Transition tab shows its time in In Progress; archiving an In Progress item is refused.
 
 ### 0.11.2 — Work items II: relations, links, attachments, subscribers, bulk, automations, inbox (3 sittings)
 - **Same as:** §4.3 (relations, links, attachments, subscribers, votes, bulk operations), §4.1 (Inbox), §4.2 (Automations).
-- **Data:** 0033.
+- **Data:** 0034.
 - **Screens and flows:** relations (Blocked by, Blocking, Relates to, Duplicate of, shown both ways), links (URL + title), attachments (limit setting), subscribers, votes; bulk operations in List (select, change state / priority / assignees / dates / labels / cycle / estimate / modules with validation, copy to a project, subscribe, archive, delete); the automations run nightly in the background lane (auto-archive, auto-close, due-date reminders); the Inbox: notifications for every tracked event by an agent or automation, mentions, reminders; read / unread, snooze, archive; preferences per kind under Settings.
 - **Done when:** a due-date reminder lands in the Inbox the day before; auto-close moves a stale Backlog item to Cancelled after the set months (clock moved in a test); bulk-changing ten items' priority writes ten activities.
 
 ### 0.11.3 — Layouts: board, calendar, table, timeline (4 sittings)
 - **Same as:** §4.4 (layouts, display options).
-- **Data:** 0034 (`user_display_property`).
+- **Data:** 0035 (`user_display_property`).
 - **Screens and flows:** Board (group + sub-group, drag between columns and sub-groups, collapse groups, quick add per column), Calendar (month / week, drag between days, quick add on a day, items without due dates hidden), Table (columns incl. Created on / by, Updated on, inline edit, keyboard navigation, bulk), Timeline (bars by start and due, drag to change dates, zoom); display properties, group / sub-group / order by, display filters per layout; per-project display settings remembered.
 - **Done when:** the board sub-grouped by assignee moves an item to another assignee and state in one drop; the timeline shows a dragged bar's new dates in the item.
 
 ### 0.11.4 — Filters and views (2 sittings)
 - **Same as:** §4.4 (filters, views).
-- **Data:** 0034 (`issue_view`, `workspace_view`).
+- **Data:** 0036 (`issue_view`, `workspace_view`).
 - **Screens and flows:** the filter bar with every field and operator; Views page per project (create from the current layout + filters + display options, update, duplicate, delete, favorite, private / lock flags); workspace Views (All · Assigned to me · Created by me · Subscribed, custom; spreadsheet) across projects.
 - **Done when:** "Assigned to me, due this week, not Done" is a favorited workspace view that opens from the sidebar.
 
 ### 0.11.5 — Cycles (3 sittings)
 - **Same as:** §4.5 (cycles).
-- **Data:** 0035.
+- **Data:** 0037.
 - **Screens and flows:** Cycles page with Active / Upcoming / Completed tabs, search and date filters; create (`N` `C`; both dates or none; no overlap); Draft · Upcoming · Active · Completed; start / complete early; add existing or create items; the Cycle property; transfer unfinished work (once); details panel: burn-down (after start), breakdowns by assignee / state / label, points when estimates are on; favorites; archive completed; delete (items stay); "Active cycles" page across projects.
 - **Done when:** a two-week cycle with five items shows the burn-down after two Done; transfer moves the three open items to the next cycle and is then disabled.
 
 ### 0.11.6 — Modules (2 sittings)
 - **Same as:** §4.5 (modules).
-- **Data:** 0036.
+- **Data:** 0038.
 - **Screens and flows:** Modules page with List / Gallery / Timeline, search, sort, filters (favorites, status, lead, members, dates); create (title unique, description, dates, state, lead, members); items in several modules; details: progress, breakdown by state group, Needs attention (overdue, blocked), breakdown by state / assignee / label / priority, links; favorites; archive (completed / cancelled); delete.
 - **Done when:** a module with three items, one overdue and one blocked, lists both under Needs attention; the timeline drags its dates.
 
 ### 0.11.7 — Pages (3 sittings)
 - **Same as:** §4.5 (pages).
-- **Data:** 0037.
+- **Data:** 0039.
 - **Screens and flows:** Pages list (search, sort, filters, favorites, archived); the editor with the block set (text, headings, quote, callout with icon and colour, divider, lists and to-dos, table, image, nested page, code with language picker, Mermaid if allowed, emoji, colours, `/` menu, `@` mentions of work items), outline, lock, public / private flag, full screen, version history (local snapshots on save), archive, export (Markdown / PDF through the existing converters).
 - **Done when:** a page with a table, a code block and a mention opens the mentioned item from the mention; a locked page refuses edits; a restored version replaces the text.
 
 ### 0.11.8 — Intake (2 sittings)
 - **Same as:** §4.5 (intake).
-- **Data:** 0038.
+- **Data:** 0040.
 - **Screens and flows:** Intake page with Open / Closed tabs, filters and sort, up / down through pending; create an intake item (title, description, priority, assignees, labels, due date; Triage state); Accept (edit, choose the state), Decline, Snooze until, Mark as duplicate (links, declines, labels), Delete; the Email reading agent files an email's request as an intake item when the project has Intake on (ours).
 - **Done when:** an accepted item becomes `VIFC-n` in the chosen state; a snoozed one returns on its date.
 
 ### 0.11.9 — Home, Your work, Power K, stickies, navigation, profile (3 sittings)
 - **Same as:** §4.1 (Home, Your work, Power K, shortcuts, customize navigation, profile settings, favorites, recents, stickies, quick links).
-- **Data:** 0039.
+- **Data:** 0041.
 - **Screens and flows:** Home (greeting, Quick links, Recents with its filter, Stickies with colours and formatting, Manage widgets); Your work (summary, by state group, by priority, pie, recent activity, Assigned / Created / Subscribed tabs); Power K actions inside ⌘K (create work item, go to project / cycle / module / page, toggle sidebar, shortcuts…); the shortcut set; Customize navigation; Settings → Notifications preferences; the Projects section of the sidebar as Plane's (Home, Your work, Inbox, Drafts, Projects with their sub-items, Views, Archives, Favorites).
 - **Done when:** the sidebar matches Plane's with Inbox showing its unread count; `G` `R` opens Archives.
 
 ### 0.11.10 — Analytics, exports, CSV importer (3 sittings)
 - **Same as:** §4.5 (analytics, exports, importer).
-- **Data:** 0040.
+- **Data:** 0042.
 - **Screens and flows:** Analytics: Overview (projects, work items, active cycles, intake), Work items (by state, Created vs Resolved over time, Customized insights by priority / assignee / state / labels / cycles), light Cycles / Modules tabs (ours), per project and per cycle / module; Exports (CSV / XLSX / JSON with current filters, history); Workspace → Imports: Plane's CSV importer with its columns, matching rules, migrations table and JSON summary.
 - **Done when:** a Plane CSV export re-imports with states, labels, parents and comments; Created vs Resolved shows the dev project's week.
 
 ### 0.11.11 — Developers: API tokens, local REST API, webhooks (2 sittings)
 - **Same as:** §4.5 (API), on the server of 0.10.14.
-- **Data:** 0041.
+- **Data:** 0043.
 - **Screens and flows:** personal API tokens; `/api/v1/workspaces/{slug}/projects/`, `…/issues/`, `/states/`, `/labels/`, `/cycles/`, `/modules/`, `/intake-issues/` with Plane's JSON and `X-API-Key`, a 60-a-minute limit with the headers; webhooks (localhost) with deliveries.
 - **Done when:** `curl -H "X-API-Key: …" http://localhost:<port>/api/v1/workspaces/vifc/projects/` lists the projects as Plane would.
 

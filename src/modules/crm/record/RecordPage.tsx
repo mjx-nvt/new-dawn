@@ -14,6 +14,7 @@ import RunBody from "../../workflows/RunPage";
 import WorkflowBuilder from "../../workflows/WorkflowBuilder";
 import DashboardBody from "./DashboardPage";
 import LayoutEditor from "./LayoutEditor";
+import ProposalCards from "../ProposalCards";
 import styles from "./Record.module.css";
 import { isDeleted, WidgetBody, WidgetCard } from "./widgets";
 
@@ -184,6 +185,8 @@ export default function RecordPage() {
           </DangerButton>
         </div>
       )}
+      {/* The CRM agent's proposals about this record — on the objects it proposes about (D-072). */}
+      {ctx && !deleted && !editingLayout && (name === "company" || name === "person" || name === "opportunity") && <ProposalCards slug={ctx.slug} about={id} />}
       {isDashboard && ctx ? (
         <DashboardBody ctx={ctx} editing={editingLayout} onEditDone={() => setEditingLayout(false)} />
       ) : isWorkflow && ctx && !editingLayout ? (

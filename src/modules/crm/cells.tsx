@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { asRecord, selectOptions, useRecords, type FieldMeta, type RecordJson } from "../../kernel/bridge/records";
 import { richExcerpt } from "../../kernel/editor/plain";
+import { formatDateTime, formatNumber as formatNumeral } from "../../kernel/format/format";
 import { formatDay } from "../projects/format";
 import styles from "./Crm.module.css";
 
@@ -29,13 +30,7 @@ export function chipClass(color: string): string {
 }
 
 function formatNumber(n: number, decimals: number | null | undefined): string {
-  return n.toLocaleString("en-GB", { maximumFractionDigits: decimals ?? 2 });
-}
-
-function formatDateTime(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return iso;
-  return `${at.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  return formatNumeral(n, decimals ?? 2);
 }
 
 /** The cell at rest. */

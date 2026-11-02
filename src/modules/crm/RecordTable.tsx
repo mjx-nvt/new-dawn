@@ -20,6 +20,7 @@ import {
 } from "../../kernel/bridge/records";
 import { useAggregates, useGroupCounts } from "../../kernel/bridge/views";
 import DangerButton from "../../kernel/shell/DangerButton";
+import { formatNumber } from "../../kernel/format/format";
 import { CellEditor, CellView, chipClass, editsInPlace, readOnly } from "./cells";
 import styles from "./Crm.module.css";
 
@@ -294,7 +295,7 @@ function formatAggregate(column: Column, value: Json | undefined): string {
   if (typeof value === "number") {
     const n = column.field.type === "CURRENCY" && ["SUM", "AVG", "MIN", "MAX"].includes(column.aggregate ?? "") ? value / 1_000_000 : value;
     const percent = column.aggregate?.startsWith("PERCENT");
-    return `${n.toLocaleString("en-GB", { maximumFractionDigits: percent ? 0 : 2 })}${percent ? " %" : ""}`;
+    return `${formatNumber(n, percent ? 0 : 2)}${percent ? " %" : ""}`;
   }
   return String(value);
 }

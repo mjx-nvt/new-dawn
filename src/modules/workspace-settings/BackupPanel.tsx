@@ -1,4 +1,5 @@
 import { useBackupNow, useBackupStatus, useChooseBackupFolder } from "../../kernel/bridge/onboarding";
+import { formatDateTime } from "../../kernel/format/format";
 
 /** Settings → Backup: a daily copy of every database and brand folder into a folder you choose. */
 export default function BackupPanel() {
@@ -30,7 +31,7 @@ export default function BackupPanel() {
         <div className="groupRow">
           <div className="rowText">
             <p className="rowLabel">Last backup</p>
-            <p className="rowHint">{b?.last_at ? new Date(b.last_at).toLocaleString("en-GB") : "Not yet captured"}</p>
+            <p className="rowHint">{b?.last_at ? formatDateTime(b.last_at) : "Not yet captured"}</p>
           </div>
           <div className="rowControl">
             <button type="button" className="btn btnSecondary btnCompact" disabled={!b?.folder || now.isPending} onClick={() => now.mutate()}>

@@ -194,6 +194,13 @@ export const commands = {
 	listUnlinkedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_unlinked_commitments", { slug })),
 	/**  The newest dismissed, for Undo. */
 	listDismissedCommitments: (slug: string) => typedError<Commitment_Serialize[], AppError>(__TAURI_INVOKE("list_dismissed_commitments", { slug })),
+	/**  The CRM agent's proposals waiting for the owner — all, or those about one record (D-072). */
+	listCrmProposals: (slug: string, about: string | null) => typedError<CrmProposal_Serialize[], AppError>(__TAURI_INVOKE("list_crm_proposals", { slug, about })),
+	/**  Writes a proposal into the CRM, as the agent (once). */
+	applyCrmProposal: (slug: string, id: string) => typedError<CrmProposal_Serialize, AppError>(__TAURI_INVOKE("apply_crm_proposal", { slug, id })),
+	dismissCrmProposal: (slug: string, id: string) => typedError<CrmProposal_Serialize, AppError>(__TAURI_INVOKE("dismiss_crm_proposal", { slug, id })),
+	/**  A meeting's ⋯ → Find CRM proposals: reads its summary now. How many it proposed. */
+	findCrmProposals: (slug: string, meetingId: string) => typedError<number, AppError>(__TAURI_INVOKE("find_crm_proposals", { slug, meetingId })),
 	/**  The emails read, newest first, with what came of each. */
 	listEmails: (slug: string) => typedError<EmailItem_Serialize[], AppError>(__TAURI_INVOKE("list_emails", { slug })),
 	/**  Reads an .eml file the owner chose (D-056). */
@@ -392,6 +399,10 @@ export const commands = {
 	 *  in every workspace).
 	 */
 	setProfile: (patch: ProfilePatch_Deserialize) => typedError<Profile, AppError>(__TAURI_INVOKE("set_profile", { patch })),
+	/**  The owner's formats: time zone, date, time, number, week start (D-072). */
+	getFormats: () => typedError<Formats_Serialize, AppError>(__TAURI_INVOKE("get_formats")),
+	/**  Saves the formats; every window redraws its dates and numbers (`FormatsChanged`). */
+	setFormats: (formats: Formats_Deserialize) => typedError<Formats_Serialize, AppError>(__TAURI_INVOKE("set_formats", { formats })),
 	/**  Shows a sample notification; the first one makes macOS ask whether New Dawn may notify. */
 	testNotification: () => typedError<null, AppError>(__TAURI_INVOKE("test_notification")),
 	exportMinutesDocx: (slug: string, meetingId: string, options: ExportOptions_Deserialize) => typedError<MinutesExport_Serialize, AppError>(__TAURI_INVOKE("export_minutes_docx", { slug, meetingId, options })),
@@ -462,6 +473,7 @@ export const commands = {
 /** Events */
 export const events = {
 	brandChanged: makeEvent<BrandChanged, BrandChanged>("brand-changed"),
+	formatsChanged: makeEvent<FormatsChanged_Serialize, FormatsChanged_Deserialize>("formats-changed"),
 	menuAction: makeEvent<MenuAction, MenuAction>("menu-action"),
 	modelDownloadFinished: makeEvent<ModelDownloadFinished_Serialize, ModelDownloadFinished_Deserialize>("model-download-finished"),
 	modelDownloadProgress: makeEvent<ModelDownloadProgress, ModelDownloadProgress>("model-download-progress"),
@@ -525,7 +537,7 @@ export type Activity_Serialize = {
 	waiting_for: string | null,
 };
 
-export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live" | "projects" | "inbox";
+export type Agent = "summary" | "naming" | "email" | "tasks" | "minutes" | "corrections" | "translate" | "live" | "projects" | "inbox" | "crm";
 
 export type AgentGuide = AgentGuide_Serialize | AgentGuide_Deserialize;
 
@@ -1236,6 +1248,77 @@ export type CorrectionsOutcome_Serialize = {
 	terms_learned: number,
 };
 
+/**  One proposal as the owner sees it. */
+export type CrmProposal = CrmProposal_Serialize | CrmProposal_Deserialize;
+
+export type CrmProposalKind = "company" | "person" | "opportunity" | "note" | "task";
+
+export type CrmProposalStatus = "proposed" | "applied" | "dismissed";
+
+/**  One proposal as the owner sees it. */
+export type CrmProposal_Deserialize = {
+	id: string,
+	kind: CrmProposalKind,
+	/**  The record's name (a note's or a task's title). */
+	name: string,
+	/**
+	 *  The record it belongs to: a person's or an opportunity's company, a note's or a task's
+	 *  record — its object, its name as said, its id once it exists.
+	 */
+	about_object?: string | null,
+	about_name: string,
+	about_id?: string | null,
+	/**  The fields Apply writes, in the engine's names (the relation is set at Apply). */
+	data: Json,
+	quote: string,
+	model?: string | null,
+	status: CrmProposalStatus,
+	/**  What Apply wrote. */
+	record_id?: string | null,
+	meeting_id?: string | null,
+	email_item_id?: string | null,
+	/**  The meeting's title or the email's subject. */
+	source_title: string,
+	created_at: string,
+};
+
+/**  One proposal as the owner sees it. */
+export type CrmProposal_Serialize = {
+	id: string,
+	kind: CrmProposalKind,
+	/**  The record's name (a note's or a task's title). */
+	name: string,
+	/**
+	 *  The record it belongs to: a person's or an opportunity's company, a note's or a task's
+	 *  record — its object, its name as said, its id once it exists.
+	 */
+	about_object: string | null,
+	about_name: string,
+	about_id: string | null,
+	/**  The fields Apply writes, in the engine's names (the relation is set at Apply). */
+	data: Json,
+	quote: string,
+	model: string | null,
+	status: CrmProposalStatus,
+	/**  What Apply wrote. */
+	record_id: string | null,
+	meeting_id: string | null,
+	email_item_id: string | null,
+	/**  The meeting's title or the email's subject. */
+	source_title: string,
+	created_at: string,
+};
+
+export type DateFormat = 
+/**  "24 Oct 2026" — New Dawn's own. */
+"dayMonthName" | 
+/**  "24/10/2026". */
+"dayFirst" | 
+/**  "10/24/2026". */
+"monthFirst" | 
+/**  "2026-10-24". */
+"yearFirst";
+
 /**  One workspace's part of the day. */
 export type Day = Day_Serialize | Day_Deserialize;
 
@@ -1251,8 +1334,13 @@ export type Day_Deserialize = {
 	commitments: Commitment_Deserialize[],
 	/**  How many there are in all. */
 	open_commitments: number,
-	/**  This week's meetings, Monday to Sunday, in order. */
+	/**  This week's meetings (from the week's first day, as Formats sets it), in order. */
 	meetings: WeekMeeting[],
+	/**
+	 *  Open opportunities to close within 30 days (soonest first), then those past their date in
+	 *  the last 90 (latest first) (D-072).
+	 */
+	opportunities: ToClose_Deserialize[],
 	/**  Proposals waiting for the owner. */
 	waiting: Waiting,
 };
@@ -1269,8 +1357,13 @@ export type Day_Serialize = {
 	commitments: Commitment_Serialize[],
 	/**  How many there are in all. */
 	open_commitments: number,
-	/**  This week's meetings, Monday to Sunday, in order. */
+	/**  This week's meetings (from the week's first day, as Formats sets it), in order. */
 	meetings: WeekMeeting[],
+	/**
+	 *  Open opportunities to close within 30 days (soonest first), then those past their date in
+	 *  the last 90 (latest first) (D-072).
+	 */
+	opportunities: ToClose_Serialize[],
 	/**  Proposals waiting for the owner. */
 	waiting: Waiting,
 };
@@ -1721,6 +1814,48 @@ export type Fonts_Serialize = {
 	heading: string,
 	body: string,
 	files?: string[],
+};
+
+export type Formats = Formats_Serialize | Formats_Deserialize;
+
+/**
+ *  The owner's formats changed (Settings → General → Formats): every window shows its dates and
+ *  numbers with them (D-072).
+ */
+export type FormatsChanged = FormatsChanged_Serialize | FormatsChanged_Deserialize;
+
+/**
+ *  The owner's formats changed (Settings → General → Formats): every window shows its dates and
+ *  numbers with them (D-072).
+ */
+export type FormatsChanged_Deserialize = {
+	formats: Formats_Deserialize,
+};
+
+/**
+ *  The owner's formats changed (Settings → General → Formats): every window shows its dates and
+ *  numbers with them (D-072).
+ */
+export type FormatsChanged_Serialize = {
+	formats: Formats_Serialize,
+};
+
+export type Formats_Deserialize = {
+	/**  An IANA time zone ("Asia/Ho_Chi_Minh"); empty: this Mac's. */
+	timeZone?: string,
+	date?: DateFormat,
+	time?: TimeFormat,
+	number?: NumberFormat,
+	weekStart?: WeekStart,
+};
+
+export type Formats_Serialize = {
+	/**  An IANA time zone ("Asia/Ho_Chi_Minh"); empty: this Mac's. */
+	timeZone: string,
+	date: DateFormat,
+	time: TimeFormat,
+	number: NumberFormat,
+	weekStart: WeekStart,
 };
 
 export type GlassStatus = "liquid_glass" | "vibrancy" | "none";
@@ -2409,6 +2544,16 @@ export type NewProject_Serialize = {
 	next_milestone: string,
 	milestone_due: string | null,
 };
+
+export type NumberFormat = 
+/**  "1,234.56". */
+"commasAndDot" | 
+/**  "1.234,56". */
+"dotsAndComma" | 
+/**  "1 234,56". */
+"spacesAndComma" | 
+/**  "1’234.56". */
+"apostrophesAndDot";
 
 /**  An object with its fields, as the query layer needs it. */
 export type ObjectDef = ObjectDef_Serialize | ObjectDef_Deserialize;
@@ -3709,6 +3854,12 @@ export type TermInput_Serialize = {
 	heard_as: string[],
 };
 
+export type TimeFormat = 
+/**  "14:05". */
+"hours24" | 
+/**  "2:05 PM". */
+"hours12";
+
 /**  One line of a record's timeline, as the page shows it. */
 export type TimelineEvent = {
 	id: string,
@@ -3719,6 +3870,36 @@ export type TimelineEvent = {
 	properties: Json,
 	/**  Who: the workspace member's name, else "New Dawn" (an agent, an import, the carry-over). */
 	actor: string,
+};
+
+export type ToClose = ToClose_Serialize | ToClose_Deserialize;
+
+export type ToClose_Deserialize = {
+	id: string,
+	name: string,
+	/**  YYYY-MM-DD. */
+	close_date: string,
+	stage: string,
+	/**  The stage as the opportunities' select names it. */
+	stage_label: string,
+	company: string,
+	/**  In units (the engine keeps micros). */
+	amount?: number | null,
+	currency: string,
+};
+
+export type ToClose_Serialize = {
+	id: string,
+	name: string,
+	/**  YYYY-MM-DD. */
+	close_date: string,
+	stage: string,
+	/**  The stage as the opportunities' select names it. */
+	stage_label: string,
+	company: string,
+	/**  In units (the engine keeps micros). */
+	amount: number | null,
+	currency: string,
 };
 
 export type Today = Today_Serialize | Today_Deserialize;
@@ -4110,6 +4291,8 @@ export type Waiting = {
 	commitments: number,
 	/**  Tasks proposed from emails. */
 	email_tasks: number,
+	/**  The CRM agent's proposals (D-072). */
+	crm: number,
 };
 
 export type Waveform = {
@@ -4154,6 +4337,8 @@ export type WeekMeeting = {
 	held_on: string,
 	status: MeetingStatus,
 };
+
+export type WeekStart = "monday" | "sunday" | "saturday";
 
 export type Widget = {
 	id: string,

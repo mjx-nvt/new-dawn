@@ -17,6 +17,7 @@ import {
   type TemplateCheck,
   type TemplateField,
 } from "../../kernel/bridge/templates";
+import { formatDay } from "../../kernel/format/format";
 import { LANGUAGE_LABEL } from "../meetings/format";
 import styles from "./MeetingTypesPanel.module.css";
 import settings from "./Settings.module.css";
@@ -120,7 +121,7 @@ function TypeRow({ slug, type, only }: { slug: string; type: MeetingTypeView; on
           <p className="fieldLabel">Minutes template</p>
           {t.path ? (
             <p className="fieldHint">
-              {t.modified_at ? `Changed ${new Date(t.modified_at).toLocaleDateString("en-GB")}` : "Own template"}
+              {t.modified_at ? `Changed ${formatDay(t.modified_at)}` : "Own template"}
             </p>
           ) : (
             <p className="ghostText">Not yet captured — uses the default type's template</p>
