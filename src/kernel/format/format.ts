@@ -20,7 +20,7 @@ export function currentFormats(): Formats {
   return current;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const NUMBER_LOCALE: Record<Formats["number"], string> = { commasAndDot: "en-GB", dotsAndComma: "de-DE", spacesAndComma: "fr-FR", apostrophesAndDot: "de-CH" };
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const pad = (n: number) => String(n).padStart(2, "0");

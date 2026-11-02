@@ -91,6 +91,21 @@ _2026-11-02_
 
 ---
 
+## D-076 — Plane's layouts: five views of one list, a drop is one change, the display remembered per project
+_2026-11-02_
+
+**Context** (plan v4 §4.4, 0.11.3): Plane's layouts — List, Board (groups and sub-groups, drag between columns), Calendar (by due date, drag to move), Table (columns, inline edit, keyboard navigation, bulk), Timeline (bars by start and due date, drag to change) — and its display options (the properties shown, group, sub-group, order, show sub-items, show empty groups), remembered per user and project.
+
+**Decision — five views of one list**: every layout reads the same items (sub-items as the display says), ordered and grouped by the List's own code (D-074); a layout is how they're drawn. The layout, grouping, sub-grouping and order can come from the address (a link); what it leaves out comes from the project's display, and every change is kept there — 0035 `pm_display`, a row a project (one owner, where Plane keeps one per user), its fields as columns and its two lists (the properties shown, the Board's folded columns) as JSON arrays; a person deleted for good leaves no folded column, and merged people move theirs. The display properties gain Attachment count and Link (0034's rows) and, in the Table, Created on, Created by and Updated on.
+
+**Decision — a move is one change**: an item dropped into another group takes what the group means — a state, a priority, a label or an assignee in place of the one it left (added when it had none of them; taken off when dropped on No label or No assignee). On a Board with sub-groups a card dropped into another column and row takes both at once: one update, one transaction, an activity row a field. The Calendar's drop sets the due date and moves the start with it (the item keeps its length); a Timeline bar moves both dates, its ends one each, never past the other. The drags have keyboard equivalents in the item's own properties, and the Table is the keyboard layout: the arrows move between cells, Enter goes in, Escape comes back out.
+
+**Where the owner sees it**: the Work items tab's toolbar — List · Board · Calendar · Table · Timeline, then Group by, Sub-group by (Board), Order by and Display. The Board: a column a group (folded to a strip and back, remembered), a row a sub-group, + and a quick add in each cell. The Calendar: a month or a week (remembered) from the owner's first day of the week, today marked, the items on their due day, + on a day, and how many have no due date. The Table: a checkbox column with the bulk bar (D-075) and each cell edited where it is. The Timeline: Weeks, Months or Quarters (remembered), today's line, bars and one-day marks, the items without dates below.
+
+**Means for future work**: saved views (0.11.4) keep a layout and a display the same way, named; cycles and modules add Group by Cycle and Module (0.11.5, 0.11.6); the Timeline's dependencies stay Plane's paid tier.
+
+---
+
 ## D-075 — Plane's work items, the rest: relations both ways, links and files, bulk checked first, an Inbox fed by others' activity, automations once a day
 _2026-11-02_
 

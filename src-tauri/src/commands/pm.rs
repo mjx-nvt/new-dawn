@@ -10,6 +10,7 @@ use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
+use crate::modules::pm::display::{self, PmDisplay};
 use crate::modules::pm::drafts::{self, PmDraft};
 use crate::modules::pm::inbox::{self, InboxCounts, InboxQuery, Notice};
 use crate::modules::pm::items::{self, ItemFile, ItemInput, ItemPatch, PmActivity, PmItem, PmVersion};
@@ -450,4 +451,18 @@ pub async fn get_pm_prefs(hub: State<'_, WorkspaceHub>) -> Result<PmPrefs, AppEr
 #[specta::specta]
 pub async fn set_pm_prefs(hub: State<'_, WorkspaceHub>, prefs: PmPrefs) -> Result<PmPrefs, AppError> {
     Ok(pm::set_prefs(&hub, prefs).await?)
+}
+
+// ── 0.11.3 (D-076): a project's layout and display ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_pm_display(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<PmDisplay, AppError> {
+    Ok(display::get(&hub.pool(&slug)?, &project_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn set_pm_display(hub: State<'_, WorkspaceHub>, slug: String, project_id: String, display: PmDisplay) -> Result<PmDisplay, AppError> {
+    Ok(display::set(&hub.pool(&slug)?, &project_id, display).await?)
 }

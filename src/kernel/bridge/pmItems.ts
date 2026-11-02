@@ -7,6 +7,7 @@ import {
   type PmActivity_Serialize,
   type PmAttachment,
   type PmBulkAction,
+  type PmDisplay,
   type PmItemRef,
   type PmLink,
   type PmRelation,
@@ -29,7 +30,7 @@ export type PmComment = PmComment_Serialize;
 export type PmActivity = PmActivity_Serialize;
 export type PmVersion = PmVersion_Serialize;
 export type PmDraft = PmDraft_Serialize;
-export type { PmAttachment, PmBulkAction, PmItemRef, PmLink, PmRelation, PmRelationKind, Priority, Reaction };
+export type { PmAttachment, PmBulkAction, PmDisplay, PmItemRef, PmLink, PmRelation, PmRelationKind, Priority, Reaction };
 
 /** After any change to items: the lists, the items, their comments and activity, the drafts. */
 function useRefresh() {
@@ -225,4 +226,20 @@ export function useBulkPmItems(slug: string | undefined) {
     act: useMutation({ mutationFn: ({ ids, action }: { ids: string[]; action: PmBulkAction }) => unwrap(commands.bulkPmItems(slug ?? "", ids, action)), onSuccess: refresh }),
     copy: useMutation({ mutationFn: ({ ids, projectId }: { ids: string[]; projectId: string }) => unwrap(commands.copyPmItems(slug ?? "", ids, projectId)), onSuccess: refresh }),
   };
+}
+
+// ── 0.11.3 (D-076): a project's layout and display, remembered ──
+
+export function usePmDisplay(slug: string | undefined, projectId: string) {
+  return useQuery({ queryKey: ["pm-display", slug ?? "", projectId], queryFn: () => unwrap(commands.getPmDisplay(slug ?? "", projectId)), enabled: !!slug && !!projectId });
+}
+
+export function useSetPmDisplay(slug: string | undefined, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (display: PmDisplay) => unwrap(commands.setPmDisplay(slug ?? "", projectId, display)),
+    // At once on screen; a refusal reads the kept one back.
+    onMutate: (display) => queryClient.setQueryData(["pm-display", slug ?? "", projectId], display),
+    onError: () => void queryClient.invalidateQueries({ queryKey: ["pm-display", slug ?? "", projectId] }),
+  });
 }

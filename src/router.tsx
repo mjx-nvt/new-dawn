@@ -121,11 +121,11 @@ const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
   // The project's tab and, under Settings, its section (D-073).
-  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; group?: string; order?: string; peek?: string; mode?: string; activity?: string } => {
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string } => {
     const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
-    // The tab, Settings' section, and the work items' group, order, peek and its activity tab
-    // (D-073, D-074).
-    return { ...text("tab"), ...text("section"), ...text("group"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity") };
+    // The tab, Settings' section, and the work items' layout, group, sub-group, order, peek and
+    // its activity tab (D-073, D-074, D-076).
+    return { ...text("tab"), ...text("section"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity") };
   },
   component: () => (
     <ModuleGate module="projects">

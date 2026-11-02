@@ -289,6 +289,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::pm::archive_notice,
             commands::pm::get_pm_prefs,
             commands::pm::set_pm_prefs,
+            commands::pm::get_pm_display,
+            commands::pm::set_pm_display,
             commands::crm::list_people_cards,
             commands::crm::list_waiting_commitments,
             commands::crm::get_person,

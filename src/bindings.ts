@@ -254,6 +254,8 @@ export const commands = {
 	archiveNotice: (slug: string, id: string, archived: boolean) => typedError<null, AppError>(__TAURI_INVOKE("archive_notice", { slug, id, archived })),
 	getPmPrefs: () => typedError<PmPrefs, AppError>(__TAURI_INVOKE("get_pm_prefs")),
 	setPmPrefs: (prefs: PmPrefs) => typedError<PmPrefs, AppError>(__TAURI_INVOKE("set_pm_prefs", { prefs })),
+	getPmDisplay: (slug: string, projectId: string) => typedError<PmDisplay, AppError>(__TAURI_INVOKE("get_pm_display", { slug, projectId })),
+	setPmDisplay: (slug: string, projectId: string, display: PmDisplay) => typedError<PmDisplay, AppError>(__TAURI_INVOKE("set_pm_display", { slug, projectId, display })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -3224,6 +3226,23 @@ export type PmComment_Serialize = {
 	reactions: Reaction[],
 };
 
+export type PmDisplay = {
+	layout: string,
+	group: string,
+	/**  The Board's rows ("none": none). */
+	sub_group: string,
+	order: string,
+	properties: string[],
+	sub_items: boolean,
+	empty_groups: boolean,
+	/**  "month" or "week". */
+	calendar: string,
+	/**  "week", "month" or "quarter". */
+	zoom: string,
+	/**  The Board's folded columns (their group keys). */
+	collapsed: string[],
+};
+
 export type PmDraft = PmDraft_Serialize | PmDraft_Deserialize;
 
 export type PmDraft_Deserialize = {
@@ -3313,6 +3332,9 @@ export type PmItem_Deserialize = {
 	sub_done: number,
 	sub_cancelled: number,
 	comments: number,
+	/**  Plane's display properties "Attachment count" and "Link". */
+	attachments: number,
+	links: number,
 	/**  The owner's vote: 1 up, -1 down, 0 none. */
 	vote: number,
 	sort_order: number | null,
@@ -3354,6 +3376,9 @@ export type PmItem_Serialize = {
 	sub_done: number,
 	sub_cancelled: number,
 	comments: number,
+	/**  Plane's display properties "Attachment count" and "Link". */
+	attachments: number,
+	links: number,
 	/**  The owner's vote: 1 up, -1 down, 0 none. */
 	vote: number,
 	sort_order: number | null,

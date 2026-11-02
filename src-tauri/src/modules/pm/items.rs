@@ -82,6 +82,9 @@ pub struct PmItem {
     pub sub_done: u32,
     pub sub_cancelled: u32,
     pub comments: u32,
+    /// Plane's display properties "Attachment count" and "Link".
+    pub attachments: u32,
+    pub links: u32,
     /// The owner's vote: 1 up, -1 down, 0 none.
     pub vote: i32,
     pub sort_order: f64,
@@ -121,6 +124,8 @@ struct Row {
     sub_done: u32,
     sub_cancelled: u32,
     comments: u32,
+    attachments: u32,
+    links: u32,
     vote: Option<i32>,
     sort_order: f64,
     completed_at: Option<String>,
@@ -169,6 +174,8 @@ impl From<Row> for PmItem {
             sub_done: r.sub_done,
             sub_cancelled: r.sub_cancelled,
             comments: r.comments,
+            attachments: r.attachments,
+            links: r.links,
             vote: r.vote.unwrap_or(0),
             sort_order: r.sort_order,
             completed_at: r.completed_at,
@@ -194,6 +201,8 @@ macro_rules! select {
              (SELECT count(*) FROM pm_item c JOIN pm_state cs ON cs.id = c.state_id WHERE c.parent_id = i.id AND cs.state_group = 'completed') AS sub_done, \
              (SELECT count(*) FROM pm_item c JOIN pm_state cs ON cs.id = c.state_id WHERE c.parent_id = i.id AND cs.state_group = 'cancelled') AS sub_cancelled, \
              (SELECT count(*) FROM pm_comment k WHERE k.item_id = i.id) AS comments, \
+             (SELECT count(*) FROM pm_attachment f WHERE f.item_id = i.id) AS attachments, \
+             (SELECT count(*) FROM pm_link k2 WHERE k2.item_id = i.id) AS links, \
              (SELECT v.vote FROM pm_vote v WHERE v.item_id = i.id AND v.who = 'me') AS vote, \
              i.sort_order, i.completed_at, i.archived_at, i.created_by, i.updated_by, i.created_at, i.updated_at \
              FROM pm_item i JOIN pm_project m ON m.project_id = i.project_id JOIN pm_state s ON s.id = i.state_id \
@@ -253,10 +262,16 @@ fn clean_item_name(text: &str) -> Result<String> {
     Ok(name)
 }
 
+/// A day, YYYY-MM-DD, of a year between 1900 and 2199 (a typed "0020" is a slip, not a date).
 fn clean_day(text: Option<&str>) -> Result<Option<String>> {
+    use chrono::Datelike;
     match text.map(str::trim).filter(|t| !t.is_empty()) {
         None => Ok(None),
-        Some(t) => chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d").map(|d| Some(d.format("%Y-%m-%d").to_string())).map_err(|_| invalid("A date is written YYYY-MM-DD")),
+        Some(t) => match chrono::NaiveDate::parse_from_str(t, "%Y-%m-%d") {
+            Ok(d) if (1900..2200).contains(&d.year()) => Ok(Some(d.format("%Y-%m-%d").to_string())),
+            Ok(_) => Err(invalid("A date's year is between 1900 and 2199")),
+            Err(_) => Err(invalid("A date is written YYYY-MM-DD")),
+        },
     }
 }
 

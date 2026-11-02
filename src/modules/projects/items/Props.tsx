@@ -1,9 +1,11 @@
-import { usePmEstimates, usePmLabels, usePmStates, type StateGroup } from "../../../kernel/bridge/pm";
-import { usePmItems, type Priority } from "../../../kernel/bridge/pmItems";
+import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { usePmEstimates, usePmLabels, usePmStates, type PmLabel, type StateGroup } from "../../../kernel/bridge/pm";
+import { useCreatePmItem, usePmItems, type PmItem, type Priority } from "../../../kernel/bridge/pmItems";
 import { usePeople } from "../../../kernel/bridge/people";
 import { colorOf } from "../../../kernel/charts/Charts";
 import { whoName } from "../pm";
-import { GROUP_LABEL, PRIORITIES } from "./items";
+import { formatDateTime, formatDay } from "../../../kernel/format/format";
+import { GROUP_LABEL, PRIORITIES, type Group, type Property } from "./items";
 import styles from "./Items.module.css";
 
 /** The pickers a work item's properties use — in the create form and the item's sidebar
@@ -148,5 +150,80 @@ export function ParentPick({ slug, projectId, value, self, disabled, onChange }:
         </option>
       ))}
     </select>
+  );
+}
+
+/** The properties a row, a card or a timeline label shows, as the display says. */
+export function ItemProps({ item: i, has, labels, who }: { item: PmItem; has: (p: Property) => boolean; labels: PmLabel[]; who: (w: string) => string }) {
+  return (
+    <span className={styles.rowProps}>
+      {has("state") && (
+        <span className={styles.prop}>
+          <Dot color={i.state_color} /> {i.state_name}
+        </span>
+      )}
+      {has("priority") && <PriorityMark value={i.priority} />}
+      {has("labels") &&
+        i.labels.map((l) => {
+          const label = labels.find((x) => x.id === l);
+          return label ? (
+            <span key={l} className="chip">
+              <Dot color={label.color} /> {label.name}
+            </span>
+          ) : null;
+        })}
+      {has("assignees") && i.assignees.length > 0 && <span className={styles.prop}>{i.assignees.map(who).join(", ")}</span>}
+      {has("start") && i.start_date && <span className={styles.prop}>From {formatDay(i.start_date, { short: true })}</span>}
+      {has("due") && i.target_date && <span className={styles.prop}>Due {formatDay(i.target_date, { short: true })}</span>}
+      {has("estimate") && i.estimate_value && <span className="chip">{i.estimate_value}</span>}
+      {has("sub_items") && i.sub_items > 0 && (
+        <span className={styles.prop}>
+          {i.sub_done}/{i.sub_items - i.sub_cancelled} done
+        </span>
+      )}
+      {has("attachments") && i.attachments > 0 && <span className={styles.prop}>📎 {i.attachments}</span>}
+      {has("links") && i.links > 0 && <span className={styles.prop}>🔗 {i.links}</span>}
+      {has("created") && <span className={styles.prop}>Created {formatDateTime(i.created_at)}</span>}
+      {has("created_by") && <span className={styles.prop}>by {who(i.created_by)}</span>}
+      {has("updated") && <span className={styles.prop}>Updated {formatDateTime(i.updated_at)}</span>}
+    </span>
+  );
+}
+
+const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
+
+/** Plane's quick add at a group's end: a title, Enter — the item takes the group's state,
+ *  priority, label or assignee (a board's cell: its column's and its row's). */
+export function QuickAdd({ slug, projectId, label, value }: { slug: string; projectId: string; label: string; value: Group["value"] }) {
+  const create = useCreatePmItem(slug);
+  const [name, setName] = useState("");
+  const add = () =>
+    name.trim() &&
+    create.mutate(
+      { project_id: projectId, name, state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [] },
+      { onSuccess: () => setName("") },
+    );
+  return (
+    <div className={styles.quick}>
+      <input className="input" aria-label={`New work item in ${label}`} placeholder="+ New work item" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !composing(e) && add()} />
+      {create.error && <span className="formError">{create.error.message}</span>}
+    </div>
+  );
+}
+
+/** A date saved once it's written — WebKit's field changes at every part typed (the year's
+ *  digits one by one), so it saves on leaving the field or Enter. */
+export function DateField({ label, value, disabled, onSave }: { label: string; value: string | null; disabled: boolean; onSave: (day: string) => void }) {
+  return (
+    <input
+      key={value ?? ""}
+      className="input"
+      type="date"
+      aria-label={label}
+      defaultValue={value ?? ""}
+      disabled={disabled}
+      onBlur={(e) => e.target.value !== (value ?? "") && onSave(e.target.value)}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
   );
 }

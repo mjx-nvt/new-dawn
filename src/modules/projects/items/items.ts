@@ -1,4 +1,4 @@
-import type { PmActivity, PmItem, PmRelationKind, Priority } from "../../../kernel/bridge/pmItems";
+import type { ItemPatch, PmActivity, PmDisplay, PmItem, PmRelationKind, Priority } from "../../../kernel/bridge/pmItems";
 import { usePeople } from "../../../kernel/bridge/people";
 import { whoName } from "../pm";
 import type { PmLabel, PmState, StateGroup } from "../../../kernel/bridge/pm";
@@ -40,38 +40,79 @@ export const ORDER_BY: { key: OrderBy; label: string }[] = [
   { key: "priority", label: "Priority" },
 ];
 
-/** What a row shows besides its title. */
-export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "sub_items"] as const;
+/** What a row, a card or a table shows besides the title (Plane's display properties; the
+ *  table's created and updated columns too). */
+export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "sub_items", "attachments", "links", "created", "created_by", "updated"] as const;
 export type Property = (typeof PROPERTIES)[number];
-export const PROPERTY_LABEL: Record<Property, string> = { id: "ID", state: "State", priority: "Priority", assignees: "Assignees", labels: "Labels", start: "Start date", due: "Due date", estimate: "Estimate", sub_items: "Sub-work items" };
+export const PROPERTY_LABEL: Record<Property, string> = {
+  id: "ID",
+  state: "State",
+  priority: "Priority",
+  assignees: "Assignees",
+  labels: "Labels",
+  start: "Start date",
+  due: "Due date",
+  estimate: "Estimate",
+  sub_items: "Sub-work items",
+  attachments: "Attachments",
+  links: "Links",
+  created: "Created on",
+  created_by: "Created by",
+  updated: "Updated on",
+};
 
-export interface Display {
-  properties: Property[];
-  subItems: boolean;
-  emptyGroups: boolean;
-}
+/** A project's display before any is kept (as the Rust side's default). */
+export const DEFAULT_DISPLAY: PmDisplay = {
+  layout: "list",
+  group: "state",
+  sub_group: "none",
+  order: "manual",
+  properties: ["id", "state", "priority", "assignees", "labels", "due", "sub_items"],
+  sub_items: true,
+  empty_groups: true,
+  calendar: "month",
+  zoom: "month",
+  collapsed: [],
+};
 
-export const DEFAULT_DISPLAY: Display = { properties: ["id", "state", "priority", "assignees", "labels", "due", "sub_items"], subItems: true, emptyGroups: true };
+export const LAYOUTS = [
+  { key: "list", label: "List" },
+  { key: "board", label: "Board" },
+  { key: "calendar", label: "Calendar" },
+  { key: "table", label: "Table" },
+  { key: "timeline", label: "Timeline" },
+] as const;
+export type Layout = (typeof LAYOUTS)[number]["key"];
 
-/** The display, remembered per project on this Mac (until views keep it, 0.11.4). */
-export function loadDisplay(projectId: string): Display {
-  try {
-    const saved = localStorage.getItem(`newdawn.items.display.${projectId}`);
-    return saved ? { ...DEFAULT_DISPLAY, ...(JSON.parse(saved) as Partial<Display>) } : DEFAULT_DISPLAY;
-  } catch {
-    return DEFAULT_DISPLAY;
+/** What an item moved from one group to another takes on: the group's state or priority; a
+ *  label or an assignee in place of the one it left (added when it had none of them). */
+export function moveTo(item: PmItem, by: GroupBy, from: Group | undefined, to: Group): ItemPatch {
+  const swap = (now: string[], left: string | undefined, target: string | undefined, none: boolean) => {
+    if (none) return left && now.includes(left) ? now.filter((x) => x !== left) : null;
+    if (!target) return null;
+    const next = [...new Set([...now.filter((x) => x !== left), target])];
+    return next.length === now.length && next.every((x) => now.includes(x)) ? null : next;
+  };
+  switch (by) {
+    case "state":
+      return to.value.state_id && to.value.state_id !== item.state_id ? { state_id: to.value.state_id } : {};
+    case "group":
+      return to.value.state_id && to.key !== item.state_group ? { state_id: to.value.state_id } : {};
+    case "priority":
+      return to.value.priority && to.value.priority !== item.priority ? { priority: to.value.priority } : {};
+    case "labels": {
+      const labels = swap(item.labels, from?.value.labels?.[0], to.value.labels?.[0], to.key === "none");
+      return labels ? { labels } : {};
+    }
+    case "assignees": {
+      const assignees = swap(item.assignees, from?.value.assignees?.[0], to.value.assignees?.[0], to.key === "none");
+      return assignees ? { assignees } : {};
+    }
+    default:
+      return {};
   }
 }
 
-export function saveDisplay(projectId: string, display: Display) {
-  try {
-    localStorage.setItem(`newdawn.items.display.${projectId}`, JSON.stringify(display));
-  } catch {
-    // A private window: the display isn't remembered.
-  }
-}
-
-/** The items in their order. */
 export function ordered(items: PmItem[], order: OrderBy): PmItem[] {
   const by = (f: (i: PmItem) => string | number | null, desc = false) => (a: PmItem, b: PmItem) => {
     const [x, y] = [f(a), f(b)];

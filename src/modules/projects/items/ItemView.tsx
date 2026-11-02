@@ -33,7 +33,7 @@ import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { RELATIONS, asPrompt, duration, progress, sentence, transitions, useWho } from "./items";
 import { Attachments, Links, RelationRow } from "./ItemTies";
-import { Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
+import { DateField, Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
 const EMOJI = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"];
@@ -185,23 +185,6 @@ function Composer({ slug, item, parentId, onDone }: { slug: string; item: PmItem
         </button>
       </div>
     </div>
-  );
-}
-
-/** A date saved once it's written — WebKit's field changes at every part typed (the year's
- *  digits one by one), so it saves on leaving the field or Enter. */
-function DateField({ label, value, disabled, onSave }: { label: string; value: string | null; disabled: boolean; onSave: (day: string) => void }) {
-  return (
-    <input
-      key={value ?? ""}
-      className="input"
-      type="date"
-      aria-label={label}
-      defaultValue={value ?? ""}
-      disabled={disabled}
-      onBlur={(e) => e.target.value !== (value ?? "") && onSave(e.target.value)}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-    />
   );
 }
 

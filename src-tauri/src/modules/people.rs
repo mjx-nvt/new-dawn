@@ -330,6 +330,16 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
+    // A board grouped by assignees keeps the kept person's column folded (D-076).
+    sqlx::query(
+        "UPDATE pm_display SET collapsed_json = (SELECT json_group_array(DISTINCT CASE WHEN c.value = ?2 THEN ?1 ELSE c.value END) \
+         FROM json_each(pm_display.collapsed_json) AS c) \
+         WHERE EXISTS (SELECT 1 FROM json_each(pm_display.collapsed_json) AS c WHERE c.value = ?2)",
+    )
+    .bind(&k.id)
+    .bind(&o.id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "UPDATE person SET notes = trim(notes || char(10) || char(10) || \
          (SELECT notes FROM person WHERE id = ?2), char(10)) WHERE id = ?1",

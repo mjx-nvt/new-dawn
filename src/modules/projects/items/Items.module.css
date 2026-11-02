@@ -670,3 +670,346 @@
   font-weight: 600;
   color: var(--ink);
 }
+
+/* Layouts (0.11.3): Board */
+.board {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.lane {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.laneHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-bottom: var(--space-1);
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.columns {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  align-items: flex-start;
+}
+
+.column {
+  flex: 0 0 280px;
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-height: 120px;
+  padding: var(--space-2);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+
+.columnHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.folded {
+  flex: 0 0 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 120px;
+  padding: var(--space-3) 0;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.foldedName {
+  writing-mode: vertical-rl;
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+
+/* Calendar */
+.calendar,
+.timeline {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.calHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.weekdays,
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.weekdays span {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 0 var(--space-2);
+}
+
+.day {
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  min-height: 104px;
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.weekSpan .day {
+  min-height: 360px;
+}
+
+.otherMonth {
+  background: transparent;
+}
+
+.otherMonth .dayNum {
+  color: var(--ink-3);
+}
+
+.dayHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dayNum,
+.todayNum {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+  padding: 0 var(--space-1);
+}
+
+.todayNum {
+  border-radius: var(--radius-pill);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.dayAdd {
+  opacity: 0;
+}
+
+.day:hover .dayAdd,
+.dayAdd:focus-visible {
+  opacity: 1;
+}
+
+.dayItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--surface-2);
+  padding: var(--space-1);
+  font: inherit;
+  font-size: var(--t-xs);
+  text-align: left;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Table */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: var(--t-sm);
+}
+
+.table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--ink-3);
+  background: var(--canvas);
+  padding: var(--space-2);
+  border-bottom: 0.5px solid var(--hair);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 0.5px solid var(--hair);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table td:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.titleCell {
+  min-width: 260px;
+}
+
+.cellInput {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+}
+
+.cellInput:focus {
+  background: var(--surface);
+  outline: 2px solid var(--focus);
+}
+
+.keyButton {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Timeline */
+.tlScroll {
+  overflow-x: auto;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.tlGrid {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+}
+
+.tlAxis {
+  position: relative;
+  height: 28px;
+  margin-left: 280px;
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.tick {
+  position: absolute;
+  top: var(--space-1);
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.todayLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--primary);
+}
+
+.tlRow {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.tlLabel {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: 0 0 280px;
+  width: 280px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: none;
+  background: var(--surface);
+  padding: var(--space-1) var(--space-3);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.tlTrack {
+  position: relative;
+  height: 36px;
+}
+
+/* A bar or a mark takes its state's colour (inline); today's line is the one orange. */
+.bar {
+  position: absolute;
+  top: 9px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  cursor: grab;
+  touch-action: none;
+}
+
+.mark {
+  position: absolute;
+  top: 12px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  cursor: grab;
+  touch-action: none;
+}
+
+.barEnd {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+}
+
+.barStart {
+  left: 0;
+  right: auto;
+}

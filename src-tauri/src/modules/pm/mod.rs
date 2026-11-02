@@ -7,6 +7,7 @@
 pub mod automations;
 pub mod bulk;
 pub mod comments;
+pub mod display;
 pub mod drafts;
 pub mod inbox;
 pub mod items;
