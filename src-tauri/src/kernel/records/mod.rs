@@ -3,6 +3,7 @@
 //! in `standard.rs` and synced at every open; custom objects and fields are run-time DDL (0.10.5).
 //! Everything the CRM module shows goes through `query`.
 
+pub mod charts;
 pub mod ddl;
 pub mod files;
 pub mod layouts;

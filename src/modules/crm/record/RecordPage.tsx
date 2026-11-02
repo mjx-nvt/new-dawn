@@ -1,12 +1,14 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNeighbours, useRecordLayout } from "../../../kernel/bridge/layouts";
+import { useDuplicateDashboard } from "../../../kernel/bridge/dashboards";
 import { noteVisit, useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { asRecord, recordLabel, useDeleteRecord, useDestroyRecord, useObject, useRecord, useRestoreRecord, useUpdateRecord } from "../../../kernel/bridge/records";
 import { useCurrentWorkspace } from "../../../kernel/bridge/workspaces";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { CellEditor } from "../cells";
+import DashboardBody from "./DashboardPage";
 import LayoutEditor from "./LayoutEditor";
 import styles from "./Record.module.css";
 import { isDeleted, WidgetBody, WidgetCard } from "./widgets";
@@ -49,6 +51,25 @@ export default function RecordPage() {
   }, []);
   const data = record.data ? asRecord(record.data) : null;
   const deleted = !!data && isDeleted(data);
+  // A dashboard's page is its own layout (D-067); ⌘K → Duplicate dashboard copies it.
+  const isDashboard = name === "dashboard";
+  const duplicate = useDuplicateDashboard(slug);
+  const duplicateNow = duplicate.mutate;
+  const copyDashboard = useCallback(
+    () =>
+      duplicateNow(id, {
+        onSuccess: (made) => {
+          const copy = made && typeof made === "object" && typeof (made as { id?: unknown }).id === "string" ? (made as { id: string }).id : "";
+          if (copy) void navigate({ to: "/crm/$object/$recordId", params: { object: objectName, recordId: copy }, search: {} });
+        },
+      }),
+    [duplicateNow, id, navigate, objectName],
+  );
+  useEffect(() => {
+    if (!isDashboard) return;
+    window.addEventListener("newdawn:duplicate-dashboard", copyDashboard);
+    return () => window.removeEventListener("newdawn:duplicate-dashboard", copyDashboard);
+  }, [isDashboard, copyDashboard]);
   const label = def && data ? recordLabel(def, data) : "";
   const labelField = def?.fields.find((f) => f.id === def.meta.label_identifier_field_id);
   const tabs = layout.data?.tabs ?? [];
@@ -111,7 +132,8 @@ export default function RecordPage() {
           <MenuButton
             label="More"
             items={[
-              { label: "Edit page layout", onSelect: () => setEditingLayout(true), disabled: !ctx || !layout.data },
+              { label: isDashboard ? "Edit dashboard" : "Edit page layout", onSelect: () => setEditingLayout(true), disabled: !ctx || (!isDashboard && !layout.data) },
+              ...(isDashboard ? [{ label: "Duplicate dashboard", onSelect: copyDashboard, disabled: !ctx || duplicate.isPending }] : []),
               deleted ? { label: "Restore", onSelect: () => restore.mutate(id), separator: true } : { label: "Delete", danger: true, separator: true, disabled: !ctx, onSelect: () => remove.mutate(id) },
             ]}
           />
@@ -133,7 +155,9 @@ export default function RecordPage() {
           </DangerButton>
         </div>
       )}
-      {editingLayout && ctx && layout.data ? (
+      {isDashboard && ctx ? (
+        <DashboardBody ctx={ctx} editing={editingLayout} onEditDone={() => setEditingLayout(false)} />
+      ) : editingLayout && ctx && layout.data ? (
         <LayoutEditor ctx={ctx} layout={layout.data} onDone={() => setEditingLayout(false)} />
       ) : (
         <>

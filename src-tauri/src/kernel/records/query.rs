@@ -82,7 +82,7 @@ impl Actor {
 }
 
 #[derive(Debug, Clone)]
-enum Bind {
+pub(super) enum Bind {
     Text(String),
     Real(f64),
     Int(i64),
@@ -95,11 +95,11 @@ type SqlQuery<'q> = sqlx::query::Query<'q, sqlx::Sqlite, sqlx::sqlite::SqliteArg
 
 /// Dynamic SQL from the metadata: table and column names come from `object_meta` / `field_meta`
 /// (never from typed input); every value is bound.
-fn sql(text: String) -> sqlx::AssertSqlSafe<String> {
+pub(super) fn sql(text: String) -> sqlx::AssertSqlSafe<String> {
     sqlx::AssertSqlSafe(text)
 }
 
-fn bind_all<'q>(mut q: SqlQuery<'q>, binds: &[Bind]) -> SqlQuery<'q> {
+pub(super) fn bind_all<'q>(mut q: SqlQuery<'q>, binds: &[Bind]) -> SqlQuery<'q> {
     for b in binds {
         q = match b {
             Bind::Text(s) => q.bind(s.clone()),
@@ -236,7 +236,7 @@ fn day_sql(field: &FieldMeta, col: &str) -> String {
     }
 }
 
-fn empty_sql(c: &StoredColumn, col: &str) -> String {
+pub(super) fn empty_sql(c: &StoredColumn, col: &str) -> String {
     match c.kind {
         ColumnKind::Text if c.json => format!("({col} IS NULL OR {col} IN ('', '[]', '{{}}', 'null'))"),
         ColumnKind::Text => format!("({col} IS NULL OR {col} = '')"),
@@ -390,7 +390,7 @@ fn cond_sql(object: &ObjectDef, cond: &Cond, binds: &mut Vec<Bind>) -> Result<St
 }
 
 /// The WHERE clause of a list: live or deleted rows, the filter, the search.
-fn where_sql(object: &ObjectDef, query: &Query, binds: &mut Vec<Bind>) -> Result<String> {
+pub(super) fn where_sql(object: &ObjectDef, query: &Query, binds: &mut Vec<Bind>) -> Result<String> {
     let mut parts = vec![if query.deleted { "t.deleted_at IS NOT NULL".to_owned() } else { "t.deleted_at IS NULL".to_owned() }];
     if let Some(Json(filter)) = &query.filter {
         if !filter.is_null() {
@@ -944,7 +944,7 @@ fn is_numeric_op(op: &str) -> bool {
 
 /// The column an aggregate reads: the named part, else a composite's number (a sum of amounts)
 /// or its first text part.
-fn aggregate_column(field: &FieldMeta, sub: Option<&str>, op: &str) -> Option<StoredColumn> {
+pub(super) fn aggregate_column(field: &FieldMeta, sub: Option<&str>, op: &str) -> Option<StoredColumn> {
     let cols = columns(field);
     match sub {
         Some(sub) => cols.into_iter().find(|c| c.key == Some(sub)),

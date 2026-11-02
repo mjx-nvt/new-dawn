@@ -301,6 +301,27 @@ pub fn standard_objects() -> Vec<ObjectDecl> {
         ],
     });
 
+    // Dashboards (D-067, 0.10.10): records whose page is a layout of their own (page_layout kind
+    // DASHBOARD); pinnable; no notes, tasks or files of their own.
+    let mut dashboard = vec![
+        required(f("name", "Name", FieldType::Text, "name", "IconLayoutDashboard")),
+        sys(f("icon", "Icon", FieldType::Text, "icon", "IconPhoto")),
+        sys(to_many("favorites", "Favorites", "favorite", "dashboard", "IconHeart")),
+    ];
+    dashboard.extend(common());
+    objects.push(ObjectDecl {
+        name_singular: "dashboard",
+        name_plural: "dashboards",
+        label_singular: "Dashboard",
+        label_plural: "Dashboards",
+        icon: "IconLayoutDashboard",
+        table: "dashboard",
+        system: false,
+        label_identifier: "name",
+        image_identifier: None,
+        fields: dashboard,
+    });
+
     objects.push(ObjectDecl {
         name_singular: "attachment",
         name_plural: "attachments",
@@ -342,6 +363,7 @@ pub fn standard_objects() -> Vec<ObjectDecl> {
             to_one("opportunity", "Opportunity", "opportunity", "opportunity", "favorites", "IconTargetArrow"),
             to_one("note", "Note", "note", "note", "favorites", "IconNotes"),
             to_one("task", "Task", "task", "task", "favorites", "IconCheckbox"),
+            to_one("dashboard", "Dashboard", "dashboard", "dashboard", "favorites", "IconLayoutDashboard"),
         ],
     });
 

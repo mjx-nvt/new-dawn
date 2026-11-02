@@ -94,6 +94,7 @@ mod commands {
     pub mod minutes;
     pub mod models;
     pub mod navigation;
+    pub mod dashboards;
     pub mod transfer;
     pub mod onboarding;
     pub mod people;
@@ -301,6 +302,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::transfer::run_import,
             commands::transfer::export_view,
             commands::transfer::list_transfer_jobs,
+            commands::dashboards::dashboard_layout,
+            commands::dashboards::save_dashboard_layout,
+            commands::dashboards::duplicate_dashboard,
+            commands::dashboards::chart_data,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

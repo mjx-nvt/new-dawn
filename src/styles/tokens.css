@@ -37,6 +37,17 @@
   --surface: #FFFFFF;
   --surface-2: #F1F5F9;                    /* slate-100 */
   --canvas: #FFFFFF;
+
+  /* Charts (D-067): the Majoris families, one hue a series — blue, cyan, green, yellow, orange, red, violet, slate */
+  --chart-1: #2563EB;
+  --chart-2: #0891B2;
+  --chart-3: #16A34A;
+  --chart-4: #CA8A04;
+  --chart-5: #F97316;
+  --chart-6: #DC2626;
+  --chart-7: #7C3AED;
+  --chart-8: #64748B;
+  --chart-grid: rgba(15, 23, 42, 0.08);
   --glass-tint: rgba(255, 255, 255, 0.55);
   --shell-scrim: transparent;              /* neutral wash behind sidebar + toolbar; dark mode only */
   --logo-dark-bg: #0F172A;                 /* slate-900, fixed in both appearances: a white logo on a dark document */
@@ -101,6 +112,15 @@
     --surface: #1C1F26;
     --surface-2: #262A33;
     --canvas: #15171C;
+    --chart-1: #60A5FA;
+    --chart-2: #22D3EE;
+    --chart-3: #4ADE80;
+    --chart-4: #FACC15;
+    --chart-5: #FB923C;
+    --chart-6: #F87171;
+    --chart-7: #A78BFA;
+    --chart-8: #94A3B8;
+    --chart-grid: rgba(255, 255, 255, 0.1);
     --glass-tint: rgba(28, 31, 38, 0.55);
     --shell-scrim: rgba(0, 0, 0, 0.4);
     --primary-text: var(--primary-400);

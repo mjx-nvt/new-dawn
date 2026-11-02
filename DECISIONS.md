@@ -2,6 +2,21 @@
 
 Newest first. Every entry: what was decided, why, and what it means for future work. Keep entries short; link to `docs/` for the long version.
 
+## D-067 — Dashboards: a record with a layout of its own, one chart query on the engine, charts as inline SVG
+_2026-11-02_
+
+**Context** (plan v4 §3.6, 0.10.10): Twenty's dashboards are records of a Dashboard object whose page is tabs of widgets on a grid — Bar, Line, Pie and Aggregate charts (a source object, a filter, the X field with a date granularity, the Y aggregate with a ratio, a group by, sort, omit zero, cumulative; stacked, data labels, legend, axis names, prefix and suffix), a Table of a view with "Allow editing", Rich text and an iFrame — capped at 100 bars and 50 groups; a Chart widget of related records on record pages.
+
+**Decision — a dashboard is a record** of the standard object `dashboard` (migration 0027: its table, `page_layout.dashboard_id`, `favorite.dashboard_id`), so views, favorites, ⌘K's "Create a dashboard…", the sidebar's Workspace section, search and the data model come free; its record page *is* the dashboard — the tabs of its own page layout (0023's `page_layout` with `kind = 'DASHBOARD'` and `object_id` empty, made with one empty tab the first time it is asked for) in view mode, and the 0.10.4 layout editor with the dashboard palette (Chart, Table, Rich text, iFrame) behind ⋯ → Edit dashboard; "Duplicate dashboard" (⋯ and ⌘K) copies the record and every tab and widget. The side panel and the table show a dashboard like any record (its name).
+
+**Decision — one chart query** (`kernel/records/charts.rs`): the widget's config names the object, a view-style filter (the same rules the view bar keeps; on a record page the relation whose records are charted, filtered to the record), the X field (a select's options in their order with their colours — every option, zeros kept unless omitted —, a date bucketed by `strftime` per granularity (a date-time in this Mac's own time), a relation by its target's label, a boolean as True / False, text as is), the Y aggregate (the engine's own operations plus Count true / false and a Ratio; Twenty's Earliest / Latest wait for a chart that can show a date), an optional second dimension that makes series; one `GROUP BY` through the engine's filter SQL, every value bound, names from the metadata; sorting, cumulative sums and the omission of zeros on the result; capped at 100 categories and 50 series with a note. Amounts come back in units. The chart's query key starts like the records' queries, so what the UI already refreshes on a record change refreshes the charts (a card moved on the kanban moves the bar).
+
+**Decision — charts are inline SVG** (`src/kernel/charts/`), no library: bars (vertical or horizontal, grouped or stacked), lines, a ring with the total in its centre, a large value with prefix and suffix; the Majoris families as `--chart-1…8` tokens with dark variants, a select's option colours mapped to the same families; DM Sans labels, four round ticks, a legend when there are series. The iFrame widget shows only a `localhost` address (checked in the widget, and the CSP's `frame-src` allows only localhost), rule 3 kept.
+
+**Means for future work**: workflows (0.10.11) get dashboards' "run a manual workflow" entries; the CRM agent (0.10.15) reads a chart's data for its answers; Plane's analytics (0.11.10) draw with the same chart components; the gauge Twenty plans is a fifth kind when they ship it.
+
+---
+
 ## D-066 — Emails and calendar from local sources: Apple Mail answers for a record's addresses, meetings are the calendar
 _2026-11-02_
 

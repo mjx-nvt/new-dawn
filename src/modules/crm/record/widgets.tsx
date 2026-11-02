@@ -5,6 +5,10 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { usePerson, type CommitmentStatus } from "../../../kernel/bridge/crm";
 import { isImage, openAttachment, pickFiles, revealAttachment, saveAttachmentAs, useAddAttachments, useDeleteAttachment } from "../../../kernel/bridge/files";
 import { useAddLinked, useAttachments, useLinked, useTimeline, type LinkedKind, type TimelineEvent, type Widget } from "../../../kernel/bridge/layouts";
+import { useChartData, type ChartConfig } from "../../../kernel/bridge/dashboards";
+import { useView } from "../../../kernel/bridge/views";
+import { AggregateValue, BarChart, LineChart, PieChart, TruncatedNote } from "../../../kernel/charts/Charts";
+import type { Json } from "../../../bindings";
 import { draftEmail, openInMail, useAddPersonFromEmail, useBlockHandle, useCalendarEvents, useEmailMessages, useEmailThreads, useRefreshEmailThreads, type EmailThread } from "../../../kernel/bridge/mailbox";
 import { asRecord, hasColumns, recordId, recordLabel, tableFields, useObject, useUpdateRecord, type FieldMeta, type ObjectDef, type Query, type RecordJson } from "../../../kernel/bridge/records";
 import Editor from "../../../kernel/editor/Editor";
@@ -14,6 +18,8 @@ import { formatWhen } from "../../meetings/format";
 import Commitments from "../../people/Commitments";
 import { CellEditor, CellView, editsInPlace, readOnly } from "../cells";
 import RecordTable, { type Column } from "../RecordTable";
+import { fromView, queryOf, type Working } from "../views/useViewState";
+import { chartConfigOf, opLabel, type ChartWidgetConfig } from "./ChartSettings";
 import styles from "./Record.module.css";
 
 /** What every widget of a record page reads: the workspace, the object and the record. */
@@ -34,10 +40,11 @@ export const WIDGET_TYPES: { type: string; label: string; since?: string }[] = [
   { type: "RICH_TEXT", label: "Rich text" },
   { type: "COMMITMENTS", label: "Commitments" },
   { type: "MEETINGS", label: "Meetings" },
-  { type: "CHART", label: "Chart", since: "the dashboards release" },
+  { type: "CHART", label: "Chart" },
   { type: "EMAILS", label: "Emails" },
   { type: "CALENDAR", label: "Calendar" },
-  { type: "IFRAME", label: "iFrame", since: "the dashboards release" },
+  { type: "IFRAME", label: "iFrame" },
+  { type: "TABLE", label: "Table" },
 ];
 
 export function typeLabel(type: string): string {
@@ -136,6 +143,12 @@ export function WidgetBody({ ctx, widget }: { ctx: WidgetContext; widget: Widget
       return <MeetingsWidget ctx={ctx} />;
     case "EMAILS":
       return <EmailsWidget ctx={ctx} />;
+    case "CHART":
+      return <ChartWidget ctx={ctx} widget={widget} />;
+    case "TABLE":
+      return <TableWidget ctx={ctx} widget={widget} />;
+    case "IFRAME":
+      return <IframeWidget widget={widget} />;
     case "CALENDAR":
       return <CalendarWidget ctx={ctx} />;
     default:
@@ -469,6 +482,108 @@ function CommitmentsWidget({ ctx }: { ctx: WidgetContext }) {
 }
 
 /** The summarised meetings that name a person. */
+/** A chart's query from a widget's config (D-067): on a dashboard the object it names; on a
+ *  record page the records a relation of this object points at, filtered to the record. */
+export function toChartConfig(def: ObjectDef, config: ChartWidgetConfig, relation: FieldMeta | undefined, record: string): ChartConfig {
+  const working: Working = { fields: [], filters: { groups: [], filters: config.rules ?? [] }, sorts: [], groupBy: null, groupSort: "MANUAL", groups: [] };
+  let filter = queryOf(def, working, { search: "", deleted: false }).filter;
+  const inverse = relation?.options.relation?.inverse;
+  if (relation && inverse) {
+    const own: Json = { field: inverse, sub: null, op: "in", value: [record] };
+    filter = filter ? { and: [filter, own] } : { and: [own] };
+  }
+  const axis = (a?: { field: string; granularity?: string | null } | null) => (a?.field ? { field: a.field, granularity: a.granularity ?? null } : null);
+  const kind = config.kind ?? "bar";
+  return {
+    source: def.meta.name_singular,
+    filter,
+    x: kind === "aggregate" ? null : axis(config.x),
+    y: { op: config.y?.op || "COUNT", field: config.y?.field ?? null, sub: config.y?.sub ?? null, ratio_value: config.y?.ratio_value ?? null },
+    group: kind === "aggregate" || kind === "pie" ? null : axis(config.group),
+    sort: config.sort ?? null,
+    omit_zero: !!config.omit_zero,
+    cumulative: !!config.cumulative,
+  };
+}
+
+function ChartWidget({ ctx, widget }: { ctx: WidgetContext; widget: Widget }) {
+  const { slug, object, record } = ctx;
+  const config = chartConfigOf(configOf(widget));
+  const onDashboard = object.meta.name_singular === "dashboard";
+  const relation = onDashboard ? undefined : object.fields.find((f) => f.name === config.relation);
+  const sourceName = onDashboard ? config.source : relation?.options.relation?.target;
+  const source = useObject(slug, sourceName);
+  const def = source.data;
+  const chart = def && config.y ? toChartConfig(def, config, relation, recordId(record)) : null;
+  const data = useChartData(slug, chart);
+  if (!sourceName || !config.y) return <Ghost text="Pick what to chart in the widget's settings" rows={1} />;
+  const error = source.error ?? data.error;
+  if (error) {
+    return (
+      <p className="formError" role="alert">
+        {error.message}
+      </p>
+    );
+  }
+  if (!data.data) return <Ghost text="Reading…" rows={1} />;
+  const yField = def?.fields.find((f) => f.name === config.y?.field);
+  const style = {
+    horizontal: !!config.horizontal,
+    stacked: !!config.stacked,
+    labels: !!config.labels,
+    legend: config.legend !== false,
+    axisName: config.axisName ?? "none",
+    xName: def?.fields.find((f) => f.name === config.x?.field)?.label,
+    yName: `${opLabel(config.y.op)}${yField ? ` of ${yField.label}` : ""}`,
+    prefix: config.prefix ?? "",
+    suffix: config.suffix ?? "",
+    showCenter: config.showCenter !== false,
+    hideEmpty: !!config.hideEmpty,
+  };
+  const kind = config.kind ?? "bar";
+  return (
+    <div className={styles.chartBox}>
+      {kind === "line" ? <LineChart data={data.data} style={style} /> : kind === "pie" ? <PieChart data={data.data} style={style} /> : kind === "aggregate" ? <AggregateValue value={data.data.total ?? 0} prefix={style.prefix} suffix={style.suffix} hint={style.yName} /> : <BarChart data={data.data} style={style} />}
+      <TruncatedNote data={data.data} />
+    </div>
+  );
+}
+
+/** A view's table on a dashboard (D-067): its columns, filters and sorts; read-only unless
+ *  "Allow editing". */
+function TableWidget({ ctx, widget }: { ctx: WidgetContext; widget: Widget }) {
+  const { slug } = ctx;
+  const config = configOf(widget);
+  const objectName = typeof config.object === "string" ? config.object : undefined;
+  const viewId = typeof config.view === "string" ? config.view : undefined;
+  const target = useObject(slug, objectName);
+  const view = useView(slug, viewId);
+  if (!objectName || !viewId) return <Ghost text="Pick a view in the widget's settings" rows={1} />;
+  if (!target.data || !view.data) return <Ghost text={target.error || view.error ? "Couldn't be read" : "Reading…"} rows={1} />;
+  const def = target.data;
+  const working = fromView(view.data);
+  const columns: Column[] = working.fields
+    .filter((f) => f.is_visible)
+    .flatMap((f) => {
+      const field = def.fields.find((x) => x.id === f.field_id);
+      return field ? [{ field, size: f.size, aggregate: f.aggregate_operation ?? null }] : [];
+    });
+  const query = queryOf(def, working, { search: "", deleted: false, limit: 50 });
+  const noop = () => undefined;
+  return <RecordTable slug={slug} object={def} columns={columns} query={query} deleted={false} compact={view.data.view.is_compact} locked={config.editable !== true} onResize={noop} onReorder={noop} onSort={noop} onHide={noop} onFilter={noop} onAggregate={noop} />;
+}
+
+const LOCAL_URL = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
+
+/** A localhost page in a frame (D-067): nothing on the web. */
+function IframeWidget({ widget }: { widget: Widget }) {
+  const config = configOf(widget);
+  const url = typeof config.url === "string" ? config.url.trim() : "";
+  if (!url) return <Ghost text="Set the address in the widget's settings" rows={1} />;
+  if (!LOCAL_URL.test(url)) return <Ghost text="Only a localhost address can be shown here" rows={1} />;
+  return <iframe className={styles.iframe} src={url} title={widget.title || "iFrame"} sandbox="allow-scripts allow-same-origin allow-forms" />;
+}
+
 const MAIL_OBJECTS = ["person", "company", "opportunity"];
 
 /** Twenty's Emails tab (D-066): the record's threads from Apple Mail, newest first — a thread

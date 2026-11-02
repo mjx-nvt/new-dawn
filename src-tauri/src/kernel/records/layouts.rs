@@ -15,7 +15,9 @@ use crate::error::AppError;
 
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 /// Twenty's widget types, and New Dawn's COMMITMENTS and MEETINGS (on a person).
-pub const WIDGETS: [&str; 13] = ["FIELDS", "RELATED", "TIMELINE", "TASKS", "NOTES", "FILES", "RICH_TEXT", "CHART", "EMAILS", "CALENDAR", "IFRAME", "COMMITMENTS", "MEETINGS"];
+pub const WIDGETS: [&str; 14] = ["FIELDS", "RELATED", "TIMELINE", "TASKS", "NOTES", "FILES", "RICH_TEXT", "CHART", "EMAILS", "CALENDAR", "IFRAME", "COMMITMENTS", "MEETINGS", "TABLE"];
+/// What a dashboard takes (D-067): the widgets that need no record.
+pub const DASHBOARD_WIDGETS: [&str; 4] = ["CHART", "TABLE", "RICH_TEXT", "IFRAME"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, sqlx::FromRow)]
 pub struct LayoutRow {
@@ -154,6 +156,10 @@ fn related_tabs(object: &ObjectDef, from: f64) -> Vec<TabInput> {
 /// records, Tasks, Notes, Files — and, on a person, New Dawn's Commitments and Meetings.
 pub fn defaults(object: &ObjectDef) -> Vec<TabInput> {
     let name = object.meta.name_singular.as_str();
+    // A dashboard's page is its own layout (D-067); its record page only names it.
+    if name == "dashboard" {
+        return vec![tab("Overview", 0.0, true, vec![widget("FIELDS", "Fields", 0, 0, 12, 4, json!({ "fields": ["name"] }))])];
+    }
     if matches!(name, "note" | "task") {
         // The body's editor wants the width; Twenty's targets — one row per record the note or
         // task is attached to — are the system junction's rows, editable (0.10.6).
@@ -308,6 +314,66 @@ pub async fn reset(pool: &SqlitePool, object: &ObjectDef) -> Result<Layout> {
     record_layout(pool, object).await
 }
 
+/// A dashboard's own layout (D-067), made with one empty tab the first time it is asked for —
+/// one a dashboard (the unique index), so two calls at once make one.
+pub async fn dashboard_layout(pool: &SqlitePool, dashboard_id: &str) -> Result<Layout> {
+    let name: Option<(String,)> = sqlx::query_as("SELECT name FROM dashboard WHERE id = ?").bind(dashboard_id).fetch_optional(pool).await?;
+    let Some((name,)) = name else { return Err(anyhow!(AppError::not_found("No such dashboard"))) };
+    let mut tx = pool.begin().await?;
+    let id = uuid::Uuid::now_v7().to_string();
+    let made = sqlx::query("INSERT OR IGNORE INTO page_layout (id, object_id, dashboard_id, name, kind) VALUES (?, NULL, ?, ?, 'DASHBOARD')")
+        .bind(&id)
+        .bind(dashboard_id)
+        .bind(&name)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected()
+        == 1;
+    if made {
+        write(&mut tx, &id, &[tab("Overview", 0.0, true, Vec::new())]).await?;
+    }
+    tx.commit().await?;
+    let row: LayoutRow = sqlx::query_as("SELECT id, object_id, name, kind FROM page_layout WHERE dashboard_id = ? AND kind = 'DASHBOARD'").bind(dashboard_id).fetch_one(pool).await?;
+    read(pool, row).await
+}
+
+/// The dashboard editor's Save: its tabs and widgets (only the kinds a dashboard takes).
+pub async fn save_dashboard(pool: &SqlitePool, dashboard_id: &str, input: LayoutInput) -> Result<Layout> {
+    let current = dashboard_layout(pool, dashboard_id).await?;
+    for w in input.tabs.iter().flat_map(|t| t.widgets.iter()) {
+        if !DASHBOARD_WIDGETS.contains(&w.r#type.as_str()) {
+            return Err(invalid(format!("A dashboard doesn't take a {} widget", w.r#type)));
+        }
+    }
+    let mut tx = pool.begin().await?;
+    write(&mut tx, &current.layout.id, &input.tabs).await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE page_layout SET updated_at = {NOW} WHERE id = ?"))).bind(&current.layout.id).execute(&mut *tx).await?;
+    tx.commit().await?;
+    dashboard_layout(pool, dashboard_id).await
+}
+
+/// Twenty's "Duplicate dashboard": the record (name + " copy") and every tab and widget.
+pub async fn duplicate_dashboard(pool: &SqlitePool, dashboard_id: &str, actor: &super::Actor) -> Result<Value> {
+    let def = super::object(pool, "dashboard").await?;
+    let source = super::query::get(pool, &def, dashboard_id, false).await?;
+    let name = format!("{} copy", source.get("name").and_then(Value::as_str).unwrap_or("Dashboard"));
+    let made = super::query::create(pool, &def, &json!({ "name": name, "icon": source.get("icon").cloned().unwrap_or(Value::Null) }), actor).await?;
+    let made_id = made.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
+    let layout = dashboard_layout(pool, dashboard_id).await?;
+    let tabs = layout
+        .tabs
+        .into_iter()
+        .map(|t| TabInput {
+            title: t.tab.title,
+            position: t.tab.position,
+            is_default: t.tab.is_default,
+            widgets: t.widgets.into_iter().map(|w| WidgetInput { r#type: w.r#type, title: w.title, position: w.position, grid_x: w.grid_x, grid_y: w.grid_y, grid_w: w.grid_w, grid_h: w.grid_h, config: w.config }).collect(),
+        })
+        .collect();
+    save_dashboard(pool, &made_id, LayoutInput { tabs }).await?;
+    Ok(made)
+}
+
 /// One line of a record's timeline, as the page shows it.
 #[derive(Debug, Clone, Serialize, Type)]
 pub struct TimelineEvent {
@@ -375,6 +441,7 @@ pub async fn neighbours(pool: &SqlitePool, object: &ObjectDef, id: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kernel::records::query::{self, Actor};
     use crate::kernel::hub::WorkspaceHub;
 
     /// A company's page comes with Twenty's defaults, keeps what the editor saves — a widget
@@ -418,6 +485,36 @@ mod tests {
             assert!(back.layout.id.is_empty(), "the defaults again");
             assert_eq!(back.tabs.len(), 8, "Overview, People, Opportunities, Tasks, Notes, Emails, Calendar, Files");
             assert_eq!(back.tabs[0].tab.title, "Overview");
+            hub.close_all().await;
+        });
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// A dashboard's layout is made once (two asks, one row), takes only its own widgets, and
+    /// a duplicate carries the tabs and widgets to the copy.
+    #[test]
+    fn a_dashboard_has_one_layout_and_copies_with_its_widgets() {
+        let root = std::env::temp_dir().join(format!("newdawn-dash-{}", uuid::Uuid::now_v7()));
+        tauri::async_runtime::block_on(async {
+            let hub = WorkspaceHub::open(root.clone()).await.unwrap();
+            hub.create_workspace("VIFC", "test").await.unwrap();
+            let pool = hub.pool("test").unwrap();
+            let actor = Actor::system("test");
+            let dashboard = super::super::object(&pool, "dashboard").await.unwrap();
+            let made = query::create(&pool, &dashboard, &json!({ "name": "Pipeline" }), &actor).await.unwrap();
+            let id = made["id"].as_str().unwrap();
+            let first = dashboard_layout(&pool, id).await.unwrap();
+            let second = dashboard_layout(&pool, id).await.unwrap();
+            assert_eq!(first.layout.id, second.layout.id, "one layout, however often it is asked for");
+            assert_eq!(first.tabs.len(), 1);
+            assert!(save_dashboard(&pool, id, LayoutInput { tabs: vec![tab("Overview", 0.0, true, vec![widget("FIELDS", "Fields", 0, 0, 6, 4, json!({}))])] }).await.is_err(), "a record widget has no place on a dashboard");
+            let saved = save_dashboard(&pool, id, LayoutInput { tabs: vec![tab("Overview", 0.0, true, vec![widget("CHART", "Pipeline by stage", 0, 0, 6, 6, json!({ "kind": "bar", "source": "opportunity" }))])] }).await.unwrap();
+            assert_eq!(saved.tabs[0].widgets[0].r#type, "CHART");
+            let copy = duplicate_dashboard(&pool, id, &actor).await.unwrap();
+            assert_eq!(copy["name"], "Pipeline copy");
+            let copied = dashboard_layout(&pool, copy["id"].as_str().unwrap()).await.unwrap();
+            assert_eq!(copied.tabs[0].widgets[0].title, "Pipeline by stage");
+            assert_ne!(copied.layout.id, saved.layout.id);
             hub.close_all().await;
         });
         std::fs::remove_dir_all(&root).unwrap();

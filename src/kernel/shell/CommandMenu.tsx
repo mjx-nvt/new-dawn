@@ -99,6 +99,7 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
       for (const o of recordObjects) if (fits(o.label_plural)) out.push({ id: `object:${o.id}`, section: "Go to", label: o.label_plural, hint: "CRM", run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural } })) });
       for (const v of views.data ?? []) if (needle && (fits(v.name) || fits(v.object_label))) out.push({ id: `view:${v.id}`, section: "Views", label: v.name, hint: v.object_label, run: go(() => void navigate({ to: "/crm", search: { tab: v.object, view: v.id } })) });
     }
+    if (path.startsWith("/crm/dashboards/") && fits("Duplicate dashboard")) out.push({ id: "action:duplicate-dashboard", section: "Actions", label: "Duplicate dashboard", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:duplicate-dashboard"))) });
     if (onRecord && fits("Edit record page layout")) out.push({ id: "action:layout", section: "Actions", label: "Edit record page layout", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:edit-layout"))) });
     if (crmTab && crmTab !== "commitments" && fits("Deleted records")) out.push({ id: "action:deleted", section: "Actions", label: "Deleted records", hint: crmTab, run: go(() => window.dispatchEvent(new CustomEvent("newdawn:show-deleted"))) });
     // Import / export (D-065): the sheet and the export are the CRM page's, reached by URL state.

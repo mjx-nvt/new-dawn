@@ -318,6 +318,12 @@ export const commands = {
 	/**  A view's records — its filters, sorts and visible fields — as a CSV file where asked. */
 	exportView: (slug: string, object: string, viewName: string, query: Query_Deserialize, fields: string[], path: string) => typedError<ExportReport, AppError>(__TAURI_INVOKE("export_view", { slug, object, viewName, query, fields, path })),
 	listTransferJobs: (slug: string) => typedError<TransferJob[], AppError>(__TAURI_INVOKE("list_transfer_jobs", { slug })),
+	dashboardLayout: (slug: string, id: string) => typedError<Layout_Serialize, AppError>(__TAURI_INVOKE("dashboard_layout", { slug, id })),
+	saveDashboardLayout: (slug: string, id: string, input: LayoutInput) => typedError<Layout_Serialize, AppError>(__TAURI_INVOKE("save_dashboard_layout", { slug, id, input })),
+	/**  Twenty's "Duplicate dashboard": the record and its layout. */
+	duplicateDashboard: (slug: string, id: string) => typedError<Json, AppError>(__TAURI_INVOKE("duplicate_dashboard", { slug, id })),
+	/**  The categories and series of a chart. */
+	chartData: (slug: string, config: ChartConfig_Deserialize) => typedError<ChartData_Serialize, AppError>(__TAURI_INVOKE("chart_data", { slug, config })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -685,6 +691,30 @@ export type Attendee_Serialize = {
 	attending: boolean,
 };
 
+/**
+ *  A dimension: a field, and for a date its granularity (DAY · WEEK · MONTH · QUARTER · YEAR ·
+ *  DAY_OF_WEEK · MONTH_OF_YEAR · QUARTER_OF_YEAR).
+ */
+export type Axis = Axis_Serialize | Axis_Deserialize;
+
+/**
+ *  A dimension: a field, and for a date its granularity (DAY · WEEK · MONTH · QUARTER · YEAR ·
+ *  DAY_OF_WEEK · MONTH_OF_YEAR · QUARTER_OF_YEAR).
+ */
+export type Axis_Deserialize = {
+	field: string,
+	granularity?: string | null,
+};
+
+/**
+ *  A dimension: a field, and for a date its granularity (DAY · WEEK · MONTH · QUARTER · YEAR ·
+ *  DAY_OF_WEEK · MONTH_OF_YEAR · QUARTER_OF_YEAR).
+ */
+export type Axis_Serialize = {
+	field: string,
+	granularity: string | null,
+};
+
 export type BackupStatus = BackupStatus_Serialize | BackupStatus_Deserialize;
 
 export type BackupStatus_Deserialize = {
@@ -858,6 +888,22 @@ export type CalendarEvent_Serialize = {
 	has_recording: boolean,
 };
 
+export type Category = Category_Serialize | Category_Deserialize;
+
+export type Category_Deserialize = {
+	key: string,
+	label: string,
+	/**  A select option's colour name, when the dimension is a select. */
+	color?: string | null,
+};
+
+export type Category_Serialize = {
+	key: string,
+	label: string,
+	/**  A select option's colour name, when the dimension is a select. */
+	color: string | null,
+};
+
 export type CellError = CellError_Serialize | CellError_Deserialize;
 
 export type CellError_Deserialize = {
@@ -870,6 +916,63 @@ export type CellError_Serialize = {
 	/**  The column in error, or none for the row as a whole. */
 	column: number | null,
 	message: string,
+};
+
+/**  What a chart widget keeps in its config. */
+export type ChartConfig = ChartConfig_Serialize | ChartConfig_Deserialize;
+
+/**  What a chart widget keeps in its config. */
+export type ChartConfig_Deserialize = {
+	/**  The object's name. */
+	source: string,
+	/**  The view bar's filter JSON (rules and groups), or none. */
+	filter?: Json | null,
+	/**  The categories; none for an aggregate of one value. */
+	x?: Axis_Deserialize | null,
+	y: Measure_Deserialize,
+	/**  A second dimension: one series a value. */
+	group?: Axis_Deserialize | null,
+	/**  POSITION · ALPHABETICAL · VALUE_DESC · VALUE_ASC */
+	sort?: string | null,
+	omit_zero?: boolean,
+	cumulative?: boolean,
+};
+
+/**  What a chart widget keeps in its config. */
+export type ChartConfig_Serialize = {
+	/**  The object's name. */
+	source: string,
+	/**  The view bar's filter JSON (rules and groups), or none. */
+	filter: Json | null,
+	/**  The categories; none for an aggregate of one value. */
+	x: Axis_Serialize | null,
+	y: Measure_Serialize,
+	/**  A second dimension: one series a value. */
+	group: Axis_Serialize | null,
+	/**  POSITION · ALPHABETICAL · VALUE_DESC · VALUE_ASC */
+	sort: string | null,
+	omit_zero: boolean,
+	cumulative: boolean,
+};
+
+export type ChartData = ChartData_Serialize | ChartData_Deserialize;
+
+export type ChartData_Deserialize = {
+	categories: Category_Deserialize[],
+	series: Series[],
+	/**  The measure over everything the filter keeps (an aggregate chart's one value). */
+	total: number | null,
+	/**  Some categories or series were left out (Twenty's "Undisplayed data"). */
+	truncated: boolean,
+};
+
+export type ChartData_Serialize = {
+	categories: Category_Serialize[],
+	series: Series[],
+	/**  The measure over everything the filter keeps (an aggregate chart's one value). */
+	total: number | null,
+	/**  Some categories or series were left out (Twenty's "Undisplayed data"). */
+	truncated: boolean,
 };
 
 export type CheckKind = 
@@ -1743,6 +1846,40 @@ export type MeaningSearch_Serialize = {
 	/**  Meetings indexed with the current model, of those with a transcript. */
 	indexed: number,
 	meetings: number,
+};
+
+/**
+ *  The value shown: COUNT · COUNT_EMPTY · COUNT_NOT_EMPTY · COUNT_UNIQUE · SUM · AVG · MIN · MAX ·
+ *  PERCENT_EMPTY · PERCENT_NOT_EMPTY · COUNT_TRUE · COUNT_FALSE · RATIO (the share of records
+ *  whose field holds `ratio_value`). A value is a number: Twenty's Earliest / Latest on a date
+ *  wait for a chart that can show a date.
+ */
+export type Measure = Measure_Serialize | Measure_Deserialize;
+
+/**
+ *  The value shown: COUNT · COUNT_EMPTY · COUNT_NOT_EMPTY · COUNT_UNIQUE · SUM · AVG · MIN · MAX ·
+ *  PERCENT_EMPTY · PERCENT_NOT_EMPTY · COUNT_TRUE · COUNT_FALSE · RATIO (the share of records
+ *  whose field holds `ratio_value`). A value is a number: Twenty's Earliest / Latest on a date
+ *  wait for a chart that can show a date.
+ */
+export type Measure_Deserialize = {
+	op: string,
+	field?: string | null,
+	sub?: string | null,
+	ratio_value?: string | null,
+};
+
+/**
+ *  The value shown: COUNT · COUNT_EMPTY · COUNT_NOT_EMPTY · COUNT_UNIQUE · SUM · AVG · MIN · MAX ·
+ *  PERCENT_EMPTY · PERCENT_NOT_EMPTY · COUNT_TRUE · COUNT_FALSE · RATIO (the share of records
+ *  whose field holds `ratio_value`). A value is a number: Twenty's Earliest / Latest on a date
+ *  wait for a chart that can show a date.
+ */
+export type Measure_Serialize = {
+	op: string,
+	field: string | null,
+	sub: string | null,
+	ratio_value: string | null,
 };
 
 export type Meeting = Meeting_Serialize | Meeting_Deserialize;
@@ -2827,6 +2964,12 @@ export type SelectOption = {
 	 */
 	color: string,
 	position: number | null,
+};
+
+export type Series = {
+	key: string,
+	label: string,
+	values: (number | null)[],
 };
 
 export type SettingsTab = "general" | "accounts" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";

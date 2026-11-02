@@ -2,7 +2,9 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import { useResetRecordLayout, useSaveRecordLayout, type Layout, type Widget } from "../../../kernel/bridge/layouts";
 import { hasColumns, type ObjectDef } from "../../../kernel/bridge/records";
 import DangerButton from "../../../kernel/shell/DangerButton";
+import type { LayoutInput } from "../../../bindings";
 import OnOff from "../../workspace-settings/OnOff";
+import { chartConfigOf, ChartSettingsForm, IframeSettingsForm, TableSettingsForm } from "./ChartSettings";
 import styles from "./Record.module.css";
 import { configOf, typeLabel, WIDGET_TYPES, WidgetBody, WidgetCard, type WidgetContext } from "./widgets";
 
@@ -20,7 +22,12 @@ const fresh = () => `new-${++seq}`;
  *  resized by their corner, snapped to the 12-column grid; a widget's settings (title, fields,
  *  relation, text); tabs added, renamed, reordered, removed, one made default; Save writes the
  *  whole layout at once, Cancel drops the changes, Reset brings Twenty's default back. */
-export default function LayoutEditor({ ctx, layout, onDone }: { ctx: WidgetContext; layout: Layout; onDone: () => void }) {
+/** A dashboard's widgets (D-067): the ones that need no record. */
+const DASHBOARD_TYPES = ["CHART", "TABLE", "RICH_TEXT", "IFRAME"];
+
+export default function LayoutEditor({ ctx, layout, onDone, kind = "record", onSave }: { ctx: WidgetContext; layout: Layout; onDone: () => void; kind?: "record" | "dashboard"; onSave?: (input: LayoutInput) => Promise<unknown> }) {
+  const [trouble, setTrouble] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const { slug, object } = ctx;
   const [tabs, setTabs] = useState<EditTab[]>(() => layout.tabs.map((t) => ({ key: t.tab.id, title: t.tab.title, is_default: t.tab.is_default, widgets: t.widgets.map((w) => ({ ...w, config: configOf(w) })) })));
   const [at, setAt] = useState(() => Math.max(0, layout.tabs.findIndex((t) => t.tab.is_default)));
@@ -54,7 +61,7 @@ export default function LayoutEditor({ ctx, layout, onDone }: { ctx: WidgetConte
   };
   const addWidget = (type: string) => {
     const y = tab.widgets.reduce((m, w) => Math.max(m, w.grid_y + w.grid_h), 0);
-    const made: Widget = { id: fresh(), tab_id: tab.key, type, title: typeLabel(type), position: tab.widgets.length, grid_x: 0, grid_y: y, grid_w: 12, grid_h: 6, config: type === "FIELDS" ? { fields: [] } : type === "RELATED" ? { editable: true } : {} };
+    const made: Widget = { id: fresh(), tab_id: tab.key, type, title: typeLabel(type), position: tab.widgets.length, grid_x: 0, grid_y: y, grid_w: type === "CHART" ? 6 : 12, grid_h: 6, config: type === "FIELDS" ? { fields: [] } : type === "RELATED" ? { editable: true } : type === "CHART" ? { kind: "bar", y: { op: "COUNT" } } : type === "TABLE" ? { editable: false } : {} };
     patchTab(at, (t) => ({ ...t, widgets: [...t.widgets, made] }));
     setPicked(made.id);
     setAdding(false);
@@ -94,40 +101,49 @@ export default function LayoutEditor({ ctx, layout, onDone }: { ctx: WidgetConte
     window.addEventListener("pointerup", up);
   };
 
-  const submit = () =>
-    save.mutate(
-      {
-        tabs: tabs.map((t, i) => ({
-          title: t.title,
-          position: i,
-          is_default: t.is_default,
-          widgets: t.widgets.map((w, j) => ({ type: w.type, title: w.title, position: j, grid_x: w.grid_x, grid_y: w.grid_y, grid_w: w.grid_w, grid_h: w.grid_h, config: w.config })),
-        })),
-      },
-      { onSuccess: onDone },
-    );
+  const submit = () => {
+    const input: LayoutInput = {
+      tabs: tabs.map((t, i) => ({
+        title: t.title,
+        position: i,
+        is_default: t.is_default,
+        widgets: t.widgets.map((w, j) => ({ type: w.type, title: w.title, position: j, grid_x: w.grid_x, grid_y: w.grid_y, grid_w: w.grid_w, grid_h: w.grid_h, config: w.config })),
+      })),
+    };
+    setTrouble(null);
+    if (onSave) {
+      setSaving(true);
+      onSave(input)
+        .then(onDone)
+        .catch((e: Error) => setTrouble(e.message))
+        .finally(() => setSaving(false));
+    } else save.mutate(input, { onSuccess: onDone });
+  };
   const person = object.meta.name_singular === "person";
-  const available = WIDGET_TYPES.filter((t) => !t.since && (person || !["COMMITMENTS", "MEETINGS"].includes(t.type)));
-  const later = WIDGET_TYPES.filter((t) => t.since);
+  const available = kind === "dashboard" ? WIDGET_TYPES.filter((t) => DASHBOARD_TYPES.includes(t.type)) : WIDGET_TYPES.filter((t) => !t.since && !["TABLE", "IFRAME"].includes(t.type) && (person || !["COMMITMENTS", "MEETINGS"].includes(t.type)));
+  const later = kind === "dashboard" ? [] : WIDGET_TYPES.filter((t) => t.since);
   const pickedWidget = tab.widgets.find((w) => w.id === picked);
-  const mutationError = save.error ?? reset.error;
+  const mutationError = save.error ?? reset.error ?? (trouble ? new Error(trouble) : null);
+  const busy = save.isPending || saving;
 
   return (
     <div>
       <div className={styles.editBar} role="toolbar" aria-label="Layout editor">
-        <span className={styles.editTitle}>Editing the {object.meta.label_singular.toLowerCase()} page</span>
+        <span className={styles.editTitle}>{kind === "dashboard" ? "Editing the dashboard" : `Editing the ${object.meta.label_singular.toLowerCase()} page`}</span>
         <button type="button" className="btn btnSecondary btnCompact" aria-expanded={adding} onClick={() => setAdding(!adding)}>
           + Widget
         </button>
         <span className={styles.spacer} />
-        <DangerButton confirm="Back to the default page?" disabled={reset.isPending} onConfirm={() => reset.mutate(undefined, { onSuccess: onDone })}>
-          Reset to default
-        </DangerButton>
+        {kind === "record" && (
+          <DangerButton confirm="Back to the default page?" disabled={reset.isPending} onConfirm={() => reset.mutate(undefined, { onSuccess: onDone })}>
+            Reset to default
+          </DangerButton>
+        )}
         <button type="button" className="btn btnGhost btnCompact" onClick={onDone}>
           Cancel
         </button>
-        <button type="button" className="btn btnPrimary btnCompact" disabled={save.isPending} onClick={submit}>
-          {save.isPending ? "Saving…" : "Save"}
+        <button type="button" className="btn btnPrimary btnCompact" disabled={busy} onClick={submit}>
+          {busy ? "Saving…" : "Save"}
         </button>
       </div>
       {mutationError && (
@@ -181,7 +197,7 @@ export default function LayoutEditor({ ctx, layout, onDone }: { ctx: WidgetConte
           + Tab
         </button>
       </div>
-      {pickedWidget && <WidgetSettings object={object} widget={pickedWidget} onChange={(fn) => patchWidget(pickedWidget.id, fn)} onRemove={() => removeWidget(pickedWidget.id)} onClose={() => setPicked(null)} />}
+      {pickedWidget && <WidgetSettings slug={slug} object={object} onDashboard={kind === "dashboard"} widget={pickedWidget} onChange={(fn) => patchWidget(pickedWidget.id, fn)} onRemove={() => removeWidget(pickedWidget.id)} onClose={() => setPicked(null)} />}
       <div ref={grid} className={styles.grid}>
         {tab.widgets.map((w) => (
           <WidgetCard
@@ -230,7 +246,7 @@ const names = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is s
 
 /** A widget's settings: its title, and by type the fields shown, the relation and whether its
  *  table edits, or the text. */
-function WidgetSettings({ object, widget, onChange, onRemove, onClose }: { object: ObjectDef; widget: Widget; onChange: (fn: (w: Widget) => Widget) => void; onRemove: () => void; onClose: () => void }) {
+function WidgetSettings({ slug, object, onDashboard, widget, onChange, onRemove, onClose }: { slug: string; object: ObjectDef; onDashboard: boolean; widget: Widget; onChange: (fn: (w: Widget) => Widget) => void; onRemove: () => void; onClose: () => void }) {
   const config = configOf(widget);
   const set = (patch: Record<string, unknown>) => onChange((w) => ({ ...w, config: { ...configOf(w), ...patch } }));
   const all = object.fields.filter((f) => f.is_active && !f.is_system && f.type !== "POSITION" && hasColumns(f));
@@ -282,6 +298,9 @@ function WidgetSettings({ object, widget, onChange, onRemove, onClose }: { objec
           </div>
         </>
       )}
+      {widget.type === "CHART" && <ChartSettingsForm slug={slug} object={object} onDashboard={onDashboard} config={chartConfigOf(config)} set={(patch) => set(patch as Record<string, unknown>)} />}
+      {widget.type === "TABLE" && <TableSettingsForm slug={slug} config={config} set={set} />}
+      {widget.type === "IFRAME" && <IframeSettingsForm config={config} set={set} />}
       {widget.type === "RICH_TEXT" && (
         <div className={styles.settingsRow}>
           <label className={styles.fieldLabel} htmlFor="widget-text">
