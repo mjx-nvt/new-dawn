@@ -18,7 +18,7 @@ use crate::kernel::records::types::Json;
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 pub const NAME_MAX: usize = 255;
 /// A description saved again within this many minutes changes its newest version.
-const VERSION_MINUTES: i64 = 10;
+pub(crate) const VERSION_MINUTES: i64 = 10;
 
 fn invalid(message: impl Into<String>) -> anyhow::Error {
     anyhow!(AppError::invalid(message))
@@ -330,11 +330,15 @@ pub(crate) fn clean_day(text: Option<&str>) -> Result<Option<String>> {
 }
 
 /// The editor's document and its words; an empty document is none.
-fn clean_description(json: Option<&str>) -> Result<(Option<String>, String)> {
+pub(crate) fn clean_description(json: Option<&str>) -> Result<(Option<String>, String)> {
     let Some(json) = json.map(str::trim).filter(|j| !j.is_empty()) else { return Ok((None, String::new())) };
     let doc: Value = serde_json::from_str(json).map_err(|_| invalid("The description doesn't read"))?;
-    let text = words(&doc);
-    Ok(if text.trim().is_empty() && !json.contains("\"image\"") { (None, String::new()) } else { (Some(doc.to_string()), text) })
+    // Nothing but empty paragraphs is nothing; a picture, a divider, a table or a page's sub-page
+    // link is something, words or not (D-080).
+    let empty = doc.get("content").and_then(Value::as_array).is_none_or(|blocks| {
+        blocks.iter().all(|b| b.get("type").and_then(Value::as_str) == Some("paragraph") && b.get("content").and_then(Value::as_array).is_none_or(Vec::is_empty))
+    });
+    Ok(if empty { (None, String::new()) } else { (Some(doc.to_string()), words(&doc)) })
 }
 
 /// The words of an editor document, a line a block.
@@ -383,7 +387,7 @@ async fn default_state(pool: &SqlitePool, project_id: &str) -> Result<String> {
     }
 }
 
-async fn check_labels(pool: &SqlitePool, project_id: &str, labels: &[String]) -> Result<Vec<String>> {
+pub(super) async fn check_labels(pool: &SqlitePool, project_id: &str, labels: &[String]) -> Result<Vec<String>> {
     let known: Vec<(String,)> = sqlx::query_as("SELECT id FROM pm_label WHERE project_id = ?").bind(project_id).fetch_all(pool).await?;
     let mut kept = Vec::new();
     for l in labels {
@@ -931,7 +935,8 @@ pub async fn archive(pool: &SqlitePool, id: &str, archived: bool, actor: &str) -
 
 /// A project's items' folders (their files) — gone with the project.
 pub async fn delete_project_files(pool: &SqlitePool, folder: &str, project_id: &str) -> Result<Vec<PathBuf>> {
-    let ids: Vec<(String,)> = sqlx::query_as("SELECT id FROM pm_item WHERE project_id = ?").bind(project_id).fetch_all(pool).await?;
+    // Its items' and its pages' (D-080).
+    let ids: Vec<(String,)> = sqlx::query_as("SELECT id FROM pm_item WHERE project_id = ?1 UNION ALL SELECT id FROM pm_page WHERE project_id = ?1").bind(project_id).fetch_all(pool).await?;
     Ok(ids.into_iter().map(|(i,)| files_dir(folder, &i)).collect())
 }
 
@@ -985,21 +990,13 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
         actor,
     )
     .await?;
-    let from = files_dir(folder, &item.id);
     // The description's pictures, not the attachments (their rows stay with the original).
     let attached: Vec<(String,)> = sqlx::query_as("SELECT file FROM pm_attachment WHERE item_id = ?").bind(&item.id).fetch_all(pool).await?;
+    let attached: Vec<String> = attached.into_iter().map(|(f,)| f).collect();
+    let copied = copy_files(folder, &item.id, &made.id, &attached).await?;
     let mut tx = pool.begin().await?;
-    if from.is_dir() {
-        let to = files_dir(folder, &made.id);
-        tokio::fs::create_dir_all(&to).await.with_context(|| format!("couldn't make {}", to.display()))?;
-        let mut entries = tokio::fs::read_dir(&from).await?;
-        while let Some(e) = entries.next_entry().await? {
-            if e.file_type().await?.is_file() && !attached.iter().any(|(f,)| e.file_name().to_string_lossy() == f.as_str()) {
-                tokio::fs::copy(e.path(), to.join(e.file_name())).await.with_context(|| format!("couldn't copy {}", e.path().display()))?;
-            }
-        }
-        // The editor keeps a picture as an asset address with its path's slashes as %2F.
-        let (a, b) = (format!("pm%2F{}%2F", item.id), format!("pm%2F{}%2F", made.id));
+    if copied {
+        let (a, b) = picture_addresses(&item.id, &made.id);
         sqlx::query("UPDATE pm_item SET description_json = replace(description_json, ?, ?) WHERE id = ?").bind(&a).bind(&b).bind(&made.id).execute(&mut *tx).await?;
         sqlx::query("UPDATE pm_item_version SET description_json = replace(description_json, ?, ?) WHERE item_id = ?").bind(&a).bind(&b).bind(&made.id).execute(&mut *tx).await?;
     }
@@ -1090,6 +1087,30 @@ pub async fn restore_version(pool: &SqlitePool, version_id: &str, actor: &str) -
 
 // ── Files ──
 
+/// An owner's files (but `except`) copied into another's folder (a copied item's pictures, a
+/// duplicated page's, D-080); whether it had a folder.
+pub(crate) async fn copy_files(folder: &str, from: &str, to: &str, except: &[String]) -> Result<bool> {
+    let from = files_dir(folder, from);
+    if !from.is_dir() {
+        return Ok(false);
+    }
+    let to = files_dir(folder, to);
+    tokio::fs::create_dir_all(&to).await.with_context(|| format!("couldn't make {}", to.display()))?;
+    let mut entries = tokio::fs::read_dir(&from).await?;
+    while let Some(e) = entries.next_entry().await? {
+        if e.file_type().await?.is_file() && !except.iter().any(|f| e.file_name().to_string_lossy() == f.as_str()) {
+            tokio::fs::copy(e.path(), to.join(e.file_name())).await.with_context(|| format!("couldn't copy {}", e.path().display()))?;
+        }
+    }
+    Ok(true)
+}
+
+/// The editor keeps a picture as an asset address with its path's slashes as %2F: one owner's
+/// folder in it, and the other's.
+pub(crate) fn picture_addresses(from: &str, to: &str) -> (String, String) {
+    (format!("pm%2F{from}%2F"), format!("pm%2F{to}%2F"))
+}
+
 /// Under the workspace's `files/`, where the window may show and open files (the asset and opener
 /// scopes).
 pub(crate) fn files_dir(folder: &str, item: &str) -> PathBuf {
@@ -1107,11 +1128,16 @@ const FILE_MAX: usize = 50 * 1024 * 1024;
 
 pub async fn add_file_bytes(pool: &SqlitePool, folder: &str, item: &str, name: &str, bytes: &[u8]) -> Result<ItemFile> {
     get(pool, item).await?;
+    keep_bytes(folder, item, name, bytes).await
+}
+
+/// A file written into its owner's folder (an item's or a page's, D-080) under a fresh name.
+pub(crate) async fn keep_bytes(folder: &str, item: &str, name: &str, bytes: &[u8]) -> Result<ItemFile> {
     if bytes.is_empty() {
         return Err(invalid("An empty file"));
     }
     if bytes.len() > FILE_MAX {
-        return Err(invalid("A file kept with a work item is at most 50 MB"));
+        return Err(invalid("A file kept here is at most 50 MB"));
     }
     let dir = files_dir(folder, item);
     tokio::fs::create_dir_all(&dir).await.with_context(|| format!("couldn't make {}", dir.display()))?;
@@ -1122,13 +1148,18 @@ pub async fn add_file_bytes(pool: &SqlitePool, folder: &str, item: &str, name: &
 }
 
 pub async fn add_file(pool: &SqlitePool, folder: &str, item: &str, source: &Path) -> Result<ItemFile> {
+    let (name, bytes) = read_file(source).await?;
+    add_file_bytes(pool, folder, item, &name, &bytes).await
+}
+
+/// A file picked on this Mac: its name and bytes, at most 50 MB.
+pub(crate) async fn read_file(source: &Path) -> Result<(String, Vec<u8>)> {
     let meta = tokio::fs::metadata(source).await.with_context(|| format!("couldn't read {}", source.display()))?;
     if !meta.is_file() || meta.len() > FILE_MAX as u64 {
-        return Err(invalid("A file kept with a work item is a file of at most 50 MB"));
+        return Err(invalid("A file kept here is a file of at most 50 MB"));
     }
     let bytes = tokio::fs::read(source).await.with_context(|| format!("couldn't read {}", source.display()))?;
-    let name = source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
-    add_file_bytes(pool, folder, item, &name, &bytes).await
+    Ok((source.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into()), bytes))
 }
 
 #[cfg(test)]

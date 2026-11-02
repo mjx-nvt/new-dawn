@@ -68,9 +68,9 @@ export default function CrmNav({ slug, iconsOnly }: { slug: string | undefined; 
 
 function FavoriteLink({ favorite: p }: { favorite: Favorite }) {
   const mark = <span className={nav.mark}>{(p.label || "?").slice(0, 1).toUpperCase()}</span>;
-  // A starred cycle or module (D-079): its project's tab, opened on it.
-  if ((p.object === "pm-cycles" || p.object === "pm-modules") && p.view_id && p.record_id) {
-    const search = p.object === "pm-cycles" ? { tab: "cycles", cycle: p.view_id } : { tab: "modules", module: p.view_id };
+  // A starred cycle, module or page (D-079, D-080): its project's tab, opened on it.
+  if ((p.object === "pm-cycles" || p.object === "pm-modules" || p.object === "pm-pages") && p.view_id && p.record_id) {
+    const search = p.object === "pm-cycles" ? { tab: "cycles", cycle: p.view_id } : p.object === "pm-modules" ? { tab: "modules", module: p.view_id } : { tab: "pages", page: p.view_id };
     return (
       <Link to="/projects/$projectId" params={{ projectId: p.record_id }} search={search} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={`${p.label} · ${p.object_label}`}>
         {mark}

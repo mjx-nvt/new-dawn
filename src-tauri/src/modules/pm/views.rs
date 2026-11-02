@@ -250,12 +250,14 @@ pub async fn favorite(pool: &SqlitePool, id: &str, on: bool) -> Result<PmView> {
     get(pool, id).await
 }
 
-/// What the sidebar's Favorites hold of Projects: a view, a cycle (D-078) or a module (D-079).
+/// What the sidebar's Favorites hold of Projects: a view, a cycle (D-078), a module (D-079) or
+/// a page (D-080).
 #[derive(Clone, Copy)]
 pub(crate) enum Pin {
     View,
     Cycle,
     Module,
+    Page,
 }
 
 /// Starred (once, last) or not.
@@ -264,6 +266,7 @@ pub(crate) async fn pin(pool: &SqlitePool, what: Pin, id: &str, on: bool) -> Res
         Pin::View => "pm_view_id",
         Pin::Cycle => "pm_cycle_id",
         Pin::Module => "pm_module_id",
+        Pin::Page => "pm_page_id",
     };
     if on {
         let there: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT id FROM favorite WHERE {column} = ? AND deleted_at IS NULL"))).bind(id).fetch_optional(pool).await?;

@@ -91,6 +91,25 @@ _2026-11-02_
 
 ---
 
+## D-080 — Plane's pages: one editor with page blocks, versions as merged snapshots, a lock on the words, PDF through the print sheet
+_2026-11-02_
+
+**Context** (plan v4 §4.5, 0.11.7): Plane's project pages — the editor's blocks (text, headings 1–6, quote, callout, divider, numbered, bulleted and to-do lists, table, image, nested page, code with a language picker, Mermaid, emoji, text and background colours, the `/` menu, `@` mentions of work items), an outline, lock, archive, favorites, public or private, full screen, version history and export. Wiki, collections, page sharing, columns, embeds, publishing and live collaboration are Plane's paid or web parts.
+
+**Decision — the one editor grows page blocks** (D-063's TipTap, no new dependency): a page's editor turns on headings 4–6, a **callout** (an emoji and a colour: Info, Note, Warning, Success, Danger), **text and background colours** as marks carrying a colour's name (the stylesheet maps names to tokens, so dark mode and printing follow), a **code block's language** (a select while the caret is in one; Mermaid stays code — no diagram library), a **sub-page** block that opens the page it names (its name read live), and the **`/` menu** of all of them. `@` in a page searches work items, and a click on a mention opens the item in the peek. Emoji come from the Mac's own picker (⌃⌘Space). The item and CRM editors keep their blocks.
+
+**Decision — versions are merged snapshots** (0039 `pm_page_version`): each saved change of the name or the document keeps the page as it then is; the same hand's saves within ten minutes are one version (as an item's description, D-074). Restoring makes a version's name and document the page's again, as a version of its own.
+
+**Decision — a lock on the words, an archive on everything**: a locked page takes no edit of its name, emoji, document or labels, and no restore — its access, star, lock and archive still change. Archiving takes the sub-pages too and unstars them; an archived page is read-only, and only an archived page is deleted (Plane's), with its sub-pages and their files. Private and public are flags (one owner, D-073). A page's pictures live in its own folder, as a work item's.
+
+**Decision — PDF through the print sheet**: Export as PDF opens the Mac's print sheet for the window (`WebviewWindow::print`), where Save as PDF is; the print stylesheet shows the page alone, in the light palette (dark tokens are screen-only). Markdown is written by Rust from the document (headings, marks, lists, to-dos, quotes, callouts, code with its language, tables, pictures, mentions, sub-pages) to the file the save dialog names. The DOCX converters (D-024) stay for minutes, which have a template.
+
+**Where the owner sees it**: a project's **Pages** tab — All · Public · Private · Archived, Search, Sort (last updated, last created, name), Label and Favorites as filters, ★ first; **New page** (`N` or `D`) opens it. A page: its emoji and name (Untitled until named), the editor, Versions, Full screen (Escape leaves), ⋯ Lock, Make private, Duplicate, Export as Markdown, Export as PDF…, Archive (Restore and Delete when archived); beside it the Outline (a heading's line scrolls to it), Labels, the pages inside it (New sub-page) and who made it. A starred page is in the sidebar's Favorites.
+
+**Means for future work**: Power K (0.11.9) finds pages; Plane's API (0.11.11) serves them and their Markdown; the Projects agent (0.11.12) can draft a page through the same versions.
+
+---
+
 ## D-079 — Plane's modules: several a work item, Needs attention from dates and blockers, every Projects star a favorite row
 _2026-11-02_
 

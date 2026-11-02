@@ -247,7 +247,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0036 | `pm_view` (a project's or the workspace's; rules as JSON), `favorite.pm_view_id` (D-077) | 0.11.4 |
 | 0037 | `pm_cycle` (with a progress snapshot), `pm_cycle_item` (one cycle an item; D-078) | 0.11.5 |
 | 0038 | `pm_module`, `pm_module_item` (several modules an item), `pm_module_member`, `pm_module_link`; `favorite.pm_cycle_id` / `pm_module_id` (cycle stars copied; D-079) | 0.11.6 |
-| 0039 | `page`, `page_label`, `page_version` | 0.11.7 |
+| 0039 | `pm_page` (sub-pages, private and locked flags), `pm_page_label`, `pm_page_version` (merged snapshots); `favorite.pm_page_id` (D-080) | 0.11.7 |
 | 0040 | `intake`, `intake_issue` | 0.11.8 |
 | 0041 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
 | 0042 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
@@ -407,7 +407,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.7 — Pages (3 sittings)
 - **Same as:** §4.5 (pages).
-- **Data:** 0039.
+- **Data:** 0039 (`pm_page`, `pm_page_label`, `pm_page_version`; pages as favorite rows).
 - **Screens and flows:** Pages list (search, sort, filters, favorites, archived); the editor with the block set (text, headings, quote, callout with icon and colour, divider, lists and to-dos, table, image, nested page, code with language picker, Mermaid if allowed, emoji, colours, `/` menu, `@` mentions of work items), outline, lock, public / private flag, full screen, version history (local snapshots on save), archive, export (Markdown / PDF through the existing converters).
 - **Done when:** a page with a table, a code block and a mention opens the mentioned item from the mention; a locked page refuses edits; a restored version replaces the text.
 

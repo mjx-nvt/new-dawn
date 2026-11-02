@@ -10,6 +10,7 @@ import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from ".
 import Archived from "./items/Archived";
 import Cycles from "./items/Cycles";
 import Modules from "./items/Modules";
+import Pages from "./items/Pages";
 import Views from "./items/Views";
 import WorkItems from "./items/WorkItems";
 import ProjectSettings from "./ProjectSettings";
@@ -20,10 +21,9 @@ const route = getRouteApi("/shell/projects/$projectId");
 /** An IME is still writing (Vietnamese): Enter confirms the composition, not the field. */
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
-/** The parts of a project Plane has that later releases fill (pages 0.11.7, intake 0.11.8):
- *  their structure now. */
+/** The parts of a project Plane has that later releases fill (intake 0.11.8): their structure
+ *  now. */
 const PLANE_TABS: Record<string, { title: string; hint: string; columns: string[]; none: string }> = {
-  pages: { title: "Pages", hint: "Documents kept beside the work.", columns: ["Page", "Updated", "Owner"], none: "No pages yet" },
   intake: { title: "Intake", hint: "Requests to triage before they become work items.", columns: ["Request", "Status", "Received"], none: "No requests yet" },
 };
 
@@ -111,7 +111,7 @@ export default function ProjectPage() {
             <p id="delete-project-title" className={styles.confirmTitle}>
               Delete “{p.name}”?
             </p>
-            <p className="fieldHint">Its risks, decisions, notes, history and waiting updates go with it, and its Plane side — states, labels, estimates, work items. Its meetings stay.</p>
+            <p className="fieldHint">Its risks, decisions, notes, history and waiting updates go with it, and its Plane side — states, labels, estimates, work items, cycles, modules and pages. Its meetings stay.</p>
           </div>
           <div className={styles.confirmActions}>
             <button type="button" className="btn btnGhost btnCompact" autoFocus onClick={() => setConfirmDelete(false)}>
@@ -143,6 +143,7 @@ export default function ProjectPage() {
       {tab === "views" && pm && slug && <Views slug={slug} project={pm} />}
       {tab === "cycles" && pm && slug && <Cycles slug={slug} project={pm} />}
       {tab === "modules" && pm && slug && <Modules slug={slug} project={pm} />}
+      {tab === "pages" && pm && slug && <Pages slug={slug} project={pm} />}
       {PLANE_TABS[tab] && <PlaneTab {...PLANE_TABS[tab]} />}
       {tab === "overview" && (
       <>

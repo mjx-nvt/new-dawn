@@ -12,6 +12,7 @@ use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
 use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
 use crate::modules::pm::modules::{self, ModuleDetails, ModuleInput, ModulePatch, PmModule};
+use crate::modules::pm::pages::{self, PageInput, PagePatch, PmPage, PmPageDoc, PmPageVersion};
 use crate::modules::pm::display::{self, PmDisplay};
 use crate::modules::pm::drafts::{self, PmDraft};
 use crate::modules::pm::filters::PmRule;
@@ -651,4 +652,100 @@ pub async fn add_pm_module_link(hub: State<'_, WorkspaceHub>, slug: String, id: 
 #[specta::specta]
 pub async fn remove_pm_module_link(hub: State<'_, WorkspaceHub>, slug: String, link_id: String) -> Result<(), AppError> {
     Ok(modules::remove_link(&hub.pool(&slug)?, &link_id).await?)
+}
+
+// ── 0.11.7 (D-080): pages ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_pages(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<Vec<PmPage>, AppError> {
+    Ok(pages::list(&hub.pool(&slug)?, &project_id).await?)
+}
+
+/// A page with its document.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmPageDoc, AppError> {
+    Ok(pages::get_doc(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_pm_page(hub: State<'_, WorkspaceHub>, slug: String, input: PageInput) -> Result<PmPage, AppError> {
+    Ok(pages::create(&hub.pool(&slug)?, input, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: PagePatch) -> Result<PmPage, AppError> {
+    Ok(pages::update(&hub.pool(&slug)?, &id, patch, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String, archived: bool) -> Result<PmPage, AppError> {
+    Ok(pages::archive(&hub.pool(&slug)?, &id, archived).await?)
+}
+
+/// An archived page, with its sub-pages and their files.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(pages::delete(&hub.pool(&slug)?, &folder, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn favorite_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String, on: bool) -> Result<PmPage, AppError> {
+    Ok(pages::favorite(&hub.pool(&slug)?, &id, on).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn duplicate_pm_page(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmPage, AppError> {
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(pages::duplicate(&hub.pool(&slug)?, &folder, &id, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_page_versions(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<Vec<PmPageVersion>, AppError> {
+    Ok(pages::versions(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_pm_page_version(hub: State<'_, WorkspaceHub>, slug: String, version_id: String) -> Result<PmPage, AppError> {
+    Ok(pages::restore(&hub.pool(&slug)?, &version_id, ME).await?)
+}
+
+/// A picture for a page, from a file on this Mac.
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_page_file(hub: State<'_, WorkspaceHub>, slug: String, page_id: String, path: String) -> Result<ItemFile, AppError> {
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(pages::add_file(&hub.pool(&slug)?, &folder, &page_id, Path::new(&path)).await?)
+}
+
+/// A picture pasted into a page, as bytes.
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_page_file_bytes(hub: State<'_, WorkspaceHub>, slug: String, page_id: String, name: String, bytes: Vec<u8>) -> Result<ItemFile, AppError> {
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(pages::add_file_bytes(&hub.pool(&slug)?, &folder, &page_id, &name, &bytes).await?)
+}
+
+/// A page as Markdown, into the file the save dialog named.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_pm_page_markdown(hub: State<'_, WorkspaceHub>, slug: String, id: String, path: String) -> Result<(), AppError> {
+    Ok(pages::export_markdown(&hub.pool(&slug)?, &id, Path::new(&path)).await?)
+}
+
+/// The Mac's print sheet for the window asking (Save as PDF is in it).
+#[tauri::command]
+#[specta::specta]
+pub async fn print_window(window: tauri::WebviewWindow) -> Result<(), AppError> {
+    window.print().map_err(|e| AppError::from(anyhow::anyhow!(e)))
 }

@@ -103,7 +103,8 @@
   --status-negative-tint: rgba(220, 38, 38, 0.12);
 }
 
-@media (prefers-color-scheme: dark) {
+/* Screen only: a printed page (a page's PDF, D-080) is in the light palette. */
+@media screen and (prefers-color-scheme: dark) {
   :root {
     --ink: #F2F4F8;
     --ink-2: #B9C0CC;

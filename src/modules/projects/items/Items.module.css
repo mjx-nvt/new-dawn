@@ -1219,3 +1219,147 @@
 .toolbar .search {
   width: 240px;
 }
+
+/* Pages (0.11.7) */
+.pageTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toolbar .pageEmoji,
+.pageTitle .pageEmoji {
+  width: 52px;
+  text-align: center;
+  font-size: var(--t-xl);
+}
+
+.pageTitle .pageName {
+  flex: 1;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  border-color: transparent;
+  background: transparent;
+}
+
+.pageTitle .pageName:hover,
+.pageTitle .pageName:focus {
+  border-color: var(--hair);
+}
+
+.outlineRow {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlineRow:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.outlineRow:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+/* Full screen: the page over the window below the toolbar, Escape to leave. */
+.fullScreen {
+  position: fixed;
+  inset: 52px 0 0 0;
+  z-index: 20;
+  overflow: auto;
+  padding: var(--space-6) max(var(--space-7), calc((100% - 880px) / 2));
+  background: var(--canvas);
+}
+
+.pageVersionsSheet {
+  width: min(960px, 92vw);
+}
+
+.pageVersions {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 320px;
+}
+
+.pageVersionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  max-height: 56vh;
+  overflow: auto;
+}
+
+.pageVersionRow {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.pageVersionRow:hover {
+  background: var(--surface-2);
+}
+
+.pageVersionRow[aria-current="true"] {
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+}
+
+.pageVersionRow:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.pageVersionPreview {
+  min-width: 0;
+  max-height: 56vh;
+  overflow: auto;
+}
+
+/* A page's PDF (the print sheet's Save as PDF): the page alone. */
+@media print {
+  :global(body *) {
+    visibility: hidden;
+  }
+
+  .printable,
+  .printable * {
+    visibility: visible;
+  }
+
+  .printable {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+
+  /* The window's fixed heights and scrolling would print one sheet: a long page runs on. */
+  :global(html),
+  :global(body),
+  :global(#root),
+  :global(.content-root) {
+    height: auto;
+    overflow: visible;
+  }
+
+  .fullScreen {
+    position: static;
+    overflow: visible;
+    padding: 0;
+  }
+}

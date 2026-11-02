@@ -292,6 +292,26 @@ export const commands = {
 	pmModuleDetails: (slug: string, id: string) => typedError<ModuleDetails, AppError>(__TAURI_INVOKE("pm_module_details", { slug, id })),
 	addPmModuleLink: (slug: string, id: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("add_pm_module_link", { slug, id, url, title })),
 	removePmModuleLink: (slug: string, linkId: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_module_link", { slug, linkId })),
+	listPmPages: (slug: string, projectId: string) => typedError<PmPage_Serialize[], AppError>(__TAURI_INVOKE("list_pm_pages", { slug, projectId })),
+	/**  A page with its document. */
+	getPmPage: (slug: string, id: string) => typedError<PmPageDoc_Serialize, AppError>(__TAURI_INVOKE("get_pm_page", { slug, id })),
+	createPmPage: (slug: string, input: PageInput_Deserialize) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("create_pm_page", { slug, input })),
+	updatePmPage: (slug: string, id: string, patch: PagePatch_Deserialize) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("update_pm_page", { slug, id, patch })),
+	archivePmPage: (slug: string, id: string, archived: boolean) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("archive_pm_page", { slug, id, archived })),
+	/**  An archived page, with its sub-pages and their files. */
+	deletePmPage: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_page", { slug, id })),
+	favoritePmPage: (slug: string, id: string, on: boolean) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("favorite_pm_page", { slug, id, on })),
+	duplicatePmPage: (slug: string, id: string) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("duplicate_pm_page", { slug, id })),
+	listPmPageVersions: (slug: string, id: string) => typedError<PmPageVersion_Serialize[], AppError>(__TAURI_INVOKE("list_pm_page_versions", { slug, id })),
+	restorePmPageVersion: (slug: string, versionId: string) => typedError<PmPage_Serialize, AppError>(__TAURI_INVOKE("restore_pm_page_version", { slug, versionId })),
+	/**  A picture for a page, from a file on this Mac. */
+	addPmPageFile: (slug: string, pageId: string, path: string) => typedError<ItemFile, AppError>(__TAURI_INVOKE("add_pm_page_file", { slug, pageId, path })),
+	/**  A picture pasted into a page, as bytes. */
+	addPmPageFileBytes: (slug: string, pageId: string, name: string, bytes: number[]) => typedError<ItemFile, AppError>(__TAURI_INVOKE("add_pm_page_file_bytes", { slug, pageId, name, bytes })),
+	/**  A page as Markdown, into the file the save dialog named. */
+	exportPmPageMarkdown: (slug: string, id: string, path: string) => typedError<null, AppError>(__TAURI_INVOKE("export_pm_page_markdown", { slug, id, path })),
+	/**  The Mac's print sheet for the window asking (Save as PDF is in it). */
+	printWindow: () => typedError<null, AppError>(__TAURI_INVOKE("print_window")),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -3250,6 +3270,53 @@ export type Page = {
 	total: number,
 };
 
+export type PageInput = PageInput_Serialize | PageInput_Deserialize;
+
+export type PageInput_Deserialize = {
+	project_id: string,
+	/**  Made inside a page (a sub-page). */
+	parent_id?: string | null,
+	name: string,
+	emoji: string,
+	is_private: boolean,
+	labels: string[],
+};
+
+export type PageInput_Serialize = {
+	project_id: string,
+	/**  Made inside a page (a sub-page). */
+	parent_id: string | null,
+	name: string,
+	emoji: string,
+	is_private: boolean,
+	labels: string[],
+};
+
+/**  The edits; a field left out stays. The document is the editor's JSON text. */
+export type PagePatch = PagePatch_Serialize | PagePatch_Deserialize;
+
+/**  The edits; a field left out stays. The document is the editor's JSON text. */
+export type PagePatch_Deserialize = {
+	name?: string | null,
+	emoji?: string | null,
+	description?: string | null,
+	is_private?: boolean | null,
+	is_locked?: boolean | null,
+	labels?: string[] | null,
+	sort_order?: number | null,
+};
+
+/**  The edits; a field left out stays. The document is the editor's JSON text. */
+export type PagePatch_Serialize = {
+	name: string | null,
+	emoji: string | null,
+	description: string | null,
+	is_private: boolean | null,
+	is_locked: boolean | null,
+	labels: string[] | null,
+	sort_order: number | null,
+};
+
 /**  A blind pair as the owner sees it. */
 export type Pair = Pair_Serialize | Pair_Deserialize;
 
@@ -3735,6 +3802,87 @@ export type PmModule_Serialize = {
 	items: number,
 	done: number,
 	cancelled: number,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmPage = PmPage_Serialize | PmPage_Deserialize;
+
+/**  A page with its document. */
+export type PmPageDoc = PmPageDoc_Serialize | PmPageDoc_Deserialize;
+
+/**  A page with its document. */
+export type PmPageDoc_Deserialize = {
+	page: PmPage_Deserialize,
+	description?: Json | null,
+};
+
+/**  A page with its document. */
+export type PmPageDoc_Serialize = {
+	page: PmPage_Serialize,
+	description: Json | null,
+};
+
+export type PmPageVersion = PmPageVersion_Serialize | PmPageVersion_Deserialize;
+
+export type PmPageVersion_Deserialize = {
+	id: string,
+	name: string,
+	description?: Json | null,
+	description_text: string,
+	created_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmPageVersion_Serialize = {
+	id: string,
+	name: string,
+	description: Json | null,
+	description_text: string,
+	created_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmPage_Deserialize = {
+	id: string,
+	project_id: string,
+	/**  Its page, when it is a sub-page. */
+	parent_id?: string | null,
+	name: string,
+	emoji: string,
+	is_private: boolean,
+	is_locked: boolean,
+	labels: string[],
+	archived_at?: string | null,
+	/**  In the sidebar's Favorites. */
+	is_favorite: boolean,
+	sub_pages: number,
+	sort_order: number | null,
+	created_by: string,
+	updated_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmPage_Serialize = {
+	id: string,
+	project_id: string,
+	/**  Its page, when it is a sub-page. */
+	parent_id: string | null,
+	name: string,
+	emoji: string,
+	is_private: boolean,
+	is_locked: boolean,
+	labels: string[],
+	archived_at: string | null,
+	/**  In the sidebar's Favorites. */
+	is_favorite: boolean,
+	sub_pages: number,
+	sort_order: number | null,
+	created_by: string,
+	updated_by: string,
 	created_at: string,
 	updated_at: string,
 };

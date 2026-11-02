@@ -181,3 +181,67 @@
   background: var(--focus);
   color: var(--on-focus);
 }
+
+/* A page's blocks (0.11.7, D-080): callouts, colours, sub-pages, the toolbar's selects. */
+.pick {
+  width: auto;
+  max-width: 140px;
+}
+.callout {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  border-left: 3px solid var(--chart-8);
+  background: var(--surface-2);
+}
+.callout[data-color="blue"] { border-left-color: var(--chart-1); }
+.callout[data-color="yellow"] { border-left-color: var(--chart-4); background: var(--status-warning-tint); }
+.callout[data-color="green"] { border-left-color: var(--chart-3); background: var(--status-positive-tint); }
+.callout[data-color="red"] { border-left-color: var(--chart-6); background: var(--status-negative-tint); }
+.calloutEmoji {
+  flex: none;
+  user-select: none;
+}
+.calloutBody {
+  flex: 1;
+  min-width: 0;
+}
+.calloutBody > :first-child { margin-top: 0; }
+.calloutBody > :last-child { margin-bottom: 0; }
+.textColor[data-text-color="gray"] { color: var(--ink-3); }
+.textColor[data-text-color="red"] { color: var(--status-negative); }
+.textColor[data-text-color="orange"] { color: var(--primary-text); }
+.textColor[data-text-color="yellow"] { color: var(--status-warning); }
+.textColor[data-text-color="green"] { color: var(--status-positive); }
+.textColor[data-text-color="blue"] { color: var(--chart-1); }
+.textColor[data-text-color="purple"] { color: var(--chart-7); }
+.backColor { border-radius: var(--radius-chip); padding: 0 2px; }
+.backColor[data-back-color="gray"] { background: var(--surface-2); }
+.backColor[data-back-color="red"] { background: var(--status-negative-tint); }
+.backColor[data-back-color="orange"] { background: var(--primary-tint-soft); }
+.backColor[data-back-color="yellow"] { background: var(--status-warning-tint); }
+.backColor[data-back-color="green"] { background: var(--status-positive-tint); }
+.pageLink { margin: var(--space-1) 0; }
+.pageLinkButton {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  border: 0.5px solid var(--hair);
+  color: var(--ink);
+  font-weight: 500;
+  cursor: pointer;
+}
+.pageLinkButton:hover { background: var(--surface-2); }
+.pageLinkButton:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
+
+@media print {
+  .toolbar { display: none; }
+  .editing { border: 0; background: transparent; }
+}

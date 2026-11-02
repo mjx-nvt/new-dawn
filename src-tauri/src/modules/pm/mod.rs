@@ -14,6 +14,7 @@ pub mod filters;
 pub mod inbox;
 pub mod items;
 pub mod modules;
+pub mod pages;
 pub mod relations;
 pub mod settings;
 pub mod views;

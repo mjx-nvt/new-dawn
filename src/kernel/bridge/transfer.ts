@@ -10,7 +10,7 @@ export type { ColumnMap, ExportReport, FieldChoice, ImportFile, ImportReport, Pr
 
 /** A dev check can't drive the native dialogs: in development, a path set on the window stands
  *  in for the file picked or the place to save. */
-function devPath(key: "__newdawnDevFile" | "__newdawnDevSave"): string | undefined {
+export function devPath(key: "__newdawnDevFile" | "__newdawnDevSave"): string | undefined {
   return import.meta.env.DEV ? (window as unknown as Record<string, string | undefined>)[key] : undefined;
 }
 

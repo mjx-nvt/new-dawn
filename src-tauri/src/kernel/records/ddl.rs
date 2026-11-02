@@ -485,8 +485,8 @@ pub async fn create_object(pool: &SqlitePool, input: ObjectInput) -> Result<Obje
             return Err(invalid(format!("An object named “{taken}” exists")));
         }
     }
-    // Projects' own favorite columns (D-077, D-079) are no custom object's link column.
-    if ["pm_view_id", "pm_cycle_id", "pm_module_id"].contains(&format!("{}_id", snake(&name)).as_str()) {
+    // Projects' own favorite columns (D-077, D-079, D-080) are no custom object's link column.
+    if ["pm_view_id", "pm_cycle_id", "pm_module_id", "pm_page_id"].contains(&format!("{}_id", snake(&name)).as_str()) {
         return Err(invalid(format!("“{label_singular}” is a name New Dawn uses")));
     }
     let id = uuid::Uuid::now_v7().to_string();

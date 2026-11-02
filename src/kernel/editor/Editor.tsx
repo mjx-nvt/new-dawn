@@ -8,11 +8,12 @@ import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import { EditorContent, useEditor, type Editor as TipTapEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { addAttachment, addAttachmentBytes, pickFiles, type Attached } from "../bridge/files";
 import { searchRecords, type Hit } from "../bridge/records";
 import styles from "./Editor.module.css";
+import { menuList } from "./menu";
+import { BACK_COLORS, BackColor, CALLOUTS, Callout, LANGUAGES, PageLink, PageLinks, SlashMenu, TEXT_COLORS, TextColor, type SlashItem } from "./pageBlocks";
 import { richContent } from "./plain";
 
 /** Where a picture pasted or picked in the editor is kept: as an attachment of this record —
@@ -25,6 +26,20 @@ export interface EditorHome {
   files?: { add: (path: string) => Promise<Attached | null>; addBytes: (name: string, bytes: Uint8Array) => Promise<Attached | null> };
 }
 
+/** A page's editor (D-080): its sub-pages — made from the `/` menu, named and opened. */
+export interface PageExtras {
+  newSubPage: () => Promise<{ id: string; title: string } | null>;
+  title: (id: string) => string | undefined;
+  open: (id: string) => void;
+}
+
+/** `@` mentions from elsewhere than the CRM's records (a page's: work items), and what a click
+ *  on one opens. */
+export interface MentionSource {
+  search: (query: string) => Promise<Hit[]>;
+  open: (object: string, id: string) => void;
+}
+
 interface Props {
   value: unknown;
   /** The document as JSON text, debounced and on blur; only when it changed. */
@@ -32,6 +47,10 @@ interface Props {
   placeholder?: string;
   readOnly?: boolean;
   home: EditorHome;
+  /** The page blocks: headings 1–6, callouts, colours, a code block's language, the `/` menu,
+   *  sub-pages. */
+  page?: PageExtras;
+  mentions?: MentionSource;
 }
 
 /** A link's scheme, kept apart from the host so the localhost-only check reads no URL here. */
@@ -42,13 +61,15 @@ const PASTE_LIMIT = 20 * 1024 * 1024;
 /** The rich text editor (D-063, 0.10.6): TipTap with Twenty's blocks — headings, lists, to-dos,
  *  quotes, code, tables, images, links — and `@` mentions of records. The document is stored
  *  as JSON; `richPlain` reads its words. */
-export default function Editor({ value, onChange, placeholder, readOnly, home }: Props) {
+export default function Editor({ value, onChange, placeholder, readOnly, home, page, mentions }: Props) {
   const queryClient = useQueryClient();
   const saved = useRef<string | null>(null);
   const timer = useRef<number | null>(null);
   const live = useRef<TipTapEditor | null>(null);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [trouble, setTrouble] = useState<string | null>(null);
+  // The `/` menu's blocks, read when it opens (they close over the latest props).
+  const slash = useRef<SlashItem[]>([]);
   const flush = (e: TipTapEditor) => {
     if (timer.current) {
       window.clearTimeout(timer.current);
@@ -68,7 +89,7 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
     editable: !readOnly,
     shouldRerenderOnTransaction: true,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true } }),
+      StarterKit.configure({ heading: { levels: page ? [1, 2, 3, 4, 5, 6] : [1, 2, 3] }, link: { openOnClick: false, autolink: true } }),
       Placeholder.configure({ placeholder: placeholder ?? "Write…" }),
       Image.configure({ inline: false, allowBase64: false }),
       Table.configure({ resizable: false }),
@@ -77,20 +98,26 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
       TableCell,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Mention.configure({
+      // A mention keeps what it names (a record's object, or "pm-items"), so a click can open it.
+      Mention.extend({
+        addAttributes() {
+          return { ...this.parent?.(), object: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute("data-object"), renderHTML: () => ({}) } };
+        },
+      }).configure({
         HTMLAttributes: { class: styles.mention },
         renderText: ({ node }) => `@${String(node.attrs.label ?? node.attrs.id)}`,
         renderHTML: ({ node }) => ["span", { class: styles.mention, "data-id": String(node.attrs.id), "data-object": String(node.attrs.object ?? "") }, `@${String(node.attrs.label ?? node.attrs.id)}`],
         suggestion: {
           char: "@",
-          items: ({ query }) => searchRecords(home.slug, query, 8),
+          items: ({ query }) => (mentions ? mentions.search(query) : searchRecords(home.slug, query, 8)),
           command: ({ editor: e, range, props }) => {
             const hit = props as unknown as Hit;
             e.chain().focus().insertContentAt(range, [{ type: "mention", attrs: { id: hit.record_id, label: hit.label, object: hit.object_plural } }, { type: "text", text: " " }]).run();
           },
-          render: mentionList,
+          render: menuList<Hit>((hit) => (hit.object_plural === "pm-items" ? hit.label : `${hit.label || "Unnamed"} · ${hit.object_plural}`), mentions ? "No work item" : "No record"),
         },
       }),
+      ...(page ? [Callout, TextColor, BackColor, PageLink, SlashMenu.configure({ items: () => slash.current })] : []),
     ],
     content: richContent(value),
     // The baseline: what is on the page now — a blur without a change saves nothing.
@@ -124,7 +151,14 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
   // Another writer changed the body (an agent, a restore): follow it unless it is what we saved.
   useEffect(() => {
     if (!editor) return;
-    const incoming = JSON.stringify(richContent(value));
+    // In the editor's own key order and defaults (the app hands JSON with its keys sorted), so a
+    // refetch of what was just saved is no change.
+    let incoming: string;
+    try {
+      incoming = JSON.stringify(editor.schema.nodeFromJSON(richContent(value)).toJSON());
+    } catch {
+      incoming = JSON.stringify(richContent(value));
+    }
     if (incoming === saved.current || editor.isFocused) return;
     saved.current = incoming;
     editor.commands.setContent(richContent(value), { emitUpdate: false });
@@ -162,6 +196,52 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
         for (const path of paths) attached(await (home.files ? home.files.add : (path: string) => addAttachment(home.slug, home.object, home.recordId, path))(path), editor);
       })
       .catch((e: Error) => setTrouble(e.message));
+  if (page) {
+    const block = (label: string, run: SlashItem["run"]): SlashItem => ({ label, run });
+    slash.current = [
+      block("Text", (e, r) => e.chain().focus().deleteRange(r).setParagraph().run()),
+      ...([1, 2, 3, 4, 5, 6] as const).map((level) => block(`Heading ${level}`, (e, r) => e.chain().focus().deleteRange(r).setHeading({ level }).run())),
+      block("Bulleted list", (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run()),
+      block("Numbered list", (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run()),
+      block("To-do list", (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run()),
+      block("Quote", (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run()),
+      ...CALLOUTS.map((c) => block(`Callout · ${c.label}`, (e, r) => e.chain().focus().deleteRange(r).wrapIn("callout", { emoji: c.emoji, color: c.color }).run())),
+      block("Divider", (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run()),
+      block("Table", (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()),
+      block("Code", (e, r) => e.chain().focus().deleteRange(r).setCodeBlock().run()),
+      block("Mermaid diagram (code)", (e, r) => e.chain().focus().deleteRange(r).setCodeBlock({ language: "mermaid" }).run()),
+      block("Picture", (e, r) => {
+        e.chain().focus().deleteRange(r).run();
+        void pickPictures();
+      }),
+      block("Page (a sub-page)", (e, r) => {
+        e.chain().focus().deleteRange(r).run();
+        void page
+          .newSubPage()
+          .then((made) => made && e.chain().focus().insertContent({ type: "pageLink", attrs: { id: made.id, title: made.title } }).run())
+          .catch((err: Error) => setTrouble(err.message));
+      }),
+      block("Mention a work item", (e, r) => e.chain().focus().deleteRange(r).insertContent("@").run()),
+    ];
+  }
+  const inCallout = page && editor.isActive("callout");
+  const inCode = page && editor.isActive("codeBlock");
+  const pick = (label: string, value: string, options: [string, string][], apply: (v: string) => void) => (
+    <select className={`input ${styles.pick}`} aria-label={label} title={label} value={value} disabled={readOnly} onMouseDown={(e) => e.stopPropagation()} onChange={(e) => apply(e.target.value)}>
+      {options.map(([v, text]) => (
+        <option key={v} value={v}>
+          {text}
+        </option>
+      ))}
+    </select>
+  );
+  const named = (c: string) => c.charAt(0).toUpperCase() + c.slice(1);
+  // A click on a mention opens what it names (a page's work items).
+  const openMention = (e: ReactMouseEvent) => {
+    const hit = (e.target as HTMLElement).closest<HTMLElement>("[data-id][data-object]");
+    // A page's mentions are work items (ones written before they kept their object too).
+    if (mentions && hit?.dataset.id) mentions.open(hit.dataset.object || "pm-items", hit.dataset.id);
+  };
   return (
     <div className={readOnly ? styles.editor : `${styles.editor} ${styles.editing}`}>
       {!readOnly && (
@@ -182,6 +262,24 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
           <span className={styles.gap} />
           {tool("Table", editor.isActive("table"), () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), "⊞")}
           {tool("Picture", false, () => void pickPictures(), "🖼")}
+          {page && (
+            <>
+              <span className={styles.gap} />
+              {pick("Text colour", String(editor.getAttributes("textColor").color ?? ""), [["", "Text colour"], ...TEXT_COLORS.map((c): [string, string] => [c, named(c)])], (c) => (c ? editor.chain().focus().setMark("textColor", { color: c }).run() : editor.chain().focus().unsetMark("textColor").run()))}
+              {pick("Background", String(editor.getAttributes("backColor").color ?? ""), [["", "Background"], ...BACK_COLORS.map((c): [string, string] => [c, named(c)])], (c) => (c ? editor.chain().focus().setMark("backColor", { color: c }).run() : editor.chain().focus().unsetMark("backColor").run()))}
+              {inCallout &&
+                pick(
+                  "Callout",
+                  CALLOUTS.find((c) => c.emoji === editor.getAttributes("callout").emoji)?.label ?? "Info",
+                  CALLOUTS.map((c): [string, string] => [c.label, `${c.emoji} ${c.label}`]),
+                  (label) => {
+                    const c = CALLOUTS.find((x) => x.label === label);
+                    if (c) editor.chain().focus().updateAttributes("callout", { emoji: c.emoji, color: c.color }).run();
+                  },
+                )}
+              {inCode && pick("Language", String(editor.getAttributes("codeBlock").language ?? ""), LANGUAGES.map((l): [string, string] => [l, l ? named(l) : "Plain text"]), (language) => editor.chain().focus().updateAttributes("codeBlock", { language: language || null }).run())}
+            </>
+          )}
           {linkDraft === null ? (
             tool("Link", editor.isActive("link"), () => setLinkDraft(String(editor.getAttributes("link").href ?? "")), "🔗")
           ) : (
@@ -194,14 +292,20 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
               onChange={(e) => setLinkDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") setLink();
-                if (e.key === "Escape") setLinkDraft(null);
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setLinkDraft(null);
+                }
               }}
               onBlur={setLink}
             />
           )}
         </div>
       )}
-      <EditorContent editor={editor} className={styles.content} />
+      <PageLinks.Provider value={page ? { title: page.title, open: page.open } : null}>
+        {/* A click on a mention opens what it names. */}
+        <EditorContent editor={editor} className={styles.content} onClick={openMention} />
+      </PageLinks.Provider>
       {trouble && (
         <p className="formError" role="alert">
           {trouble}
@@ -215,87 +319,4 @@ async function pasteImage(file: File, home: EditorHome): Promise<Attached | null
   const bytes = new Uint8Array(await file.arrayBuffer());
   const name = file.name && file.name !== "image.png" ? file.name : `Pasted ${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.${file.type.split("/")[1] || "png"}`;
   return (home.files ? home.files.addBytes : (name: string, bytes: Uint8Array) => addAttachmentBytes(home.slug, home.object, home.recordId, name, bytes))(name, bytes);
-}
-
-/** The `@` list: a glass menu under the caret, arrows and Enter pick, Escape closes. Plain DOM,
- *  as TipTap's suggestion drives it imperatively. */
-function mentionList() {
-  let root: HTMLDivElement | null = null;
-  let items: Hit[] = [];
-  let selected = 0;
-  let command: ((hit: Hit) => void) | null = null;
-  const paint = () => {
-    if (!root) return;
-    root.innerHTML = "";
-    if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "ghostText";
-      empty.textContent = "No record";
-      root.appendChild(empty);
-      return;
-    }
-    items.forEach((hit, i) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.setAttribute("role", "menuitem");
-      button.className = i === selected ? `menuItem ${styles.mentionItemSelected}` : "menuItem";
-      button.textContent = `${hit.label || "Unnamed"} · ${hit.object_plural}`;
-      button.addEventListener("mousedown", (e) => e.preventDefault());
-      button.addEventListener("click", () => command?.(hit));
-      root?.appendChild(button);
-    });
-  };
-  const place = (clientRect: SuggestionProps["clientRect"]) => {
-    const rect = clientRect?.();
-    if (!root || !rect) return;
-    root.style.left = `${rect.left}px`;
-    root.style.top = `${rect.bottom + 4}px`;
-  };
-  return {
-    onStart: (props: SuggestionProps) => {
-      root = document.createElement("div");
-      root.className = `glass menu ${styles.mentionMenu}`;
-      root.setAttribute("role", "menu");
-      document.body.appendChild(root);
-      items = props.items as Hit[];
-      selected = 0;
-      command = (hit) => props.command(hit);
-      paint();
-      place(props.clientRect);
-    },
-    onUpdate: (props: SuggestionProps) => {
-      items = props.items as Hit[];
-      selected = Math.min(selected, Math.max(0, items.length - 1));
-      command = (hit) => props.command(hit);
-      paint();
-      place(props.clientRect);
-    },
-    onKeyDown: (props: SuggestionKeyDownProps) => {
-      if (props.event.key === "ArrowDown") {
-        selected = items.length ? (selected + 1) % items.length : 0;
-        paint();
-        return true;
-      }
-      if (props.event.key === "ArrowUp") {
-        selected = items.length ? (selected - 1 + items.length) % items.length : 0;
-        paint();
-        return true;
-      }
-      if (props.event.key === "Enter") {
-        const hit = items[selected];
-        if (hit) command?.(hit);
-        return true;
-      }
-      if (props.event.key === "Escape") {
-        root?.remove();
-        root = null;
-        return true;
-      }
-      return false;
-    },
-    onExit: () => {
-      root?.remove();
-      root = null;
-    },
-  };
 }

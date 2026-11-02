@@ -1,6 +1,15 @@
-/** The words of a stored rich text (the editor's JSON document, or a plain body from before),
- *  for a table cell's excerpt and a list row — the Rust `rich::plain` for the index. */
+/** An editor document as the bridge hands it (a parsed object, not its text). */
+const isDoc = (value: unknown): value is object => !!value && typeof value === "object" && (value as { type?: unknown }).type === "doc";
+
+/** The words of a stored rich text (the editor's JSON document — as text, or as the object a
+ *  work item's or a page's comes as — or a plain body from before), for a table cell's excerpt
+ *  and a list row — the Rust `rich::plain` for the index. */
 export function richPlain(stored: unknown): string {
+  if (isDoc(stored)) {
+    const out: string[] = [];
+    walk(stored, out);
+    return out.join("").trim();
+  }
   if (typeof stored !== "string") return "";
   const text = stored.trim();
   if (!text.startsWith("{")) return text;
@@ -34,8 +43,10 @@ export function richExcerpt(stored: unknown, max = 80): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-/** A stored body as the editor's content: a document as it is, a plain body as one paragraph. */
+/** A stored body as the editor's content: a document (its text, or the object a work item's
+ *  description, a comment or a page comes as) as it is, a plain body as one paragraph. */
 export function richContent(stored: unknown): object {
+  if (isDoc(stored)) return stored;
   if (typeof stored === "string" && stored.trim().startsWith("{")) {
     try {
       const doc: unknown = JSON.parse(stored);

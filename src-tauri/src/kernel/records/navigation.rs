@@ -150,10 +150,10 @@ pub async fn favorites(pool: &SqlitePool) -> Result<Favorites> {
             items.push(Favorite { id, folder_id, position, object: "pm-views".into(), object_label: "Views".into(), record_id: project_id, view_id: Some(pm_view), label: name });
             continue;
         }
-        // A cycle or a module (D-079): "pm-cycles" / "pm-modules", the record their project, the
-        // view the cycle or module.
+        // A cycle, a module or a page (D-079, D-080): "pm-cycles" / "pm-modules" / "pm-pages",
+        // the record their project, the view the cycle, module or page.
         let mut found_pm = None;
-        for (column, object, label, table) in [("pm_cycle_id", "pm-cycles", "Cycles", "pm_cycle"), ("pm_module_id", "pm-modules", "Modules", "pm_module")] {
+        for (column, object, label, table) in [("pm_cycle_id", "pm-cycles", "Cycles", "pm_cycle"), ("pm_module_id", "pm-modules", "Modules", "pm_module"), ("pm_page_id", "pm-pages", "Pages", "pm_page")] {
             if let Some(pm_id) = row.try_get::<Option<String>, _>(column)? {
                 found_pm = Some((pm_id, object, label, table));
                 break;
@@ -162,6 +162,8 @@ pub async fn favorites(pool: &SqlitePool) -> Result<Favorites> {
         if let Some((pm_id, object, label, table)) = found_pm {
             let named: Option<(String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT name, project_id FROM {table} WHERE id = ?"))).bind(&pm_id).fetch_optional(pool).await?;
             let Some((name, project_id)) = named else { continue };
+            // A page may have no name yet.
+            let name = if name.is_empty() { "Untitled".to_owned() } else { name };
             items.push(Favorite { id, folder_id, position, object: object.into(), object_label: label.into(), record_id: Some(project_id), view_id: Some(pm_id), label: name });
             continue;
         }
