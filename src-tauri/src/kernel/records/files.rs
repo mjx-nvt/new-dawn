@@ -16,7 +16,7 @@ use crate::error::AppError;
 const MAX_BYTES: u64 = 200 * 1024 * 1024;
 
 /// A file name as the folder keeps it: the base name, odd characters as `_`, at most 120 long.
-fn safe_name(name: &str) -> String {
+pub(crate) fn safe_name(name: &str) -> String {
     let cleaned: String = name.chars().map(|c| if c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ') { c } else { '_' }).collect();
     let cleaned = cleaned.trim().trim_start_matches('.').to_owned();
     let cleaned = if cleaned.is_empty() { "file".to_owned() } else { cleaned };

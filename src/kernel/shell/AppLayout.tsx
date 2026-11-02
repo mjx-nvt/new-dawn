@@ -1,5 +1,6 @@
 import { Outlet, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { isMainWindow } from "../bridge/app";
 import { useBrandSync } from "../bridge/brand";
 import { useFormats } from "../bridge/formats";
 import { openSettings } from "../bridge/settings";
@@ -64,7 +65,10 @@ export default function AppLayout() {
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
-  useUpdateCheckAtLaunch(setUpdateVersion);
+  // Once an app: the main window checks for updates and runs workflows' code steps; a work
+  // item's own window (D-074) doesn't.
+  const isMain = isMainWindow();
+  useUpdateCheckAtLaunch(isMain ? setUpdateVersion : null);
   const navigate = useNavigate();
   const { data: recorder } = useRecorderStatus();
   const { stop } = useStopAndOpen();
@@ -96,7 +100,7 @@ export default function AppLayout() {
   useWorkspaceShortcuts();
   // The workflows' code steps run in this window (D-069).
   const { data: workspace } = useCurrentWorkspace();
-  useCodeRunner(workspace?.slug);
+  useCodeRunner(isMain ? workspace?.slug : undefined);
   // The assistant's panel (D-070): asked for from ⌘K or a record's menu, on a record or not.
   const [asking, setAsking] = useState<{ on: AskTarget | null } | null>(null);
   useEffect(() => {

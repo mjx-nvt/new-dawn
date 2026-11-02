@@ -70,6 +70,31 @@ pub fn open_settings(app: &AppHandle, tab: SettingsTab) -> Result<()> {
     Ok(())
 }
 
+/// A work item in a window of its own (Plane's "open in a new tab", D-074): the app at the
+/// item's page; a second ask brings that window forward.
+pub fn open_item(app: &AppHandle, project_id: &str, item_id: &str) -> Result<()> {
+    let clean = |id: &str| id.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect::<String>();
+    let (project_id, item_id) = (clean(project_id), clean(item_id));
+    let label = format!("item-{}", item_id.replace('-', ""));
+    if let Some(window) = app.get_webview_window(&label) {
+        window.show()?;
+        window.set_focus()?;
+        return Ok(());
+    }
+    let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(format!("projects/{project_id}/items/{item_id}").into()))
+        .title("Work item")
+        .inner_size(1180.0, 820.0)
+        .min_inner_size(900.0, 600.0)
+        .transparent(true)
+        .title_bar_style(TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(LogicalPosition::new(18.0, 28.0))
+        .build()?;
+    let target = window.clone();
+    app.run_on_main_thread(move || super::glass::apply_shell_glass(&target))?;
+    Ok(())
+}
+
 /// Debug builds: `NEWDAWN_DEV_OPEN=settings:<tab>` opens Settings on that tab at launch,
 /// `NEWDAWN_DEV_OPEN=/<route>` sends the main window there — for looking at a screen without
 /// clicking. `NEWDAWN_DEV_THEME=dark|light` sets the app's appearance (not the Mac's), and

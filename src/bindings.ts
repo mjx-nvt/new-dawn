@@ -197,6 +197,35 @@ export const commands = {
 	createPmEstimate: (slug: string, projectId: string, input: EstimateInput) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("create_pm_estimate", { slug, projectId, input })),
 	updatePmEstimate: (slug: string, id: string, input: EstimateInput) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("update_pm_estimate", { slug, id, input })),
 	disablePmEstimates: (slug: string, projectId: string) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("disable_pm_estimates", { slug, projectId })),
+	listPmItems: (slug: string, projectId: string, archived: boolean) => typedError<PmItem_Serialize[], AppError>(__TAURI_INVOKE("list_pm_items", { slug, projectId, archived })),
+	getPmItem: (slug: string, id: string) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("get_pm_item", { slug, id })),
+	listPmSubItems: (slug: string, id: string) => typedError<PmItem_Serialize[], AppError>(__TAURI_INVOKE("list_pm_sub_items", { slug, id })),
+	createPmItem: (slug: string, input: ItemInput_Deserialize) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("create_pm_item", { slug, input })),
+	updatePmItem: (slug: string, id: string, patch: ItemPatch_Deserialize) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("update_pm_item", { slug, id, patch })),
+	archivePmItem: (slug: string, id: string, archived: boolean) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("archive_pm_item", { slug, id, archived })),
+	deletePmItem: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_item", { slug, id })),
+	copyPmItem: (slug: string, id: string, projectId: string | null) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("copy_pm_item", { slug, id, projectId })),
+	subscribePmItem: (slug: string, id: string, on: boolean) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("subscribe_pm_item", { slug, id, on })),
+	listPmActivity: (slug: string, id: string) => typedError<PmActivity_Serialize[], AppError>(__TAURI_INVOKE("list_pm_activity", { slug, id })),
+	listPmVersions: (slug: string, id: string) => typedError<PmVersion_Serialize[], AppError>(__TAURI_INVOKE("list_pm_versions", { slug, id })),
+	restorePmVersion: (slug: string, versionId: string) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("restore_pm_version", { slug, versionId })),
+	listPmComments: (slug: string, itemId: string) => typedError<PmComment_Serialize[], AppError>(__TAURI_INVOKE("list_pm_comments", { slug, itemId })),
+	addPmComment: (slug: string, itemId: string, body: string, parentId: string | null) => typedError<PmComment_Serialize[], AppError>(__TAURI_INVOKE("add_pm_comment", { slug, itemId, body, parentId })),
+	editPmComment: (slug: string, id: string, body: string) => typedError<PmComment_Serialize[], AppError>(__TAURI_INVOKE("edit_pm_comment", { slug, id, body })),
+	deletePmComment: (slug: string, id: string) => typedError<PmComment_Serialize[], AppError>(__TAURI_INVOKE("delete_pm_comment", { slug, id })),
+	togglePmReaction: (slug: string, itemId: string, commentId: string | null, emoji: string) => typedError<null, AppError>(__TAURI_INVOKE("toggle_pm_reaction", { slug, itemId, commentId, emoji })),
+	listPmItemReactions: (slug: string, itemId: string) => typedError<Reaction[], AppError>(__TAURI_INVOKE("list_pm_item_reactions", { slug, itemId })),
+	listPmDrafts: (slug: string) => typedError<PmDraft_Serialize[], AppError>(__TAURI_INVOKE("list_pm_drafts", { slug })),
+	savePmDraft: (slug: string, id: string | null, input: ItemInput_Deserialize) => typedError<PmDraft_Serialize, AppError>(__TAURI_INVOKE("save_pm_draft", { slug, id, input })),
+	copyPmDraft: (slug: string, id: string) => typedError<PmDraft_Serialize, AppError>(__TAURI_INVOKE("copy_pm_draft", { slug, id })),
+	deletePmDraft: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_draft", { slug, id })),
+	publishPmDraft: (slug: string, id: string, input: ItemInput_Deserialize) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("publish_pm_draft", { slug, id, input })),
+	/**  A picture picked for an item's description or comment. */
+	addPmItemFile: (slug: string, itemId: string, path: string) => typedError<ItemFile, AppError>(__TAURI_INVOKE("add_pm_item_file", { slug, itemId, path })),
+	/**  A picture pasted, as bytes. */
+	addPmItemFileBytes: (slug: string, itemId: string, name: string, bytes: number[]) => typedError<ItemFile, AppError>(__TAURI_INVOKE("add_pm_item_file_bytes", { slug, itemId, name, bytes })),
+	/**  Opens a work item in a window of its own. */
+	openPmItemWindow: (projectId: string, itemId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_pm_item_window", { projectId, itemId })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -2011,6 +2040,80 @@ export type InstalledModel = {
 	size_mb: number,
 };
 
+/**  A file kept with an item (a picture in its description or a comment). */
+export type ItemFile = {
+	path: string,
+	name: string,
+};
+
+/**  What the create form and a draft hold. */
+export type ItemInput = ItemInput_Serialize | ItemInput_Deserialize;
+
+/**  What the create form and a draft hold. */
+export type ItemInput_Deserialize = {
+	project_id: string,
+	name: string,
+	/**  The editor's document as JSON text. */
+	description?: string | null,
+	state_id?: string | null,
+	priority?: Priority | null,
+	assignees: string[],
+	labels: string[],
+	start_date?: string | null,
+	target_date?: string | null,
+	estimate_point_id?: string | null,
+	parent_id?: string | null,
+};
+
+/**  What the create form and a draft hold. */
+export type ItemInput_Serialize = {
+	project_id: string,
+	name: string,
+	/**  The editor's document as JSON text. */
+	description: string | null,
+	state_id: string | null,
+	priority: Priority | null,
+	assignees: string[],
+	labels: string[],
+	start_date: string | null,
+	target_date: string | null,
+	estimate_point_id: string | null,
+	parent_id: string | null,
+};
+
+/**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
+export type ItemPatch = ItemPatch_Serialize | ItemPatch_Deserialize;
+
+/**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
+export type ItemPatch_Deserialize = {
+	name?: string | null,
+	description?: string | null,
+	state_id?: string | null,
+	priority?: Priority | null,
+	assignees?: string[] | null,
+	labels?: string[] | null,
+	start_date?: string | null,
+	target_date?: string | null,
+	estimate_point_id?: string | null,
+	parent_id?: string | null,
+	sort_order?: number | null,
+};
+
+/**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
+export type ItemPatch_Serialize = {
+	name: string | null,
+	description: string | null,
+	state_id: string | null,
+	priority: Priority | null,
+	assignees: string[] | null,
+	labels: string[] | null,
+	start_date: string | null,
+	target_date: string | null,
+	estimate_point_id: string | null,
+	parent_id: string | null,
+	sort_order: number | null,
+};
+
 /**  A meeting's long job: the activity list shows its progress and can stop it. */
 export type JobKind = "transcription" | "summary";
 
@@ -2950,6 +3053,76 @@ export type PersonInput_Serialize = {
 
 export type Pick = "a" | "b" | "same";
 
+export type PmActivity = PmActivity_Serialize | PmActivity_Deserialize;
+
+export type PmActivity_Deserialize = {
+	id: string,
+	kind: string,
+	field: string,
+	old_value: string,
+	new_value: string,
+	old_ref?: string | null,
+	new_ref?: string | null,
+	actor: string,
+	created_at: string,
+};
+
+export type PmActivity_Serialize = {
+	id: string,
+	kind: string,
+	field: string,
+	old_value: string,
+	new_value: string,
+	old_ref: string | null,
+	new_ref: string | null,
+	actor: string,
+	created_at: string,
+};
+
+export type PmComment = PmComment_Serialize | PmComment_Deserialize;
+
+export type PmComment_Deserialize = {
+	id: string,
+	parent_id?: string | null,
+	body: Json,
+	body_text: string,
+	created_by: string,
+	edited_at?: string | null,
+	created_at: string,
+	reactions: Reaction[],
+};
+
+export type PmComment_Serialize = {
+	id: string,
+	parent_id: string | null,
+	body: Json,
+	body_text: string,
+	created_by: string,
+	edited_at: string | null,
+	created_at: string,
+	reactions: Reaction[],
+};
+
+export type PmDraft = PmDraft_Serialize | PmDraft_Deserialize;
+
+export type PmDraft_Deserialize = {
+	id: string,
+	project_id?: string | null,
+	project_name?: string | null,
+	input: ItemInput_Deserialize,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmDraft_Serialize = {
+	id: string,
+	project_id: string | null,
+	project_name: string | null,
+	input: ItemInput_Serialize,
+	created_at: string,
+	updated_at: string,
+};
+
 export type PmEstimate = PmEstimate_Serialize | PmEstimate_Deserialize;
 
 export type PmEstimate_Deserialize = {
@@ -2974,6 +3147,86 @@ export type PmEstimate_Serialize = {
 	active: boolean,
 	archived_at: string | null,
 	created_at: string,
+};
+
+export type PmItem = PmItem_Serialize | PmItem_Deserialize;
+
+export type PmItem_Deserialize = {
+	id: string,
+	project_id: string,
+	sequence: number,
+	/**  "VIFC-12". */
+	key: string,
+	name: string,
+	/**  The editor's document, as stored. */
+	description?: Json | null,
+	description_text: string,
+	state_id: string,
+	state_name: string,
+	state_group: StateGroup,
+	state_color: string,
+	priority: Priority,
+	start_date?: string | null,
+	target_date?: string | null,
+	estimate_point_id?: string | null,
+	estimate_value?: string | null,
+	parent_id?: string | null,
+	parent_key?: string | null,
+	parent_name?: string | null,
+	/**  "me" or people's ids. */
+	assignees: string[],
+	labels: string[],
+	subscribers: string[],
+	sub_items: number,
+	sub_done: number,
+	sub_cancelled: number,
+	comments: number,
+	sort_order: number | null,
+	completed_at?: string | null,
+	archived_at?: string | null,
+	created_by: string,
+	updated_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmItem_Serialize = {
+	id: string,
+	project_id: string,
+	sequence: number,
+	/**  "VIFC-12". */
+	key: string,
+	name: string,
+	/**  The editor's document, as stored. */
+	description: Json | null,
+	description_text: string,
+	state_id: string,
+	state_name: string,
+	state_group: StateGroup,
+	state_color: string,
+	priority: Priority,
+	start_date: string | null,
+	target_date: string | null,
+	estimate_point_id: string | null,
+	estimate_value: string | null,
+	parent_id: string | null,
+	parent_key: string | null,
+	parent_name: string | null,
+	/**  "me" or people's ids. */
+	assignees: string[],
+	labels: string[],
+	subscribers: string[],
+	sub_items: number,
+	sub_done: number,
+	sub_cancelled: number,
+	comments: number,
+	sort_order: number | null,
+	completed_at: string | null,
+	archived_at: string | null,
+	created_by: string,
+	updated_by: string,
+	created_at: string,
+	updated_at: string,
 };
 
 export type PmLabel = PmLabel_Serialize | PmLabel_Deserialize;
@@ -3106,6 +3359,26 @@ export type PmState = {
 	is_default: boolean,
 };
 
+export type PmVersion = PmVersion_Serialize | PmVersion_Deserialize;
+
+export type PmVersion_Deserialize = {
+	id: string,
+	description?: Json | null,
+	description_text: string,
+	created_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmVersion_Serialize = {
+	id: string,
+	description: Json | null,
+	description_text: string,
+	created_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
 export type Preview = Preview_Serialize | Preview_Deserialize;
 
 export type Preview_Deserialize = {
@@ -3121,6 +3394,8 @@ export type Preview_Serialize = {
 	updates: number,
 	errors: number,
 };
+
+export type Priority = "urgent" | "high" | "medium" | "low" | "none";
 
 export type Profile = {
 	/**  "" until the owner sets it. */
@@ -3362,6 +3637,12 @@ export type Radius_Serialize = {
 	chip: number,
 	control: number,
 	modal: number,
+};
+
+export type Reaction = {
+	emoji: string,
+	/**  "me" or people's ids. */
+	by: string[],
 };
 
 export type Recent = {

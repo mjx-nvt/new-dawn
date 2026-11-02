@@ -15,9 +15,10 @@ export const SHORTCUTS: { keys: string; what: string }[] = [
   { keys: "⌃⌘S · ⌥⌘S", what: "Sidebar: icons only, hidden" },
   { keys: "⌘,", what: "Settings" },
   { keys: "⌘N · ⇧⌘H", what: "Tasks: a new task, show or hide Completed" },
+  { keys: "N · I", what: "A project's work items: a new work item" },
 ];
 
-function inField(target: EventTarget | null): boolean {
+export function inField(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el || !el.tagName) return false;
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;

@@ -205,6 +205,10 @@ pub async fn delete_state(pool: &SqlitePool, id: &str) -> Result<Vec<PmState>> {
     if s.is_default {
         return Err(invalid("The default state can't be deleted — make another one the default first"));
     }
+    let (used,): (i64,) = sqlx::query_as("SELECT count(*) FROM pm_item WHERE state_id = ?").bind(id).fetch_one(pool).await?;
+    if used > 0 {
+        return Err(invalid(format!("{used} work item{} {} in “{}” — move them to another state first", if used == 1 { "" } else { "s" }, if used == 1 { "is" } else { "are" }, s.name)));
+    }
     let all = states(pool, &s.project_id).await?;
     if s.group != StateGroup::Triage && all.iter().filter(|o| o.group == s.group).count() <= 1 {
         return Err(invalid(format!("“{}” is the last state of its group — each group keeps one", s.name)));
@@ -412,6 +416,8 @@ pub async fn create_estimate(pool: &SqlitePool, project_id: &str, input: Estimat
         sqlx::query("INSERT INTO pm_estimate_point (id, estimate_id, key, value) VALUES (?, ?, ?, ?)").bind(id()).bind(&estimate).bind(i as i64 + 1).bind(v).execute(&mut *tx).await?;
     }
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_project SET estimate_id = ?, updated_at = {NOW} WHERE project_id = ?"))).bind(&estimate).bind(project_id).execute(&mut *tx).await?;
+    // Items sized in the old system aren't sized in the new one.
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_item SET estimate_point_id = NULL, updated_at = {NOW} WHERE project_id = ? AND estimate_point_id IS NOT NULL"))).bind(project_id).execute(&mut *tx).await?;
     tx.commit().await?;
     estimates(pool, project_id).await
 }
@@ -445,6 +451,7 @@ pub async fn disable_estimates(pool: &SqlitePool, project_id: &str) -> Result<Ve
     let mut tx = pool.begin().await?;
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_estimate SET archived_at = coalesce(archived_at, {NOW}), updated_at = {NOW} WHERE project_id = ?"))).bind(project_id).execute(&mut *tx).await?;
     sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_project SET estimate_id = NULL, updated_at = {NOW} WHERE project_id = ?"))).bind(project_id).execute(&mut *tx).await?;
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_item SET estimate_point_id = NULL, updated_at = {NOW} WHERE project_id = ? AND estimate_point_id IS NOT NULL"))).bind(project_id).execute(&mut *tx).await?;
     tx.commit().await?;
     estimates(pool, project_id).await
 }

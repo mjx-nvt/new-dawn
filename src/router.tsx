@@ -13,6 +13,8 @@ import WelcomePage, { WELCOME_STEPS, type WelcomeStep } from "./modules/onboardi
 import TasksPage from "./modules/tasks/TasksPage";
 import ProjectsPage from "./modules/projects/ProjectsPage";
 import ProjectPage from "./modules/projects/ProjectPage";
+import Drafts from "./modules/projects/items/Drafts";
+import ItemPage from "./modules/projects/items/ItemPage";
 import CrmPage from "./modules/crm/CrmPage";
 import RecordPage from "./modules/crm/record/RecordPage";
 import EmailPage from "./modules/email/EmailPage";
@@ -118,16 +120,44 @@ const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
   // The project's tab and, under Settings, its section (D-073).
-  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string } => ({
-    ...(typeof search.tab === "string" && search.tab ? { tab: search.tab } : {}),
-    ...(typeof search.section === "string" && search.section ? { section: search.section } : {}),
-  }),
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; group?: string; order?: string; peek?: string; mode?: string; activity?: string } => {
+    const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
+    // The tab, Settings' section, and the work items' group, order, peek and its activity tab
+    // (D-073, D-074).
+    return { ...text("tab"), ...text("section"), ...text("group"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity") };
+  },
   component: () => (
     <ModuleGate module="projects">
       <ProjectPage />
     </ModuleGate>
   ),
   staticData: { title: "Project", breadcrumb: "Projects" },
+});
+
+// A work item's page (D-074) — also a window of its own.
+const itemRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/$projectId/items/$itemId",
+  // The activity tab (D-074).
+  validateSearch: (search: Record<string, unknown>): { activity?: string } => (typeof search.activity === "string" && search.activity ? { activity: search.activity } : {}),
+  component: () => (
+    <ModuleGate module="projects">
+      <ItemPage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Work item", breadcrumb: "Projects" },
+});
+
+// Drafts of work items, across the workspace's projects (D-074).
+const draftsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/drafts",
+  component: () => (
+    <ModuleGate module="projects">
+      <Drafts />
+    </ModuleGate>
+  ),
+  staticData: { title: "Drafts", breadcrumb: "Projects" },
 });
 
 // The CRM module (D-059, D-060): Twenty's objects as tabs, and the commitments (D-055).
@@ -240,7 +270,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

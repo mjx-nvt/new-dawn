@@ -73,12 +73,13 @@ export function useUpdater() {
   return { ...state, checkNow, install };
 }
 
-/** Mount once in the main window: a check shortly after launch and every 24 h after that
- *  (the app lives in the tray for weeks), when the daily check is on. */
-export function useUpdateCheckAtLaunch(onAvailable: (version: string) => void) {
+/** The main window's: a check shortly after launch and every 24 h after that (the app lives in
+ *  the tray for weeks), when the daily check is on. `null` in other windows (a work item's,
+ *  D-074): no check there. */
+export function useUpdateCheckAtLaunch(onAvailable: ((version: string) => void) | null) {
   const running = useRef(false);
   useEffect(() => {
-    if (!autoCheckEnabled() || import.meta.env.DEV) return;
+    if (!onAvailable || !autoCheckEnabled() || import.meta.env.DEV) return;
     const run = () => {
       if (running.current || !autoCheckEnabled()) return;
       running.current = true;

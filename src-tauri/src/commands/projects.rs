@@ -43,7 +43,9 @@ pub async fn delete_project(
     slug: String,
     id: String,
 ) -> Result<(), AppError> {
-    Ok(projects::delete(&hub.pool(&slug)?, &id).await?)
+    // With its Plane side and its work items' files (D-074).
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(crate::modules::pm::delete(&hub.pool(&slug)?, &folder, &id).await?)
 }
 
 /// Apply: the proposed change goes into the project.

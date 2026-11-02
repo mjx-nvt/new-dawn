@@ -15,12 +15,14 @@ import { searchRecords, type Hit } from "../bridge/records";
 import styles from "./Editor.module.css";
 import { richContent } from "./plain";
 
-/** Where a picture pasted or picked in the editor is kept: as an attachment of this record. */
+/** Where a picture pasted or picked in the editor is kept: as an attachment of this record —
+ *  or, when `files` is given, where those say (a work item keeps its own, D-074). */
 export interface EditorHome {
   slug: string;
   /** The object's plural name (the record route) — also the attachment's link. */
   object: string;
   recordId: string;
+  files?: { add: (path: string) => Promise<Attached | null>; addBytes: (name: string, bytes: Uint8Array) => Promise<Attached | null> };
 }
 
 interface Props {
@@ -157,7 +159,7 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
   const pickPictures = () =>
     pickFiles(true)
       .then(async (paths) => {
-        for (const path of paths) attached(await addAttachment(home.slug, home.object, home.recordId, path), editor);
+        for (const path of paths) attached(await (home.files ? home.files.add : (path: string) => addAttachment(home.slug, home.object, home.recordId, path))(path), editor);
       })
       .catch((e: Error) => setTrouble(e.message));
   return (
@@ -212,7 +214,7 @@ export default function Editor({ value, onChange, placeholder, readOnly, home }:
 async function pasteImage(file: File, home: EditorHome): Promise<Attached | null> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const name = file.name && file.name !== "image.png" ? file.name : `Pasted ${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.${file.type.split("/")[1] || "png"}`;
-  return addAttachmentBytes(home.slug, home.object, home.recordId, name, bytes);
+  return (home.files ? home.files.addBytes : (name: string, bytes: Uint8Array) => addAttachmentBytes(home.slug, home.object, home.recordId, name, bytes))(name, bytes);
 }
 
 /** The `@` list: a glass menu under the caret, arrows and Enter pick, Escape closes. Plain DOM,

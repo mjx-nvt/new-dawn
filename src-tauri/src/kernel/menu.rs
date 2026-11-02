@@ -174,9 +174,10 @@ pub fn on_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
+/// To the main window only — a work item's window runs the same shell and mustn't act on it too.
 fn forward(app: &AppHandle, action: MenuAction) -> anyhow::Result<()> {
     windows::show_main(app);
-    action.emit(app)?;
+    action.emit_to(app, windows::MAIN_LABEL)?;
     Ok(())
 }
 

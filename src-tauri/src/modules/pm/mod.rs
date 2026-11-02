@@ -4,6 +4,9 @@
 //! project made before 0.11.0, or through the dossier's own path, gets its Plane side the first
 //! time the module reads the workspace.
 
+pub mod comments;
+pub mod drafts;
+pub mod items;
 pub mod settings;
 
 use anyhow::{Result, anyhow};
@@ -423,6 +426,16 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: PmProjectPatch) -> Resul
     .map_err(|e| or_taken(e, identifier.as_deref().unwrap_or("that identifier")))?;
     tx.commit().await?;
     get(pool, id).await
+}
+
+/// Deletes a project with everything in it — its dossier, its Plane side, its items' files.
+pub async fn delete(pool: &SqlitePool, folder: &str, id: &str) -> Result<()> {
+    let dirs = items::delete_project_files(pool, folder, id).await?;
+    projects::delete(pool, id).await?;
+    for d in dirs {
+        let _ = std::fs::remove_dir_all(d);
+    }
+    Ok(())
 }
 
 /// Archives a project (it leaves the list, keeps everything) or brings it back.

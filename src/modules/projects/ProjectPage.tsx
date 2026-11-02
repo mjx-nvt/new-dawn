@@ -7,6 +7,8 @@ import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
+import Archived from "./items/Archived";
+import WorkItems from "./items/WorkItems";
 import ProjectSettings from "./ProjectSettings";
 import styles from "./Projects.module.css";
 
@@ -15,16 +17,14 @@ const route = getRouteApi("/shell/projects/$projectId");
 /** An IME is still writing (Vietnamese): Enter confirms the composition, not the field. */
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
-/** The parts of a project Plane has that later releases fill (work items 0.11.1, cycles 0.11.5,
- *  modules 0.11.6, views 0.11.4, pages 0.11.7, intake 0.11.8): their structure now. */
+/** The parts of a project Plane has that later releases fill (cycles 0.11.5, modules 0.11.6,
+ *  views 0.11.4, pages 0.11.7, intake 0.11.8): their structure now. */
 const PLANE_TABS: Record<string, { title: string; hint: string; columns: string[]; none: string }> = {
-  items: { title: "Work items", hint: "The project's work, item by item — each with its state, priority, assignees and dates.", columns: ["ID", "Title", "State", "Priority", "Assignees", "Due date"], none: "No work items yet" },
   cycles: { title: "Cycles", hint: "Short, repeating periods of work, each with its items and progress.", columns: ["Cycle", "Dates", "Progress", "Lead"], none: "No cycles yet" },
   modules: { title: "Modules", hint: "Larger pieces of work, each grouping its items.", columns: ["Module", "Status", "Dates", "Lead"], none: "No modules yet" },
   views: { title: "Views", hint: "Saved filters, orders and layouts of the work items.", columns: ["View", "Filters", "Layout"], none: "No views yet" },
   pages: { title: "Pages", hint: "Documents kept beside the work.", columns: ["Page", "Updated", "Owner"], none: "No pages yet" },
   intake: { title: "Intake", hint: "Requests to triage before they become work items.", columns: ["Request", "Status", "Received"], none: "No requests yet" },
-  archives: { title: "Archives", hint: "Archived work items, cycles and modules.", columns: ["Archived", "Kind", "When"], none: "Nothing archived" },
 };
 
 /** A project's page (D-054, D-073): its Overview — the updates its meetings brought, where it
@@ -54,6 +54,7 @@ export default function ProjectPage() {
     ["settings", "Settings"],
   ];
   const tab = tabs.find(([t]) => t === wanted)?.[0] ?? "overview";
+  // A tab of its own: the list's group, order and peek are the Work items tab's.
   const showTab = (t: string) => void navigate({ to: "/projects/$projectId", params: { projectId }, search: t === "overview" ? {} : { tab: t }, replace: true });
   const update = useUpdateProject(slug);
   const remove = useDeleteProject(slug);
@@ -137,6 +138,8 @@ export default function ProjectPage() {
       </div>
 
       {tab === "settings" && pm && slug && <ProjectSettings slug={slug} project={pm} section={section} />}
+      {tab === "items" && pm && slug && <WorkItems slug={slug} project={pm} />}
+      {tab === "archives" && pm && slug && <Archived slug={slug} projectId={pm.id} />}
       {PLANE_TABS[tab] && <PlaneTab {...PLANE_TABS[tab]} />}
       {tab === "overview" && (
       <>

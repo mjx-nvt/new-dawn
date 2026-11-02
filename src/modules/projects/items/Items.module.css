@@ -1,0 +1,577 @@
+/* Work items (D-074): the List layout, the create modal, the item (peek and page). Tokens only. */
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pick :global(select.input),
+.props :global(select.input),
+.propList :global(select.input) {
+  width: auto;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.priority {
+  font-size: var(--t-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.p_urgent {
+  color: var(--status-negative);
+}
+
+.p_high {
+  color: var(--primary-text);
+}
+
+.p_low {
+  color: var(--ink-3);
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.chips :global(.chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.chipX {
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0 0 0 var(--space-1);
+  cursor: pointer;
+  font-size: var(--t-xs);
+}
+
+.add {
+  max-width: 180px;
+}
+
+/* The create modal */
+.create {
+  width: min(760px, 92vw);
+}
+
+.editorBox {
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  min-height: 72px;
+}
+
+.props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.date {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: auto;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.ask {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.askTitle {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* The List layout */
+.list {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tool :global(select.input) {
+  width: auto;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.display {
+  position: relative;
+}
+
+.display > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.display > summary::-webkit-details-marker {
+  display: none;
+}
+
+.displayPanel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  min-width: 220px;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+}
+
+.groupName {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  border: 0.5px solid var(--hair);
+}
+
+.dragged {
+  opacity: 0.5;
+}
+
+.key {
+  flex-shrink: 0;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.rowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: var(--space-1) 0;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.rowTitle:hover {
+  color: var(--primary-text);
+}
+
+.childMark {
+  color: var(--ink-3);
+}
+
+.rowProps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  max-width: 60%;
+}
+
+.prop {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.quick :global(.input) {
+  width: 100%;
+  background: transparent;
+}
+
+.lead {
+  margin: var(--space-2) 0 var(--space-5);
+}
+
+/* The item */
+.view {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.viewHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--ink-2);
+}
+
+.viewBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--space-6);
+  container-type: inline-size;
+}
+
+.viewMain {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.title {
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--t-xl);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.title:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+  border-radius: var(--radius-control);
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.reactions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.reaction {
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  padding: 2px var(--space-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.mine {
+  background: var(--primary-tint);
+  color: var(--on-primary-tint);
+}
+
+.versions {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
+  list-style: none;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 0.5px solid var(--hair);
+}
+
+.excerpt {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--t-sm);
+}
+
+.subs {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.subsHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.h3 {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.progressWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.progress {
+  display: inline-block;
+  width: 120px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+
+.subList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ghostRow {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+}
+
+.subRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  border: none;
+  background: none;
+  padding: var(--space-1) 0;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.activity {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.feed {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.acts {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.act,
+.history {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.history {
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.beforeAfter {
+  color: var(--ink);
+}
+
+.before {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+.comment {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 0.5px solid var(--hair);
+}
+
+.reply {
+  margin-left: var(--space-6);
+  background: transparent;
+}
+
+.commentHead {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.commentBody {
+  min-width: 0;
+}
+
+.composer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.side {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+}
+
+.propList {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  margin: 0;
+}
+
+.propList dt {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+}
+
+.propList dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.sideMeta {
+  margin: 0;
+}
+
+@container (max-width: 720px) {
+  .viewBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .side {
+    order: -1;
+  }
+}
+
+/* The peek — below the 52 pt toolbar with an 8 pt gap (60). */
+.peekBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+}
+
+.peekSide {
+  position: fixed;
+  z-index: 30;
+  top: 60px;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: min(640px, 55vw);
+  overflow: auto;
+  padding: var(--space-5);
+  border-radius: var(--radius-modal);
+}
+
+.peekFull {
+  position: fixed;
+  z-index: 30;
+  inset: 60px var(--space-4) var(--space-4);
+  overflow: auto;
+  padding: var(--space-6);
+  border-radius: var(--radius-modal);
+}
+
+.peekModal {
+  width: min(960px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+}

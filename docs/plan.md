@@ -241,8 +241,8 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0030 | `api_key`, `webhook`, `webhook_delivery` | 0.10.14 |
 | 0031 | `crm_proposal` (the CRM agent's proposals, D-072) | 0.10.15 |
 | 0032 | `pm_project` (Plane's columns — features and automations as columns — linked 1:1 to `project`), `pm_state`, `pm_label`, `pm_estimate`, `pm_estimate_point` | 0.11.0 |
-| 0033 | `issue`, `issue_assignee`, `issue_label`, `issue_sequence`, `issue_comment`, `issue_comment_reaction`, `issue_reaction`, `issue_activity`, `issue_subscriber`, `issue_mention`, `issue_vote`, `issue_description_version`, `draft_issue` | 0.11.1 |
-| 0034 | `issue_relation`, `issue_link`, `issue_attachment`, `notification`, `notification_preference` | 0.11.2 |
+| 0033 | `pm_item` (numbered per project: `pm_project.last_sequence`), `pm_item_assignee`, `pm_item_label`, `pm_item_subscriber`, `pm_comment`, `pm_reaction`, `pm_activity`, `pm_item_version`, `pm_mention`, `pm_draft` | 0.11.1 |
+| 0034 | `issue_relation`, `issue_link`, `issue_attachment`, `issue_vote`, `notification`, `notification_preference` | 0.11.2 |
 | 0035 | `user_display_property` | 0.11.3 |
 | 0036 | `issue_view`, `workspace_view` | 0.11.4 |
 | 0037 | `cycle`, `cycle_issue` | 0.11.5 |

@@ -280,6 +280,30 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
+    // Work items (D-074): assigned to, followed by, mentioning — the kept person, once.
+    for table in ["pm_item_assignee", "pm_item_subscriber"] {
+        sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE OR IGNORE {table} SET who = ?1 WHERE who = ?2")))
+            .bind(&k.id)
+            .bind(&o.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table} WHERE who = ?1")))
+            .bind(&o.id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    // OR IGNORE: where the kept person is there already, the row stays with the other one, whose
+    // delete below takes it (the trigger).
+    sqlx::query("UPDATE OR IGNORE pm_mention SET who = ?1 WHERE who = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE OR IGNORE pm_reaction SET created_by = ?1 WHERE created_by = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("UPDATE pm_project SET lead = ?1 WHERE lead = ?2")
         .bind(&k.id)
         .bind(&o.id)
@@ -299,6 +323,13 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
     .bind(&o.id)
     .execute(&mut *tx)
     .await?;
+    // Drafts keep their assignees in the form they hold: ids are UUIDs, so the quoted id is only
+    // ever that person (a draft assigning both keeps one when it is made).
+    sqlx::query("UPDATE pm_draft SET data_json = replace(data_json, '\"' || ?2 || '\"', '\"' || ?1 || '\"') WHERE instr(data_json, '\"' || ?2 || '\"') > 0")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(
         "UPDATE person SET notes = trim(notes || char(10) || char(10) || \
          (SELECT notes FROM person WHERE id = ?2), char(10)) WHERE id = ?1",
