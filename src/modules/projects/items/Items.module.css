@@ -17,6 +17,7 @@
 
 .pick :global(select.input),
 .props :global(select.input),
+.propList :global(input.input),
 .propList :global(select.input) {
   width: auto;
   min-width: 0;
@@ -268,6 +269,7 @@
 .view {
   display: grid;
   gap: var(--space-4);
+  container: item / inline-size;
 }
 
 .viewHead {
@@ -290,7 +292,6 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--space-6);
-  container-type: inline-size;
 }
 
 .viewMain {
@@ -531,7 +532,9 @@
   margin: 0;
 }
 
-@container (max-width: 720px) {
+/* Narrow (a side peek, a narrow panel): one column, the properties first. The article is the
+   container — a grid can't follow a query on itself. */
+@container item (max-width: 720px) {
   .viewBody {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -574,4 +577,96 @@
   width: min(960px, 92vw);
   max-height: 88vh;
   overflow: auto;
+}
+
+/* Relations, links, attachments (0.11.2) */
+.tie {
+  display: grid;
+  gap: var(--space-1);
+  position: relative;
+}
+
+.chipLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.finder {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-card);
+}
+
+.hits {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.hit:hover,
+.hit:focus-visible {
+  background: var(--surface-2);
+}
+
+.tieRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.votes {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+/* Bulk changes (0.11.2): a bar over the list's foot while items are selected. */
+.bulk {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 20;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+}
+
+.bulkCount {
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink);
 }

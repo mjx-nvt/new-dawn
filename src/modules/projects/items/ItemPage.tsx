@@ -19,7 +19,7 @@ export default function ItemPage() {
         itemId={itemId}
         tab={activity}
         onTab={(tab) => void navigate({ to: "/projects/$projectId/items/$itemId", params: { projectId, itemId }, search: tab ? { activity: tab } : {}, replace: true })}
-        onOpen={(id) => void navigate({ to: "/projects/$projectId/items/$itemId", params: { projectId, itemId: id } })}
+        onOpen={(id, other) => void navigate({ to: "/projects/$projectId/items/$itemId", params: { projectId: other ?? projectId, itemId: id } })}
         onGone={() => void navigate({ to: "/projects/$projectId", params: { projectId }, search: { tab: "items" } })}
       />
     </div>

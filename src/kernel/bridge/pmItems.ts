@@ -1,9 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   commands,
   type ItemInput_Deserialize,
   type ItemPatch_Deserialize,
   type PmActivity_Serialize,
+  type PmAttachment,
+  type PmBulkAction,
+  type PmItemRef,
+  type PmLink,
+  type PmRelation,
+  type PmRelationKind,
   type PmComment_Serialize,
   type PmDraft_Serialize,
   type PmItem_Serialize,
@@ -22,13 +29,13 @@ export type PmComment = PmComment_Serialize;
 export type PmActivity = PmActivity_Serialize;
 export type PmVersion = PmVersion_Serialize;
 export type PmDraft = PmDraft_Serialize;
-export type { Priority, Reaction };
+export type { PmAttachment, PmBulkAction, PmItemRef, PmLink, PmRelation, PmRelationKind, Priority, Reaction };
 
 /** After any change to items: the lists, the items, their comments and activity, the drafts. */
 function useRefresh() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ["pm-items", "pm-item", "pm-sub-items", "pm-activity", "pm-versions", "pm-comments", "pm-reactions", "pm-drafts"]) void queryClient.invalidateQueries({ queryKey: [key] });
+    for (const key of ["pm-items", "pm-item", "pm-sub-items", "pm-activity", "pm-versions", "pm-comments", "pm-reactions", "pm-drafts", "pm-relations", "pm-links", "pm-attachments", "notices", "notice-counts"]) void queryClient.invalidateQueries({ queryKey: [key] });
   };
 }
 
@@ -147,4 +154,75 @@ export function itemFiles(slug: string, itemId: string) {
 
 export async function openItemWindow(projectId: string, itemId: string): Promise<void> {
   await unwrap(commands.openPmItemWindow(projectId, itemId));
+}
+
+// ── 0.11.2 (D-075): relations, links, attachments, votes, bulk changes ──
+
+export function usePmRelations(slug: string | undefined, itemId: string) {
+  return useQuery({ queryKey: ["pm-relations", slug ?? "", itemId], queryFn: () => unwrap(commands.listPmRelations(slug ?? "", itemId)), enabled: !!slug && !!itemId });
+}
+
+/** Work items to relate to, from every project (by key or title words). */
+export function useSearchPmItems(slug: string | undefined, query: string, except: string, enabled: boolean) {
+  return useQuery({ queryKey: ["pm-search", slug ?? "", query, except], queryFn: () => unwrap(commands.searchPmItems(slug ?? "", query, except)), enabled: !!slug && enabled, placeholderData: keepPreviousData });
+}
+
+export function useRelationMutations(slug: string | undefined, itemId: string) {
+  const refresh = useRefresh();
+  return {
+    add: useMutation({ mutationFn: ({ kind, otherId }: { kind: PmRelationKind; otherId: string }) => unwrap(commands.addPmRelation(slug ?? "", itemId, kind, otherId)), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => unwrap(commands.removePmRelation(slug ?? "", id)), onSuccess: refresh }),
+  };
+}
+
+export function usePmLinks(slug: string | undefined, itemId: string) {
+  return useQuery({ queryKey: ["pm-links", slug ?? "", itemId], queryFn: () => unwrap(commands.listPmLinks(slug ?? "", itemId)), enabled: !!slug && !!itemId });
+}
+
+export function useLinkMutations(slug: string | undefined, itemId: string) {
+  const refresh = useRefresh();
+  return {
+    add: useMutation({ mutationFn: ({ url, title }: { url: string; title: string }) => unwrap(commands.addPmLink(slug ?? "", itemId, url, title)), onSuccess: refresh }),
+    edit: useMutation({ mutationFn: ({ id, url, title }: { id: string; url: string; title: string }) => unwrap(commands.editPmLink(slug ?? "", id, url, title)), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => unwrap(commands.removePmLink(slug ?? "", id)), onSuccess: refresh }),
+  };
+}
+
+/** A link opens in the owner's browser or Mail — never inside New Dawn. */
+export function openLink(url: string): Promise<void> {
+  return openUrl(url);
+}
+
+export function usePmAttachments(slug: string | undefined, itemId: string) {
+  return useQuery({ queryKey: ["pm-attachments", slug ?? "", itemId], queryFn: () => unwrap(commands.listPmAttachments(slug ?? "", itemId)), enabled: !!slug && !!itemId });
+}
+
+export function useAttachmentMutations(slug: string | undefined, itemId: string) {
+  const refresh = useRefresh();
+  return {
+    add: useMutation({ mutationFn: (paths: string[]) => unwrap(commands.addPmAttachments(slug ?? "", itemId, paths)), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => unwrap(commands.removePmAttachment(slug ?? "", id)), onSuccess: refresh }),
+  };
+}
+
+export function openAttachmentFile(a: PmAttachment, reveal = false): Promise<void> {
+  return reveal ? revealItemInDir(a.path) : openPath(a.path);
+}
+
+export function useVotePmItem(slug: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, vote }: { id: string; vote: number }) => unwrap(commands.votePmItem(slug ?? "", id, vote)),
+    onSuccess: (item) => queryClient.setQueryData(["pm-item", slug ?? "", item.id], item),
+  });
+}
+
+/** Bulk changes (List): the same edits, an action, or copies — every item checked first. */
+export function useBulkPmItems(slug: string | undefined) {
+  const refresh = useRefresh();
+  return {
+    update: useMutation({ mutationFn: ({ ids, patch }: { ids: string[]; patch: ItemPatch }) => unwrap(commands.bulkUpdatePmItems(slug ?? "", ids, patch)), onSuccess: refresh }),
+    act: useMutation({ mutationFn: ({ ids, action }: { ids: string[]; action: PmBulkAction }) => unwrap(commands.bulkPmItems(slug ?? "", ids, action)), onSuccess: refresh }),
+    copy: useMutation({ mutationFn: ({ ids, projectId }: { ids: string[]; projectId: string }) => unwrap(commands.copyPmItems(slug ?? "", ids, projectId)), onSuccess: refresh }),
+  };
 }

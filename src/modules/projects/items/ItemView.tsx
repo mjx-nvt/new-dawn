@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePmLabels, usePmProjects } from "../../../kernel/bridge/pm";
 import {
   itemFiles,
@@ -19,20 +19,20 @@ import {
   useSubscribePmItem,
   useToggleReaction,
   useUpdatePmItem,
+  useVotePmItem,
   type ItemPatch,
   type PmActivity,
   type PmComment,
   type PmItem,
   type Reaction,
 } from "../../../kernel/bridge/pmItems";
-import { usePeople } from "../../../kernel/bridge/people";
 import Editor from "../../../kernel/editor/Editor";
 import { richPlain } from "../../../kernel/editor/plain";
 import { formatDateTime } from "../../../kernel/format/format";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
-import { whoName } from "../pm";
-import { asPrompt, duration, progress, transitions } from "./items";
+import { RELATIONS, asPrompt, duration, progress, sentence, transitions, useWho } from "./items";
+import { Attachments, Links, RelationRow } from "./ItemTies";
 import { Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
@@ -45,12 +45,6 @@ const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyC
 
 function copy(text: string) {
   void navigator.clipboard.writeText(text).catch(() => undefined);
-}
-
-/** "You" or a person's name; an agent or an automation by its own name. */
-function useWho(slug: string) {
-  const people = usePeople(slug).data ?? [];
-  return (w: string) => (w === "me" || w.length > 30 || people.some((p) => p.id === w) ? whoName(w, people) : w);
 }
 
 function Reactions({ reactions, disabled, onToggle }: { reactions: Reaction[]; disabled?: boolean; onToggle: (emoji: string) => void }) {
@@ -82,28 +76,6 @@ function Reactions({ reactions, disabled, onToggle }: { reactions: Reaction[]; d
         ))}
     </div>
   );
-}
-
-/** One activity row as a sentence ("You changed the state from Backlog to In Progress"). */
-function sentence(a: PmActivity, who: (w: string) => string): string {
-  const actor = who(a.actor);
-  switch (a.kind) {
-    case "created":
-      return `${actor} created the work item`;
-    case "commented":
-      return `${actor} commented`;
-    case "archived":
-      return `${actor} archived the work item`;
-    case "restored":
-      return `${actor} restored the work item`;
-    case "copied":
-      return `${actor} made it as a copy of ${a.new_value}`;
-    default:
-      if (a.field === "description") return `${actor} updated the description`;
-      if (!a.new_value) return `${actor} removed the ${a.field}${a.old_value ? ` (${a.old_value})` : ""}`;
-      if (!a.old_value) return `${actor} set the ${a.field} to ${a.new_value}`;
-      return `${actor} changed the ${a.field} from ${a.old_value} to ${a.new_value}`;
-  }
 }
 
 function Comment({ slug, item, comment: c, replies, readOnly }: { slug: string; item: PmItem; comment: PmComment; replies: PmComment[]; readOnly: boolean }) {
@@ -366,7 +338,8 @@ function SubItems({ slug, item, onOpen }: { slug: string; item: PmItem; onOpen: 
 /** A work item (D-074, Plane's peek and page): its header actions, title, description (with
  *  its versions and reactions), properties, sub-items with their progress, and the activity
  *  tabs with the comments. Archived: read-only, with Restore. */
-export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: { slug: string; itemId: string; tab?: string; onTab: (tab: string | undefined) => void; onOpen: (id: string) => void; onGone: () => void }) {
+/** `onOpen` takes the item's project when it may be another one (a relation). */
+export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: { slug: string; itemId: string; tab?: string; onTab: (tab: string | undefined) => void; onOpen: (id: string, projectId?: string) => void; onGone: () => void }) {
   const query = usePmItem(slug, itemId);
   const item = query.data;
   const update = useUpdatePmItem(slug);
@@ -374,6 +347,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
   const remove = useDeletePmItem(slug);
   const copyItem = useCopyPmItem(slug);
   const subscribe = useSubscribePmItem(slug);
+  const vote = useVotePmItem(slug);
   const react = useToggleReaction(slug, itemId);
   const reactions = usePmItemReactions(slug, itemId).data ?? [];
   const labels = usePmLabels(slug, item?.project_id ?? "").data ?? [];
@@ -389,7 +363,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
   if (!item) return <p className={query.isError ? "formError" : "ghostText"}>{query.isError ? query.error.message : "Reading…"}</p>;
   const ro = !!item.archived_at;
   const save = (patch: ItemPatch) => update.mutate({ id: item.id, patch });
-  const error = update.error ?? archive.error ?? remove.error ?? copyItem.error ?? subscribe.error ?? restore.error;
+  const error = update.error ?? archive.error ?? remove.error ?? copyItem.error ?? subscribe.error ?? restore.error ?? vote.error;
   const following = item.subscribers.includes("me");
   const closed = item.state_group === "completed" || item.state_group === "cancelled";
   const flash = (text: string) => {
@@ -407,6 +381,14 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
         )}
         <span className={styles.spacer} />
         {note && <span className="fieldHint">{note}</span>}
+        <span className={styles.votes} role="group" aria-label="Your vote">
+          <button type="button" className={`${styles.reaction} ${item.vote === 1 ? styles.mine : ""}`} aria-pressed={item.vote === 1} aria-label="Upvote" disabled={ro || vote.isPending} onClick={() => vote.mutate({ id: item.id, vote: item.vote === 1 ? 0 : 1 })}>
+            ▲ {item.vote === 1 ? 1 : 0}
+          </button>
+          <button type="button" className={`${styles.reaction} ${item.vote === -1 ? styles.mine : ""}`} aria-pressed={item.vote === -1} aria-label="Downvote" disabled={ro || vote.isPending} onClick={() => vote.mutate({ id: item.id, vote: item.vote === -1 ? 0 : -1 })}>
+            ▼ {item.vote === -1 ? 1 : 0}
+          </button>
+        </span>
         <button type="button" className="btn btnGhost btnCompact" aria-pressed={following} disabled={subscribe.isPending} onClick={() => subscribe.mutate({ id: item.id, on: !following })}>
           {following ? "Subscribed" : "Subscribe"}
         </button>
@@ -470,9 +452,9 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
           {error.message}
         </p>
       )}
+      <input key={item.name} className={styles.title} aria-label="Title" defaultValue={item.name} readOnly={ro} maxLength={255} onBlur={(e) => e.target.value.trim() && e.target.value !== item.name && save({ name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && !composing(e) && e.currentTarget.blur()} />
       <div className={styles.viewBody}>
         <div className={styles.viewMain}>
-          <input key={item.name} className={styles.title} aria-label="Title" defaultValue={item.name} readOnly={ro} maxLength={255} onBlur={(e) => e.target.value.trim() && e.target.value !== item.name && save({ name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && !composing(e) && e.currentTarget.blur()} />
           <div className={styles.editorBox}>
             <Editor key={`${item.id}-${ro}`} value={item.description ?? null} readOnly={ro} placeholder="Add a description…" home={{ slug, object: "pm-items", recordId: item.id, files: itemFiles(slug, item.id) }} onChange={(json) => save({ description: json })} />
           </div>
@@ -502,6 +484,8 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
           )}
           {versionsOpen && !versions.data?.length && <Ghosts text={versions.isError ? "Couldn't be read" : versions.data ? "No versions yet — the description hasn't been written" : "Reading…"} />}
           <SubItems slug={slug} item={item} onOpen={onOpen} />
+          <Links slug={slug} item={item} />
+          <Attachments slug={slug} item={item} />
           <Activity slug={slug} item={item} tab={TABS.find((t) => t === tab) ?? "all"} onTab={(t) => onTab(t === "all" ? undefined : t)} />
         </div>
         <aside className={styles.side} aria-label="Properties">
@@ -538,6 +522,14 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
             <dd>
               <ParentPick slug={slug} projectId={item.project_id} value={item.parent_id} self={item.id} disabled={ro} onChange={(parent_id) => save({ parent_id })} />
             </dd>
+            {RELATIONS.map((r) => (
+              <Fragment key={r.kind}>
+                <dt>{r.label}</dt>
+                <dd>
+                  <RelationRow slug={slug} item={item} kind={r.kind} onOpen={onOpen} />
+                </dd>
+              </Fragment>
+            ))}
             <dt>Cycle</dt>
             <dd className="ghostText">No cycles yet</dd>
             <dt>Modules</dt>

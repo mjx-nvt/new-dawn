@@ -4,9 +4,13 @@
 //! project made before 0.11.0, or through the dossier's own path, gets its Plane side the first
 //! time the module reads the workspace.
 
+pub mod automations;
+pub mod bulk;
 pub mod comments;
 pub mod drafts;
+pub mod inbox;
 pub mod items;
+pub mod relations;
 pub mod settings;
 
 use anyhow::{Result, anyhow};
@@ -444,6 +448,35 @@ pub async fn archive(pool: &SqlitePool, id: &str, archived: bool) -> Result<PmPr
     let sql = if archived { format!("UPDATE pm_project SET archived_at = coalesce(archived_at, {NOW}), updated_at = {NOW} WHERE project_id = ?") } else { format!("UPDATE pm_project SET archived_at = NULL, updated_at = {NOW} WHERE project_id = ?") };
     sqlx::query(sqlx::AssertSqlSafe(sql)).bind(id).execute(pool).await?;
     get(pool, id).await
+}
+
+/// The owner's choices for work items, app-wide (one owner; D-075): the Inbox's kinds turned off
+/// and the attachment size limit (5 MB unless changed, up to 200).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PmPrefs {
+    pub muted: Vec<inbox::NoticeKind>,
+    pub attachment_mb: u32,
+}
+
+impl Default for PmPrefs {
+    fn default() -> Self {
+        Self { muted: Vec::new(), attachment_mb: relations::ATTACHMENT_MB }
+    }
+}
+
+const PREFS_KEY: &str = "pm_prefs";
+
+/// The owner's choices; what doesn't read is New Dawn's default.
+pub async fn prefs(hub: &crate::kernel::hub::WorkspaceHub) -> Result<PmPrefs> {
+    Ok(hub.app_setting(PREFS_KEY).await?.and_then(|v| serde_json::from_str(&v).ok()).unwrap_or_default())
+}
+
+pub async fn set_prefs(hub: &crate::kernel::hub::WorkspaceHub, prefs: PmPrefs) -> Result<PmPrefs> {
+    if !(1..=relations::ATTACHMENT_MB_MAX).contains(&prefs.attachment_mb) {
+        return Err(anyhow!(AppError::invalid(format!("Attachments can be 1 to {} MB", relations::ATTACHMENT_MB_MAX))));
+    }
+    hub.set_app_setting(PREFS_KEY, &serde_json::to_string(&prefs)?).await?;
+    Ok(prefs)
 }
 
 #[cfg(test)]

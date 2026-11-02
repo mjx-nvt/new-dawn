@@ -1,0 +1,146 @@
+/* The Inbox (D-075): the notices beside the work item they tell of. */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 var(--space-4);
+}
+
+.bar :global(select.input) {
+  min-width: 0;
+  max-width: 180px;
+}
+
+.types {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.types :global(.chip) {
+  border: none;
+  font: inherit;
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@container content (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+
+.open {
+  background: var(--primary-tint-soft);
+}
+
+.main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+}
+
+.unread .dot {
+  background: var(--primary);
+}
+
+.text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.line {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.unread .line {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.item {
+  font-size: var(--t-md);
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.key {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+}
+
+.custom {
+  padding-left: var(--space-4);
+}
+
+.ghost {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-card);
+  list-style: none;
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}

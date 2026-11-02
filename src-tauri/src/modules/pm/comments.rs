@@ -106,6 +106,22 @@ fn mentioned(doc: &Value) -> Vec<String> {
     out
 }
 
+/// The owner named in a document: their CRM member record ("workspaceMembers") or "me".
+fn mentions_owner(doc: &Value) -> bool {
+    fn walk(v: &Value) -> bool {
+        if v.get("type").and_then(Value::as_str) == Some("mention") {
+            let attrs = v.get("attrs");
+            let object = attrs.and_then(|a| a.get("object")).and_then(Value::as_str).unwrap_or("");
+            let id = attrs.and_then(|a| a.get("id")).and_then(Value::as_str).unwrap_or("");
+            if object == "workspaceMembers" || id == "me" {
+                return true;
+            }
+        }
+        v.get("content").and_then(Value::as_array).into_iter().flatten().any(walk)
+    }
+    walk(doc)
+}
+
 fn body(json: &str) -> Result<(Value, String)> {
     let doc: Value = serde_json::from_str(json).map_err(|_| invalid("The comment doesn't read"))?;
     let text = items::words(&doc);
@@ -158,7 +174,11 @@ pub async fn add(pool: &SqlitePool, item: &str, json: &str, parent: Option<&str>
         .execute(&mut *tx)
         .await?;
     keep_mentions(&mut tx, &id, &doc).await?;
-    sqlx::query("INSERT INTO pm_activity (id, item_id, kind, field, new_value, actor) VALUES (?, ?, 'commented', '', ?, ?)").bind(uuid::Uuid::now_v7().to_string()).bind(item).bind(&id).bind(actor).execute(&mut *tx).await?;
+    let activity = items::activity(&mut tx, item, "commented", "", "", &id, (None, None), actor).await?;
+    // Someone else's comment naming the owner is the owner's mention (D-075).
+    if actor != "me" && mentions_owner(&doc) {
+        super::inbox::mention(&mut tx, item, &activity, actor).await?;
+    }
     // The owner follows what they comment on (an agent doesn't subscribe).
     if actor == "me" {
         sqlx::query("INSERT INTO pm_item_subscriber (item_id, who) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(item).bind(actor).execute(&mut *tx).await?;

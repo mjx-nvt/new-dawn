@@ -101,7 +101,7 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
       ["Meetings", () => void navigate({ to: "/meetings", search: {} })],
       ["Live", () => void navigate({ to: "/live", search: {} })],
       ["Tasks", () => void navigate({ to: "/tasks" })],
-      ...(modules.projects ? [["Projects", () => void navigate({ to: "/projects" })] as [string, () => void]] : []),
+      ...(modules.projects ? [["Projects", () => void navigate({ to: "/projects" })] as [string, () => void], ["Inbox", () => void navigate({ to: "/inbox", search: {} })] as [string, () => void]] : []),
       ["Email", () => void navigate({ to: "/email" })],
       ["Workspace", () => void navigate({ to: "/workspace", search: { tab: "overview" } })],
       ["Settings", () => void openSettings("general")],

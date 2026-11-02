@@ -29,6 +29,7 @@
 
 /* A text field in a grouped row's control slot. */
 .rowInput { width: 260px; }
+.numInput { width: 88px; }
 
 .permission {
   display: flex;

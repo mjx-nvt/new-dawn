@@ -82,6 +82,8 @@ pub struct PmItem {
     pub sub_done: u32,
     pub sub_cancelled: u32,
     pub comments: u32,
+    /// The owner's vote: 1 up, -1 down, 0 none.
+    pub vote: i32,
     pub sort_order: f64,
     pub completed_at: Option<String>,
     pub archived_at: Option<String>,
@@ -119,6 +121,7 @@ struct Row {
     sub_done: u32,
     sub_cancelled: u32,
     comments: u32,
+    vote: Option<i32>,
     sort_order: f64,
     completed_at: Option<String>,
     archived_at: Option<String>,
@@ -166,6 +169,7 @@ impl From<Row> for PmItem {
             sub_done: r.sub_done,
             sub_cancelled: r.sub_cancelled,
             comments: r.comments,
+            vote: r.vote.unwrap_or(0),
             sort_order: r.sort_order,
             completed_at: r.completed_at,
             archived_at: r.archived_at,
@@ -190,6 +194,7 @@ macro_rules! select {
              (SELECT count(*) FROM pm_item c JOIN pm_state cs ON cs.id = c.state_id WHERE c.parent_id = i.id AND cs.state_group = 'completed') AS sub_done, \
              (SELECT count(*) FROM pm_item c JOIN pm_state cs ON cs.id = c.state_id WHERE c.parent_id = i.id AND cs.state_group = 'cancelled') AS sub_cancelled, \
              (SELECT count(*) FROM pm_comment k WHERE k.item_id = i.id) AS comments, \
+             (SELECT v.vote FROM pm_vote v WHERE v.item_id = i.id AND v.who = 'me') AS vote, \
              i.sort_order, i.completed_at, i.archived_at, i.created_by, i.updated_by, i.created_at, i.updated_at \
              FROM pm_item i JOIN pm_project m ON m.project_id = i.project_id JOIN pm_state s ON s.id = i.state_id \
              LEFT JOIN pm_estimate_point ep ON ep.id = i.estimate_point_id \
@@ -388,10 +393,13 @@ async fn label_names(pool: &SqlitePool, labels: &[String]) -> Result<String> {
     Ok(out.join(", "))
 }
 
+/// One row of an item's activity — and, when someone else did it (an agent, an automation), the
+/// owner's notice in the Inbox if they follow the item (D-075).
 #[allow(clippy::too_many_arguments)]
-async fn activity(tx: &mut Transaction<'_, Sqlite>, item: &str, kind: &str, field: &str, old: &str, new: &str, refs: (Option<&str>, Option<&str>), actor: &str) -> Result<()> {
+pub(crate) async fn activity(tx: &mut Transaction<'_, Sqlite>, item: &str, kind: &str, field: &str, old: &str, new: &str, refs: (Option<&str>, Option<&str>), actor: &str) -> Result<String> {
+    let aid = id();
     sqlx::query("INSERT INTO pm_activity (id, item_id, kind, field, old_value, new_value, old_ref, new_ref, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(id())
+        .bind(&aid)
         .bind(item)
         .bind(kind)
         .bind(field)
@@ -402,7 +410,10 @@ async fn activity(tx: &mut Transaction<'_, Sqlite>, item: &str, kind: &str, fiel
         .bind(actor)
         .execute(&mut **tx)
         .await?;
-    Ok(())
+    if actor != "me" {
+        super::inbox::notify(tx, item, &aid, kind, field, refs.1, actor).await?;
+    }
+    Ok(aid)
 }
 
 /// A description saved: a new version, or — when `merge` — the newest one changed when it is under
@@ -541,6 +552,30 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: ItemPatch, actor: &str) 
 /// `merge`: whether a description saved within ten minutes changes the newest version (a restore
 /// never does — it is a version of its own).
 async fn update_with(pool: &SqlitePool, id: &str, patch: ItemPatch, actor: &str, merge: bool) -> Result<PmItem> {
+    let plan = plan(pool, id, patch).await?;
+    write(pool, plan, actor, merge).await?;
+    get(pool, id).await
+}
+
+/// An item's edits checked and worked out, not yet written — bulk changes check every item first.
+pub(crate) struct Plan {
+    pub item: PmItem,
+    changes: Vec<Change<'static>>,
+    name: Option<String>,
+    description: Option<(Option<String>, String)>,
+    state: Option<(String, StateGroup)>,
+    priority: Option<Priority>,
+    assignees: Option<Vec<String>>,
+    labels: Option<Vec<String>>,
+    start: Option<Option<String>>,
+    target: Option<Option<String>>,
+    point: Option<Option<String>>,
+    parent: Option<Option<String>>,
+    order: Option<f64>,
+}
+
+/// Checks an item's edits: an archived item is read-only; each field as the create form checks it.
+pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Result<Plan> {
     let item = get(pool, id).await?;
     if item.archived_at.is_some() {
         return Err(invalid("An archived work item is read-only — restore it to change it"));
@@ -659,10 +694,19 @@ async fn update_with(pool: &SqlitePool, id: &str, patch: ItemPatch, actor: &str,
         None => None,
     };
     let order = patch.sort_order.filter(|o| o.is_finite());
-    if changes.is_empty() && order.is_none() {
-        return Ok(item);
-    }
+    Ok(Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order })
+}
 
+/// Writes checked edits in one transaction — the item, its assignees and labels, one activity row
+/// a field changed (readable before and after), the description's version; entering a completed
+/// state sets when, leaving it clears it; the owner follows what they change. Whether anything
+/// changed. `merge`: see [`update_with`].
+pub(crate) async fn write(pool: &SqlitePool, plan: Plan, actor: &str, merge: bool) -> Result<bool> {
+    let Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order } = plan;
+    if changes.is_empty() && order.is_none() {
+        return Ok(false);
+    }
+    let id = item.id.as_str();
     let mut tx = pool.begin().await?;
     let completed = match &state {
         Some((_, StateGroup::Completed)) => Some(true),
@@ -709,6 +753,9 @@ async fn update_with(pool: &SqlitePool, id: &str, patch: ItemPatch, actor: &str,
             sqlx::query("INSERT INTO pm_item_subscriber (item_id, who) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(id).bind(w).execute(&mut *tx).await?;
         }
     }
+    if actor == "me" && !changes.is_empty() {
+        sqlx::query("INSERT INTO pm_item_subscriber (item_id, who) VALUES (?, 'me') ON CONFLICT DO NOTHING").bind(id).execute(&mut *tx).await?;
+    }
     if let Some(l) = &labels {
         sqlx::query("DELETE FROM pm_item_label WHERE item_id = ?").bind(id).execute(&mut *tx).await?;
         for label in l {
@@ -739,7 +786,7 @@ async fn update_with(pool: &SqlitePool, id: &str, patch: ItemPatch, actor: &str,
         activity(&mut tx, id, "updated", field, old, new, (refs.0.as_deref(), refs.1.as_deref()), actor).await?;
     }
     tx.commit().await?;
-    get(pool, id).await
+    Ok(true)
 }
 
 /// Archives an item — only a completed or cancelled one (read-only after, still found) — or
@@ -808,13 +855,15 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
     )
     .await?;
     let from = files_dir(folder, &item.id);
+    // The description's pictures, not the attachments (their rows stay with the original).
+    let attached: Vec<(String,)> = sqlx::query_as("SELECT file FROM pm_attachment WHERE item_id = ?").bind(&item.id).fetch_all(pool).await?;
     let mut tx = pool.begin().await?;
     if from.is_dir() {
         let to = files_dir(folder, &made.id);
         tokio::fs::create_dir_all(&to).await.with_context(|| format!("couldn't make {}", to.display()))?;
         let mut entries = tokio::fs::read_dir(&from).await?;
         while let Some(e) = entries.next_entry().await? {
-            if e.file_type().await?.is_file() {
+            if e.file_type().await?.is_file() && !attached.iter().any(|(f,)| e.file_name().to_string_lossy() == f.as_str()) {
                 tokio::fs::copy(e.path(), to.join(e.file_name())).await.with_context(|| format!("couldn't copy {}", e.path().display()))?;
             }
         }
@@ -826,6 +875,30 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
     activity(&mut tx, &made.id, "copied", "", "", &item.key, (None, None), actor).await?;
     tx.commit().await?;
     get(pool, &made.id).await
+}
+
+/// The owner's upvote (1) or downvote (-1), or none (0) — Plane's votes; not on an archived item.
+pub async fn vote(pool: &SqlitePool, id: &str, vote: i32) -> Result<PmItem> {
+    let item = get(pool, id).await?;
+    if item.archived_at.is_some() {
+        return Err(invalid("An archived work item can't be voted on"));
+    }
+    match vote {
+        0 => {
+            sqlx::query("DELETE FROM pm_vote WHERE item_id = ? AND who = 'me'").bind(id).execute(pool).await?;
+        }
+        1 | -1 => {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "INSERT INTO pm_vote (item_id, who, vote) VALUES (?, 'me', ?) ON CONFLICT (item_id, who) DO UPDATE SET vote = excluded.vote, updated_at = {NOW}"
+            )))
+            .bind(id)
+            .bind(vote)
+            .execute(pool)
+            .await?;
+        }
+        _ => return Err(invalid("A vote is up or down")),
+    }
+    get(pool, id).await
 }
 
 /// Follows or stops following an item.
@@ -888,7 +961,7 @@ pub async fn restore_version(pool: &SqlitePool, version_id: &str, actor: &str) -
 
 /// Under the workspace's `files/`, where the window may show and open files (the asset and opener
 /// scopes).
-fn files_dir(folder: &str, item: &str) -> PathBuf {
+pub(crate) fn files_dir(folder: &str, item: &str) -> PathBuf {
     Path::new(folder).join("files").join("pm").join(item)
 }
 

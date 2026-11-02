@@ -226,6 +226,34 @@ export const commands = {
 	addPmItemFileBytes: (slug: string, itemId: string, name: string, bytes: number[]) => typedError<ItemFile, AppError>(__TAURI_INVOKE("add_pm_item_file_bytes", { slug, itemId, name, bytes })),
 	/**  Opens a work item in a window of its own. */
 	openPmItemWindow: (projectId: string, itemId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_pm_item_window", { projectId, itemId })),
+	listPmRelations: (slug: string, itemId: string) => typedError<PmRelation[], AppError>(__TAURI_INVOKE("list_pm_relations", { slug, itemId })),
+	addPmRelation: (slug: string, itemId: string, kind: PmRelationKind, otherId: string) => typedError<PmRelation, AppError>(__TAURI_INVOKE("add_pm_relation", { slug, itemId, kind, otherId })),
+	removePmRelation: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_relation", { slug, id })),
+	/**  Work items to relate to, from every project of the workspace. */
+	searchPmItems: (slug: string, query: string, except: string | null) => typedError<PmItemRef[], AppError>(__TAURI_INVOKE("search_pm_items", { slug, query, except })),
+	listPmLinks: (slug: string, itemId: string) => typedError<PmLink[], AppError>(__TAURI_INVOKE("list_pm_links", { slug, itemId })),
+	addPmLink: (slug: string, itemId: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("add_pm_link", { slug, itemId, url, title })),
+	editPmLink: (slug: string, id: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("edit_pm_link", { slug, id, url, title })),
+	removePmLink: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_link", { slug, id })),
+	listPmAttachments: (slug: string, itemId: string) => typedError<PmAttachment[], AppError>(__TAURI_INVOKE("list_pm_attachments", { slug, itemId })),
+	/**  Files picked or dropped, each up to the owner's limit. */
+	addPmAttachments: (slug: string, itemId: string, paths: string[]) => typedError<PmAttachment[], AppError>(__TAURI_INVOKE("add_pm_attachments", { slug, itemId, paths })),
+	removePmAttachment: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_attachment", { slug, id })),
+	/**  1 up, -1 down, 0 none. */
+	votePmItem: (slug: string, id: string, vote: number) => typedError<PmItem_Serialize, AppError>(__TAURI_INVOKE("vote_pm_item", { slug, id, vote })),
+	/**  The same edits on the selected items: every one checked first; how many changed. */
+	bulkUpdatePmItems: (slug: string, ids: string[], patch: ItemPatch_Deserialize) => typedError<number, AppError>(__TAURI_INVOKE("bulk_update_pm_items", { slug, ids, patch })),
+	bulkPmItems: (slug: string, ids: string[], action: PmBulkAction) => typedError<number, AppError>(__TAURI_INVOKE("bulk_pm_items", { slug, ids, action })),
+	copyPmItems: (slug: string, ids: string[], projectId: string) => typedError<number, AppError>(__TAURI_INVOKE("copy_pm_items", { slug, ids, projectId })),
+	listNotices: (slug: string, query: InboxQuery) => typedError<Notice_Serialize[], AppError>(__TAURI_INVOKE("list_notices", { slug, query })),
+	noticeCounts: (slug: string) => typedError<InboxCounts, AppError>(__TAURI_INVOKE("notice_counts", { slug })),
+	markNotice: (slug: string, id: string, read: boolean) => typedError<null, AppError>(__TAURI_INVOKE("mark_notice", { slug, id, read })),
+	markAllNotices: (slug: string, mentions: boolean) => typedError<null, AppError>(__TAURI_INVOKE("mark_all_notices", { slug, mentions })),
+	/**  Until an ISO-8601 time to come, or none to bring it back. */
+	snoozeNotice: (slug: string, id: string, until: string | null) => typedError<null, AppError>(__TAURI_INVOKE("snooze_notice", { slug, id, until })),
+	archiveNotice: (slug: string, id: string, archived: boolean) => typedError<null, AppError>(__TAURI_INVOKE("archive_notice", { slug, id, archived })),
+	getPmPrefs: () => typedError<PmPrefs, AppError>(__TAURI_INVOKE("get_pm_prefs")),
+	setPmPrefs: (prefs: PmPrefs) => typedError<PmPrefs, AppError>(__TAURI_INVOKE("set_pm_prefs", { prefs })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -2035,6 +2063,33 @@ export type ImportReport = {
 	errors: RowError[],
 };
 
+export type InboxCounts = {
+	/**  Unread in All. */
+	all: number,
+	/**  Unread in Mentions. */
+	mentions: number,
+};
+
+export type InboxQuery = {
+	/**  The Mentions tab; otherwise All (everything but mentions). */
+	mentions: boolean,
+	show: InboxShow,
+	/**
+	 *  Plane's type filters — items assigned to the owner, made by them, followed by them; any
+	 *  of those chosen (none: every one).
+	 */
+	assigned: boolean,
+	created: boolean,
+	subscribed: boolean,
+};
+
+/**  Which notices a list shows — Plane's display options, one at a time. */
+export type InboxShow = 
+/**  Not archived, not snoozed (or snoozed until a time now past). */
+"inbox" | "unread" | 
+/**  Snoozed, its time past or not. */
+"snoozed" | "archived";
+
 export type InstalledModel = {
 	name: string,
 	size_mb: number,
@@ -2748,6 +2803,58 @@ export type NewPmProject_Serialize = {
 	features: Features,
 };
 
+export type Notice = Notice_Serialize | Notice_Deserialize;
+
+export type NoticeKind = 
+/**  A property changed (and an item made, copied, archived, restored, related, linked…). */
+"property" | "state" | 
+/**  Moved into a completed state. */
+"completed" | "comment" | "mention" | "reminder";
+
+export type Notice_Deserialize = {
+	id: string,
+	kind: NoticeKind,
+	item_id: string,
+	project_id: string,
+	/**  "VIFC-12". */
+	item_key: string,
+	item_name: string,
+	/**  Who did it ("" for a reminder). */
+	actor: string,
+	/**  The activity it tells of, as the item's activity has it ("" for a reminder). */
+	activity_kind: string,
+	field: string,
+	old_value: string,
+	new_value: string,
+	due_on?: string | null,
+	read_at?: string | null,
+	snoozed_until?: string | null,
+	archived_at?: string | null,
+	created_at: string,
+};
+
+export type Notice_Serialize = {
+	id: string,
+	kind: NoticeKind,
+	item_id: string,
+	project_id: string,
+	/**  "VIFC-12". */
+	item_key: string,
+	item_name: string,
+	/**  Who did it ("" for a reminder). */
+	actor: string,
+	/**  The activity it tells of, as the item's activity has it ("" for a reminder). */
+	activity_kind: string,
+	field: string,
+	old_value: string,
+	new_value: string,
+	due_on: string | null,
+	read_at: string | null,
+	snoozed_until: string | null,
+	archived_at: string | null,
+	created_at: string,
+};
+
 export type NumberFormat = 
 /**  "1,234.56". */
 "commasAndDot" | 
@@ -3079,6 +3186,20 @@ export type PmActivity_Serialize = {
 	created_at: string,
 };
 
+export type PmAttachment = {
+	id: string,
+	item_id: string,
+	name: string,
+	/**  Bytes. */
+	size: number,
+	/**  The file on this Mac, for Open and Reveal. */
+	path: string,
+	created_by: string,
+	created_at: string,
+};
+
+export type PmBulkAction = "subscribe" | "archive" | "delete";
+
 export type PmComment = PmComment_Serialize | PmComment_Deserialize;
 
 export type PmComment_Deserialize = {
@@ -3151,6 +3272,17 @@ export type PmEstimate_Serialize = {
 
 export type PmItem = PmItem_Serialize | PmItem_Deserialize;
 
+/**  Another work item, as a relation or a search shows it. */
+export type PmItemRef = {
+	id: string,
+	project_id: string,
+	key: string,
+	name: string,
+	state_name: string,
+	state_group: StateGroup,
+	state_color: string,
+};
+
 export type PmItem_Deserialize = {
 	id: string,
 	project_id: string,
@@ -3181,6 +3313,8 @@ export type PmItem_Deserialize = {
 	sub_done: number,
 	sub_cancelled: number,
 	comments: number,
+	/**  The owner's vote: 1 up, -1 down, 0 none. */
+	vote: number,
 	sort_order: number | null,
 	completed_at?: string | null,
 	archived_at?: string | null,
@@ -3220,6 +3354,8 @@ export type PmItem_Serialize = {
 	sub_done: number,
 	sub_cancelled: number,
 	comments: number,
+	/**  The owner's vote: 1 up, -1 down, 0 none. */
+	vote: number,
 	sort_order: number | null,
 	completed_at: string | null,
 	archived_at: string | null,
@@ -3251,6 +3387,24 @@ export type PmLabel_Serialize = {
 	description: string,
 	color: string,
 	sort_order: number | null,
+};
+
+export type PmLink = {
+	id: string,
+	item_id: string,
+	url: string,
+	title: string,
+	created_by: string,
+	created_at: string,
+};
+
+/**
+ *  The owner's choices for work items, app-wide (one owner; D-075): the Inbox's kinds turned off
+ *  and the attachment size limit (5 MB unless changed, up to 200).
+ */
+export type PmPrefs = {
+	muted: NoticeKind[],
+	attachment_mb: number,
 };
 
 export type PmProject = PmProject_Serialize | PmProject_Deserialize;
@@ -3347,6 +3501,17 @@ export type PmProject_Serialize = {
 	created_at: string,
 	updated_at: string,
 };
+
+export type PmRelation = {
+	id: string,
+	/**  As seen from the item asked about. */
+	kind: PmRelationKind,
+	item: PmItemRef,
+};
+
+export type PmRelationKind = "relates_to" | "duplicate" | "blocked_by" | 
+/**  Stored as the other item's Blocked by. */
+"blocking";
 
 export type PmState = {
 	id: string,

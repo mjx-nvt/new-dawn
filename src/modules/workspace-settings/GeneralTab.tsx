@@ -5,6 +5,7 @@ import { openPrivacySettings, useMicrophonePermission, useRequestMicrophone, typ
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SUMMARY_LANGS } from "../meetings/format";
 import FormatsGroup from "./FormatsGroup";
+import WorkItemsGroup from "./WorkItemsGroup";
 import styles from "./Settings.module.css";
 
 const MIC_LABEL: Record<PermissionState, string> = {
@@ -111,6 +112,7 @@ export default function GeneralTab() {
       )}
 
       <FormatsGroup />
+      <WorkItemsGroup />
 
       <p className="groupTitle">Workspace</p>
       <div className="group">

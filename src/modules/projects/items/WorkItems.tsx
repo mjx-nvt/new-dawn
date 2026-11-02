@@ -6,6 +6,7 @@ import { usePeople } from "../../../kernel/bridge/people";
 import { formatDay } from "../../../kernel/format/format";
 import { inField } from "../../../kernel/shell/useShortcuts";
 import { whoName } from "../pm";
+import BulkBar from "./BulkBar";
 import CreateItem from "./CreateItem";
 import ItemPeek, { type PeekMode } from "./ItemPeek";
 import { DEFAULT_DISPLAY, GROUP_BY, ORDER_BY, PROPERTIES, PROPERTY_LABEL, grouped, loadDisplay, ordered, saveDisplay, type Display, type Group, type GroupBy, type OrderBy } from "./items";
@@ -48,6 +49,9 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const [display, setDisplay] = useState<Display>(() => loadDisplay(project.id));
   const [creating, setCreating] = useState<Partial<ItemInput> | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
+  // Bulk changes (D-075): the selected items, in the order picked.
+  const [selected, setSelected] = useState<string[]>([]);
+  const pick = (ids: string[], on: boolean) => setSelected((now) => (on ? [...now, ...ids.filter((id) => !now.includes(id))] : now.filter((id) => !ids.includes(id))));
   const group: GroupBy = GROUP_BY.find((g) => g.key === search.group)?.key ?? "state";
   const order: OrderBy = ORDER_BY.find((o) => o.key === search.order)?.key ?? "manual";
   const set = (patch: Record<string, string | undefined>) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { ...search, ...patch }, replace: true });
@@ -60,6 +64,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const visible = display.subItems ? all : all.filter((i) => !i.parent_id);
   const groups = grouped(ordered(visible, order), group, states, labels, who).filter((g) => display.emptyGroups || g.items.length);
   const has = (p: (typeof PROPERTIES)[number]) => display.properties.includes(p);
+  const chosen = selected.filter((id) => all.some((i) => i.id === id)); // the selected still here
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -138,7 +143,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           </div>
         </details>
         <span className={styles.spacer} />
-        <button type="button" className="btn btnPrimary" disabled={!!project.archived_at} onClick={() => setCreating({})}>
+        <button type="button" className={chosen.length ? "btn btnSecondary" : "btn btnPrimary"} disabled={!!project.archived_at} onClick={() => setCreating({})}>
           New work item
         </button>
       </div>
@@ -150,6 +155,16 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
       {groups.map((g) => (
         <div key={g.key} className={styles.group} onDragOver={(e) => e.preventDefault()} onDrop={() => drop(null, g)}>
           <div className={styles.groupHead}>
+            <input
+              type="checkbox"
+              aria-label={`Select every work item in ${g.label}`}
+              checked={g.items.length > 0 && g.items.every((i) => selected.includes(i.id))}
+              disabled={!g.items.length || !!project.archived_at}
+              ref={(el) => {
+                if (el) el.indeterminate = g.items.some((i) => selected.includes(i.id)) && !g.items.every((i) => selected.includes(i.id));
+              }}
+              onChange={(e) => pick(g.items.map((i) => i.id), e.target.checked)}
+            />
             {g.color && <Dot color={g.color} />}
             <span className={styles.groupName}>{g.label}</span>
             <span className="fieldHint">{g.items.length}</span>
@@ -170,6 +185,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
                 drop(i, g);
               }}
             >
+              <input type="checkbox" aria-label={`Select ${i.key}`} checked={selected.includes(i.id)} disabled={!!project.archived_at} onChange={(e) => pick([i.id], e.target.checked)} />
               {has("id") && <span className={styles.key}>{i.key}</span>}
               <button type="button" className={styles.rowTitle} onClick={() => set({ peek: i.id })}>
                 {i.parent_id && display.subItems && <span className={styles.childMark}>↳ </span>}
@@ -217,6 +233,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
             {n === 0 && <span className="ghostText">{items.isError ? "Couldn't be read" : items.data ? "No work items to show — Display hides sub-work items and empty groups" : "Reading…"}</span>}
           </div>
         ))}
+      {chosen.length > 0 && <BulkBar slug={slug} project={project} ids={chosen} onClear={() => setSelected([])} />}
       {creating && <CreateItem slug={slug} projectId={project.id} preset={creating} onClose={() => setCreating(null)} />}
       {search.peek && (
         <ItemPeek

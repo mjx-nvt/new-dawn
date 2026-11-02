@@ -1,4 +1,6 @@
-import type { PmActivity, PmItem, Priority } from "../../../kernel/bridge/pmItems";
+import type { PmActivity, PmItem, PmRelationKind, Priority } from "../../../kernel/bridge/pmItems";
+import { usePeople } from "../../../kernel/bridge/people";
+import { whoName } from "../pm";
 import type { PmLabel, PmState, StateGroup } from "../../../kernel/bridge/pm";
 
 /** Plane's work items in New Dawn (D-074): the choices the list and the forms offer. */
@@ -191,3 +193,51 @@ export function asPrompt(item: PmItem, labels: PmLabel[], who: (w: string) => st
   ];
   return lines.filter((l, i) => l !== "" || i === 7).join("\n").trim();
 }
+
+/** "You" or a person's name; an agent by its own name; the project automations as Automation. */
+export function useWho(slug: string) {
+  const people = usePeople(slug).data ?? [];
+  return (w: string) => (w === "automation" ? "Automation" : w === "me" || w.length > 30 || people.some((p) => p.id === w) ? whoName(w, people) : w);
+}
+
+/** One activity row as a sentence ("You changed the state from Backlog to In Progress"). */
+export function sentence(a: Pick<PmActivity, "kind" | "field" | "old_value" | "new_value" | "actor">, who: (w: string) => string): string {
+  const actor = who(a.actor);
+  switch (a.kind) {
+    case "related":
+      return `${actor} marked it ${a.new_value}`;
+    case "unrelated":
+      return `${actor} removed the relation ${a.old_value}`;
+    case "linked":
+      return `${actor} added the link ${a.new_value}`;
+    case "unlinked":
+      return `${actor} removed the link ${a.old_value}`;
+    case "attached":
+      return `${actor} attached ${a.new_value}`;
+    case "detached":
+      return `${actor} removed the attachment ${a.old_value}`;
+    case "created":
+      return `${actor} created the work item`;
+    case "commented":
+      return `${actor} commented`;
+    case "archived":
+      return `${actor} archived the work item`;
+    case "restored":
+      return `${actor} restored the work item`;
+    case "copied":
+      return `${actor} made it as a copy of ${a.new_value}`;
+    default:
+      if (a.field === "description") return `${actor} updated the description`;
+      if (!a.new_value) return `${actor} removed the ${a.field}${a.old_value ? ` (${a.old_value})` : ""}`;
+      if (!a.old_value) return `${actor} set the ${a.field} to ${a.new_value}`;
+      return `${actor} changed the ${a.field} from ${a.old_value} to ${a.new_value}`;
+  }
+}
+
+/** Plane's four relations, as the item reads them. */
+export const RELATIONS: { kind: PmRelationKind; label: string }[] = [
+  { kind: "relates_to", label: "Relates to" },
+  { kind: "blocked_by", label: "Blocked by" },
+  { kind: "blocking", label: "Blocking" },
+  { kind: "duplicate", label: "Duplicate of" },
+];

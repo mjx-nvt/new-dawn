@@ -69,6 +69,14 @@ export const TasksIcon = () => (
   </Icon>
 );
 
+/** A tray: the Inbox (D-075). */
+export const InboxIcon = () => (
+  <Icon>
+    <path d="M2 9.5 3.8 3.5h8.4L14 9.5v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z" />
+    <path d="M2 9.5h3.5l1 1.5h3l1-1.5H14" />
+  </Icon>
+);
+
 /** A tick ("In Tasks"). */
 export const CheckIcon = () => (
   <Icon>

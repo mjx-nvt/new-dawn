@@ -266,6 +266,29 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::pm::add_pm_item_file,
             commands::pm::add_pm_item_file_bytes,
             commands::pm::open_pm_item_window,
+            commands::pm::list_pm_relations,
+            commands::pm::add_pm_relation,
+            commands::pm::remove_pm_relation,
+            commands::pm::search_pm_items,
+            commands::pm::list_pm_links,
+            commands::pm::add_pm_link,
+            commands::pm::edit_pm_link,
+            commands::pm::remove_pm_link,
+            commands::pm::list_pm_attachments,
+            commands::pm::add_pm_attachments,
+            commands::pm::remove_pm_attachment,
+            commands::pm::vote_pm_item,
+            commands::pm::bulk_update_pm_items,
+            commands::pm::bulk_pm_items,
+            commands::pm::copy_pm_items,
+            commands::pm::list_notices,
+            commands::pm::notice_counts,
+            commands::pm::mark_notice,
+            commands::pm::mark_all_notices,
+            commands::pm::snooze_notice,
+            commands::pm::archive_notice,
+            commands::pm::get_pm_prefs,
+            commands::pm::set_pm_prefs,
             commands::crm::list_people_cards,
             commands::crm::list_waiting_commitments,
             commands::crm::get_person,
@@ -637,6 +660,8 @@ pub fn run() {
                 });
             kernel::backup::spawn_scheduler(app.handle());
             modules::workflows::triggers::spawn(app.handle());
+            // Plane's project automations, once a day (D-075).
+            modules::pm::automations::spawn(app.handle());
             modules::api::spawn(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
             modules::lessons::spawn(app.handle());
