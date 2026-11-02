@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { MeetingProposals } from "../Proposals";
 import { usePmLabels, usePmProjects } from "../../../kernel/bridge/pm";
 import {
   itemFiles,
@@ -485,6 +486,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
             </ul>
           )}
           {versionsOpen && !versions.data?.length && <Ghosts text={versions.isError ? "Couldn't be read" : versions.data ? "No versions yet — the description hasn't been written" : "Reading…"} />}
+          <MeetingProposals slug={slug} projectId={item.project_id} itemId={item.id} readOnly={!!item.archived_at} />
           <SubItems slug={slug} item={item} onOpen={onOpen} />
           <Links slug={slug} item={item} />
           <Attachments slug={slug} item={item} />

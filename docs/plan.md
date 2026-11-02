@@ -252,6 +252,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0041 | `pm_sticky`, `pm_quick_link`, `pm_home_widget`, `pm_navigation`, `pm_recent` (visits; D-082) | 0.11.9 |
 | — | none: exports and imports are rows of 0025's `export_job` / `import_job`; analytics are queries, their choices URL state (D-083) | 0.11.10 |
 | 0042 | `api_key.description`, `webhook.format`: Plane's tokens and webhooks on 0030's tables, one key store for both path families (D-084) | 0.11.11 |
+| 0043 | `project_update.item_id` (SET NULL) and `payload_json`, a BEFORE DELETE trigger on `pm_item` for the proposals still waiting: the Projects agent's Plane-side proposals (D-085) | 0.11.12 |
 
 Conventions as before (UUID v7 ids, `created_at` / `updated_at`, enumerations checked in Rust, BEFORE triggers for meeting deletes). Custom objects and fields are run-time DDL (§5.2), not migrations. Registry: nothing.
 
@@ -437,6 +438,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.12 — The Projects agent on Plane's model, Today (2 sittings)
 - **Same as:** §5.7 (ours).
+- **Data:** 0043 (proposals on Plane's side as rows of `project_update`; D-085).
 - **Screens and flows:** after each summary and email, for each followed project: proposed work items (title, assignee, dates, priority, labels, parent, cycle = the active one), state changes, comments quoting the meeting, Overview updates as today; proposal cards in the item and the project; Today: your items due (Assigned to me), cycles ending within 7 days, intake pending, Inbox unread, proposals waiting.
 - **Done when:** the dev meeting's action items become proposed items in the active cycle; "the report was sent" proposes Done with its quote.
 

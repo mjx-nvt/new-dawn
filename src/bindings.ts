@@ -1653,6 +1653,8 @@ export type Day_Deserialize = {
 	opportunities: ToClose_Deserialize[],
 	/**  Proposals waiting for the owner. */
 	waiting: Waiting,
+	/**  The Projects module's work for today (D-085); empty when the module is off. */
+	work: WorkToday,
 };
 
 /**  One workspace's part of the day. */
@@ -1676,6 +1678,8 @@ export type Day_Serialize = {
 	opportunities: ToClose_Serialize[],
 	/**  Proposals waiting for the owner. */
 	waiting: Waiting,
+	/**  The Projects module's work for today (D-085); empty when the module is off. */
+	work: WorkToday,
 };
 
 export type Decision = {
@@ -1706,6 +1710,19 @@ export type Delivery_Serialize = {
 	error: string,
 	duration_ms: number,
 	created_at: string,
+};
+
+export type DueWork = {
+	id: string,
+	project_id: string,
+	project_name: string,
+	/**  "VIFC-12". */
+	key: string,
+	name: string,
+	/**  YYYY-MM-DD. */
+	target_date: string,
+	state_name: string,
+	state_group: StateGroup,
 };
 
 /**  An email read, and what came of it. */
@@ -1831,6 +1848,18 @@ export type EmailThreads_Serialize = {
 	mail_state: MailState,
 	/**  A word for the owner when Mail couldn't be asked. */
 	note: string,
+};
+
+export type EndingCycle = {
+	id: string,
+	project_id: string,
+	project_name: string,
+	name: string,
+	/**  YYYY-MM-DD. */
+	end_date: string,
+	items: number,
+	done: number,
+	cancelled: number,
 };
 
 export type EstimateInput = {
@@ -4489,6 +4518,12 @@ export type ProjectUpdate_Deserialize = {
 	status: UpdateStatus,
 	created_at: string,
 	updated_at: string,
+	/**  The work item it's about (a state, a comment), or the one it made once applied (D-085). */
+	item_id?: string | null,
+	item_key?: string | null,
+	item_title?: string | null,
+	/**  A new work item's fields or a state's. */
+	work?: ProposedWork_Deserialize | null,
 };
 
 /**  A change proposed from a meeting (or applied: the history). */
@@ -4508,6 +4543,12 @@ export type ProjectUpdate_Serialize = {
 	status: UpdateStatus,
 	created_at: string,
 	updated_at: string,
+	/**  The work item it's about (a state, a comment), or the one it made once applied (D-085). */
+	item_id: string | null,
+	item_key: string | null,
+	item_title: string | null,
+	/**  A new work item's fields or a state's. */
+	work: ProposedWork_Serialize | null,
 };
 
 export type Project_Deserialize = {
@@ -4549,6 +4590,47 @@ export type Project_Serialize = {
 };
 
 export type ProposalStatus = "proposed" | "added" | "dismissed";
+
+/**  A proposed work item's fields, or a state's, as the proposal card shows them (D-085). */
+export type ProposedWork = ProposedWork_Serialize | ProposedWork_Deserialize;
+
+/**  A proposed work item's fields, or a state's, as the proposal card shows them (D-085). */
+export type ProposedWork_Deserialize = {
+	/**  "me" or people's ids, with their names. */
+	assignees?: string[],
+	assignee_names?: string[],
+	start_date?: string | null,
+	target_date?: string | null,
+	priority?: Priority | null,
+	labels?: string[],
+	label_names?: string[],
+	parent_id?: string | null,
+	parent_key?: string | null,
+	/**  The cycle running when it was proposed. */
+	cycle_id?: string | null,
+	cycle_name?: string | null,
+	/**  A state proposal's state. */
+	state_id?: string | null,
+};
+
+/**  A proposed work item's fields, or a state's, as the proposal card shows them (D-085). */
+export type ProposedWork_Serialize = {
+	/**  "me" or people's ids, with their names. */
+	assignees: string[],
+	assignee_names: string[],
+	start_date: string | null,
+	target_date: string | null,
+	priority: Priority | null,
+	labels: string[],
+	label_names: string[],
+	parent_id: string | null,
+	parent_key: string | null,
+	/**  The cycle running when it was proposed. */
+	cycle_id: string | null,
+	cycle_name: string | null,
+	/**  A state proposal's state. */
+	state_id: string | null,
+};
 
 /**
  *  What a list asks for. The filter is Twenty-shaped JSON: `{"and": [...]}`, `{"or": [...]}`,
@@ -5593,7 +5675,13 @@ export type TranslatedSection = {
 /**  What a proposed update changes. */
 export type UpdateField = 
 /**  The next milestone (and its date). */
-"milestone" | "phase" | "status" | "risk" | "decision" | "note";
+"milestone" | "phase" | "status" | "risk" | "decision" | "note" | 
+/**  A new work item on Plane's side (D-085). */
+"work_item" | 
+/**  A work item's new state. */
+"item_state" | 
+/**  A comment on a work item. */
+"comment";
 
 export type UpdateStatus = "proposed" | "applied" | "dismissed";
 
@@ -5938,6 +6026,18 @@ export type WidgetInput = {
 	grid_w: number,
 	grid_h: number,
 	config: Json,
+};
+
+/**  What Today shows of the Projects module (D-085), across its open projects. */
+export type WorkToday = {
+	/**  Your open work items due within a week or overdue, soonest first (the first 20). */
+	due: DueWork[],
+	/**  The cycles running that end within a week. */
+	cycles: EndingCycle[],
+	/**  Intake's requests waiting today. */
+	requests: number,
+	/**  The Inbox's unread notices. */
+	unread: number,
 };
 
 export type Workspace = Workspace_Serialize | Workspace_Deserialize;

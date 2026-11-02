@@ -12,9 +12,10 @@ type Meeting = Day["meetings"][number];
 /** A row and the workspace it belongs to. */
 type In<T> = { day: Day; item: T };
 
-/** Today (D-057): what needs you, across every open workspace — tasks due, projects whose
- *  milestone is near, proposals waiting for you, commitments to follow up and this week's
- *  meetings. It only reads; each row opens its page, in its workspace. */
+/** Today (D-057): what needs you, across every open workspace — tasks due, your work items due
+ *  and the cycles ending (D-085), projects whose milestone is near, proposals waiting for you
+ *  (Intake's requests and the Inbox too), commitments to follow up and this week's meetings. It
+ *  only reads; each row opens its page, in its workspace. */
 export default function TodayPage() {
   const today = useToday();
   const days = today.data?.workspaces ?? [];
@@ -22,6 +23,9 @@ export default function TodayPage() {
   const all = <T,>(pick: (d: Day) => T[]): In<T>[] => days.flatMap((day) => pick(day).map((item) => ({ day, item })));
   const tasks = all((d) => d.tasks);
   const projects = all((d) => d.projects);
+  // The Projects module's (D-085): your work items due within a week, the cycles ending.
+  const work = all((d) => d.work.due);
+  const cycles = all((d) => d.work.cycles);
   // The ones to come first (soonest first), then those past their date (latest first), as each
   // workspace sends them (D-072).
   const opportunities = all((d) => d.opportunities).sort((a, b) => {
@@ -30,7 +34,7 @@ export default function TodayPage() {
   });
   const commitments = all((d) => d.commitments);
   const meetings = all((d) => d.meetings).sort((a, b) => a.item.held_on.localeCompare(b.item.held_on));
-  const waiting = days.filter((d) => d.waiting.updates + d.waiting.commitments + d.waiting.email_tasks + d.waiting.crm > 0);
+  const waiting = days.filter((d) => d.waiting.updates + d.waiting.commitments + d.waiting.email_tasks + d.waiting.crm + d.work.requests + d.work.unread > 0);
   const week = { monday: "Monday to Sunday", sunday: "Sunday to Saturday", saturday: "Saturday to Friday" }[currentFormats().weekStart];
   const more = days.reduce((n, d) => n + d.open_commitments - d.commitments.length, 0);
   // A section's line when it has nothing: only once the page was read.
@@ -66,7 +70,7 @@ export default function TodayPage() {
         ))}
       </Section>
 
-      <Section title="Waiting for you" subtitle="Proposals to apply or dismiss" empty={empty("Nothing waiting for you")} count={waiting.length}>
+      <Section title="Waiting for you" subtitle="Proposals to apply or dismiss, Intake's requests, the Inbox's unread" empty={empty("Nothing waiting for you")} count={waiting.length}>
         {waiting.map((d) => (
           <div key={d.slug} className={styles.waiting}>
             {many && <span className="chip">{d.name}</span>}
@@ -85,12 +89,42 @@ export default function TodayPage() {
                 {plural(d.waiting.email_tasks, "task from an email", "tasks from emails")}
               </Link>
             )}
+            {d.work.requests > 0 && (
+              <Link to="/projects" className={styles.link} aria-label={many ? `${plural(d.work.requests, "request")} in Intake in ${d.name}` : undefined} onClick={via(d.slug)}>
+                {plural(d.work.requests, "request")} in Intake
+              </Link>
+            )}
+            {d.work.unread > 0 && (
+              <Link to="/inbox" className={styles.link} aria-label={many ? `${d.work.unread} unread in Inbox in ${d.name}` : undefined} onClick={via(d.slug)}>
+                {d.work.unread} unread in Inbox
+              </Link>
+            )}
             {d.waiting.crm > 0 && (
               <Link to="/crm" search={{ tab: "waiting" }} className={styles.link} aria-label={many ? `${plural(d.waiting.crm, "CRM proposal")} in ${d.name}` : undefined} onClick={via(d.slug)}>
                 {plural(d.waiting.crm, "CRM proposal")}
               </Link>
             )}
           </div>
+        ))}
+      </Section>
+
+      <Section title="Your work items" subtitle="Open work items assigned to you, due within a week or overdue" empty={empty("No work item of yours due this week")} count={work.length}>
+        {work.map(({ day, item: w }) => (
+          <Link key={w.id} to="/projects/$projectId/items/$itemId" params={{ projectId: w.project_id, itemId: w.id }} className={styles.row} onClick={via(day.slug)}>
+            <Row day={day} many={many} title={`${w.key} ${w.name}`} meta={`${w.project_name} · ${w.state_name}`}>
+              <span className={isPast(w.target_date) ? `${styles.side} ${styles.late}` : styles.side}>{milestoneWhen(w.target_date)}</span>
+            </Row>
+          </Link>
+        ))}
+      </Section>
+
+      <Section title="Cycles ending" subtitle="Cycles running that end within a week" empty={empty("No cycle ends this week")} count={cycles.length}>
+        {cycles.map(({ day, item: c }) => (
+          <Link key={c.id} to="/projects/$projectId" params={{ projectId: c.project_id }} search={{ tab: "cycles", cycle: c.id }} className={styles.row} onClick={via(day.slug)}>
+            <Row day={day} many={many} title={c.name} meta={`${c.project_name} · ${c.done} of ${Math.max(c.items - c.cancelled, 0)} done`}>
+              <span className={styles.side}>{`Ends ${dueLabel(c.end_date).replace(/^(Today|Tomorrow)$/, (w) => w.toLowerCase())}`}</span>
+            </Row>
+          </Link>
         ))}
       </Section>
 

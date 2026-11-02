@@ -299,3 +299,6 @@
   border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
+
+/* What the meetings proposed for the work (D-085), above a list or in an item's view. */
+.proposed { margin-bottom: var(--space-5); }

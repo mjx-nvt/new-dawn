@@ -1,3 +1,74 @@
+# Last Build — The Projects agent on Plane's model, Today · release 0.11.12
+_2026-11-03_
+
+## What changed
+- **The Projects agent now proposes the work** (D-085). After a meeting's summary, besides the project's own updates, it proposes for each project the meeting touched:
+  - new **work items** for the action items: title, assignee (you, or a person the summary names), dates, priority, labels, a parent, and the cycle running;
+  - **state changes** for listed work items ("the report was sent" → Done);
+  - **comments** on listed work items.
+
+  Each rests on a sentence quoted from the summary.
+- **Where they show:**
+  - all of them in the project's "Updates waiting for you";
+  - the new work items also above the **Work items** list;
+  - what concerns one item, in that item's **Proposed from meetings** section.
+
+  Apply makes the change as yours: a new item's description quotes the meeting, and a state change leaves the quote as a comment. Dismiss sets it aside.
+- **Today** gains:
+  - **Your work items**: assigned to you, due within a week or overdue;
+  - **Cycles ending** within a week;
+  - Intake's requests and the Inbox's unread, under Waiting for you.
+- Migration **0043** (`project_update.item_id`, `payload_json`, a trigger that keeps decided proposals when a work item is deleted), reviewed by migration-safety (SAFE after one change). No new dependency.
+- Seen in the dev app, on the dev workspace's "Block B defects repair" (BBDR) and its "Building defects review" meeting:
+  - **Set-up:** the dev workspace took 0043. The check added a cycle "Week 45" running this week, a work item BBDR-2 "Send the November audit report to the contractor" (yours, due Thursday), and, for the check only, a line in the summary: "Ms. Chi confirmed the November audit report was sent to the contractor on 1 November."
+  - **The run:** "Find project updates" ran on qwen3.5:9b in 56 s (3,479 tokens in, 637 out) and proposed 5 updates: a decision for the dossier, and four of the meeting's action items as new work items in Week 45, among them "Compile and issue the final Defect List … to the contractor" for Ms. Chi and "Verify the defect list against the current site conditions", each with its quoted line.
+  - **Apply:** the first made BBDR-3 in Week 45, its description quoting the action item and "From the meeting “Building defects review”".
+  - **What it looked like:** the project's Overview showed the cards (who, priority, cycle, quote, Apply / Dismiss); Work items showed the three still waiting above the list; Today listed BBDR-2 under Your work items (due Thu).
+  - **Clean-up:** everything the check made was removed and the summary restored byte for byte.
+  - **Not proposed:** the state change for BBDR-2 (see below).
+- **"The report was sent" → Done**, the other half of the done-when, is not met in the app with this model. Four more runs on qwen3.5:9b (45–56 s each) proposed the action items every time, but never the state change:
+  - two runs filed the line as a dossier note ("November audit report was sent to the contractor on 1 November.");
+  - the others didn't use the line at all;
+  - between them, three wordings of the rule were tried: states listed with their groups, "work done is its state change, not a note", and an example.
+
+  So a safety net now does it in code (D-085): a sentence the model proposes for the project that says a listed open item's work was done also proposes that item's completed state, with that sentence. Unit tests cover the safety net, Apply (Done, plus a comment quoting the meeting) and the negative cases. Whether it fires in the app depends on the model picking the line up. The Projects agent's guide (Workspace → Agents) is your lever to tune it.
+- Review: the architecture review found two must-fixes, both taken:
+  1. One list the model gets wrong (null, a word, a single object) now costs that list, not the whole answer with its dossier updates.
+  2. The same meeting read again is matched by the sentence a proposal rests on, so a reworded repeat isn't proposed again. A work item made once may come again from a later meeting.
+
+  Should-fixes, all taken:
+  - the prompt is bounded: 150 work items in all, the running cycle's and the most recently changed first;
+  - names in the prompt are cleaned (one line, no markup, 80 characters);
+  - only the people the summary names, plus you;
+  - `<people>` is declared as data;
+  - an empty project's first items are asked for;
+  - Apply keeps only fields that still stand (labels, people, an open parent) and finds a state by name if it was made again;
+  - a state proposal with no state is refused;
+  - dates are checked as a work item checks them;
+  - an item's view always has its Proposed from meetings section, and an archived project or item offers only Dismiss.
+
+  Nits, taken:
+  - the rollback only undoes its own claim;
+  - Today reads project names without writing;
+  - Today's waiting count leaves out archived projects, and its subtitle names Intake and the Inbox;
+  - the proposals refresh every minute.
+
+  Also: evidence quoted without the action list's `[ ]` box, and the answer read as its JSON object with `touched`, whatever comes around it. Left as is: Today's due list shows 20 without an "and N more".
+- Checks: 218 Rust tests pass. Their new cases cover:
+  - new items, state changes and comments that hold up and apply;
+  - a list the model gets wrong;
+  - the same meeting read again;
+  - the safety net;
+  - a deleted item's proposals;
+  - the answer found inside other text.
+
+  Clippy, tsc and the localhost check are clean.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+---
+
 # Last Build — Developers: Plane's API tokens, local REST API, webhooks · release 0.11.11
 _2026-11-02_
 

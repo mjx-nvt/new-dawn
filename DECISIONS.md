@@ -91,6 +91,65 @@ _2026-11-02_
 
 ---
 
+## D-085 — The Projects agent on Plane's model: work items, states and comments as the dossier's proposals; Today reads the work
+_2026-11-02_
+
+**Context** (plan v4 §5.7, 0.11.12): the Projects agent (D-054) proposes a project's dossier updates after each summary and email. With Plane's side (0.11.x) it should also propose the work:
+- new work items (title, assignee, dates, priority, labels, parent, the active cycle);
+- state changes;
+- comments quoting the meeting.
+
+The proposal cards show in the item and the project. Today shows your items due, cycles ending, Intake pending, Inbox unread and proposals waiting.
+
+**Decision — the same proposals**: a Plane-side proposal is a row of the dossier's `project_update` (0043: `item_id`, `payload_json`) with the field `work_item`, `item_state` or `comment`. So there is one list of what waits (the project's "Updates waiting for you"), with Apply or Dismiss as before, the same feedback record (D-052) and the same history. The Work items tab shows the new work items waiting, while some wait; it's a queue, not a dossier section. An item's view always has its "Proposed from meetings" section. In an archived project or item, only Dismiss is offered. A proposal names the work item it's about, or once applied the one it made. Deleting the item takes the proposals still waiting about it and leaves the decided ones, unlinked: a BEFORE DELETE trigger, as 0018 does for emails.
+
+**Decision — what the agent reads and proposes**: after a summary, for each open project with a Plane side, the prompt lists:
+- its open work items (key, title, state, who): 40 at most for a project and 150 in all, the running cycle's and the most recently changed first;
+- its states and labels;
+- the cycle running;
+- the people it may assign: the owner (as "me") and the people the summary names.
+
+Names are cleaned as the owner's profile cleans them: one line, no markup, 80 characters at most.
+
+The answer adds, for each project the meeting touched:
+- `work_items`: new work the meeting gave someone, not already an item;
+- `state_changes`: a listed item moved to a listed state;
+- `comments`: what was said about a listed item.
+
+Each holds up only with a sentence quoted from the summary (as in D-054), and only with keys, states and labels the project has. Names: one the workspace knows, else the item is unassigned. Dates: as a work item takes them (years 1900–2199); a start after the due date is dropped.
+
+These aren't proposed again:
+- a title that is already an open item's;
+- a state the item already has;
+- the same proposal still waiting;
+- anything from the same meeting read again, matched by the sentence it rests on (in other words too), whatever became of it.
+
+A work item made from an earlier meeting can be proposed again by a later one: work recurs.
+
+**Decision — a safety net for work done**: on the dev meeting, the local 9b model kept filing "the report was sent" as a dossier note rather than as the listed item's state change, through three wordings of the rule (each state's group listed; "done work is its state change, not a note", with an example). So a sentence the model proposed for the project that says a listed open item's work was done also proposes that item's completed state, with that sentence, when the model didn't propose one. The match needs most of the item's longer title words, a word of work done (sent, delivered, signed…) and none of work not done. It is only a proposal, so a wrong match costs a Dismiss.
+
+The answer is read leniently. Where one name is asked and a list comes back, the first is taken. A list the model gets wrong (null, a word, a single object) costs that list, not the answer.
+
+**Decision — applying through the module**: Apply claims the proposal (a second click finds it applied), then makes the change through the Projects module as the owner's ("me": the owner decided, and the quote says where it came from):
+- a work item, in the cycle it was proposed for while that cycle is open (else the cycle running), its description quoting the meeting;
+- a state, with a comment quoting the meeting;
+- a comment, with the sentence it rests on.
+
+A work item's fields are taken as they still stand: labels still the project's, people still known, a parent still the project's and open; the rest are left off. A state is found by its id, or else by its name.
+
+A change the module refuses (an item now another project's, a state gone) puts the proposal back, with the reason. A state moved and its comment refused puts it back too; applying again is safe, since the state is then a no-op.
+
+**Decision — emails keep Intake**: an email's asks become Intake requests (D-081) and its dossier updates become proposals, as before. The Plane-side proposals come from meetings.
+
+**Decision — Today reads the work** (D-057): for each workspace with Projects on, Today adds:
+- your open work items (assigned to "me"; not done, cancelled or waiting in Intake) due within a week or overdue, as a section;
+- the cycles running that end within a week, as a section;
+- Intake's requests waiting and the Inbox's unread (its muted kinds left out), under Waiting for you.
+
+**Means for future work**: the parity audit (0.12.0) checks these against Plane's. A lesson from what the owner dismisses (D-052) can tune the agent's guide.
+
+---
+
 ## D-084 — Plane's API on the local server: one key store for both path families, Plane's webhooks in the same table, events after commit
 _2026-11-02_
 

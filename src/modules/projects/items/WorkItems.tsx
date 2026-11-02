@@ -8,6 +8,7 @@ import { readRules, usePmQuery, usePmViews, useViewMutations, type PmRule } from
 import { usePeople } from "../../../kernel/bridge/people";
 import { inField } from "../../../kernel/shell/useShortcuts";
 import { whoName } from "../pm";
+import { MeetingProposals } from "../Proposals";
 import Board from "./Board";
 import BulkBar from "./BulkBar";
 import Calendar from "./Calendar";
@@ -138,6 +139,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
 
   return (
     <section className={styles.list} aria-label="Work items">
+      <MeetingProposals slug={slug} projectId={project.id} readOnly={ro} />
       <div className={styles.toolbar}>
         <div className="segmented" role="tablist" aria-label="Layout">
           {LAYOUTS.map((l) => (

@@ -3,9 +3,8 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent }
 import { useArchivePmProject, usePmProject } from "../../kernel/bridge/pm";
 import { useVisitPm } from "../../kernel/bridge/pmHome";
 import { usePmIntakeCount } from "../../kernel/bridge/pmIntake";
-import { useDecideUpdate, useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
+import { useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
-import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
@@ -18,6 +17,7 @@ import Pages from "./items/Pages";
 import Views from "./items/Views";
 import WorkItems from "./items/WorkItems";
 import ProjectSettings from "./ProjectSettings";
+import Proposals from "./Proposals";
 import styles from "./Projects.module.css";
 
 const route = getRouteApi("/shell/projects/$projectId");
@@ -199,7 +199,8 @@ export default function ProjectPage() {
             {d.history.map((u) => (
               <li key={u.id} className={styles.item}>
                 <span>
-                  <span className="fieldLabel">{FIELD_LABEL[u.field]}</span> {u.value}
+                  <span className="fieldLabel">{FIELD_LABEL[u.field]}</span> {u.field === "item_state" || u.field === "comment" ? `${u.item_key ?? "A work item no longer kept"} — ` : ""}
+                  {u.value}
                   {u.due ? ` · by ${formatDay(u.due)}` : ""}
                 </span>
                 <span className="fieldHint">
@@ -252,53 +253,10 @@ function Field({ label, value }: { label: string; value?: string }) {
   );
 }
 
-/** The proposals, each with its evidence and the meeting it came from: Apply or Dismiss. */
+/** The proposals waiting, or ghost rows saying where they come from. */
 function Waiting({ slug, updates }: { slug?: string; updates?: ProjectUpdate[] }) {
-  const decide = useDecideUpdate(slug);
   if (!updates?.length) return <Ghosts text="Not yet captured — after each summary, the changes its meetings bring show here" />;
-  return (
-    <div className={styles.list}>
-      {decide.error && <p className="formError">{decide.error.message}</p>}
-      {updates.map((u) => (
-        <div key={u.id} className={`card ${styles.update}`}>
-          <div className={styles.updateText}>
-            <p className="eyebrow">{FIELD_LABEL[u.field]}</p>
-            <p className={styles.updateValue}>
-              {u.value}
-              {u.due ? ` · by ${formatDay(u.due)}` : ""}
-            </p>
-            {u.evidence && <p className={styles.evidence}>“{u.evidence}”</p>}
-            <p className="fieldHint aiMark">
-              <SparkleIcon /> Proposed from{" "}
-              {u.email_item_id ? (
-                <>
-                  the email{" "}
-                  <Link to="/email" className={styles.link}>
-                    “{u.email_subject || "No subject"}”
-                  </Link>
-                </>
-              ) : u.meeting_id ? (
-                <Link to="/meetings/$meetingId" params={{ meetingId: u.meeting_id }} search={{ tab: "summary" }} className={styles.link}>
-                  {u.meeting_title ?? "a meeting"}
-                </Link>
-              ) : (
-                "a meeting"
-              )}{" "}
-              · {formatWhen(u.created_at)}
-            </p>
-          </div>
-          <div className={styles.updateActions}>
-            <button type="button" className="btn btnSecondary btnCompact" disabled={decide.isPending} aria-label={`Apply: ${FIELD_LABEL[u.field]} ${u.value}`} onClick={() => decide.mutate({ id: u.id, apply: true })}>
-              Apply
-            </button>
-            <button type="button" className="btn btnGhost btnCompact" disabled={decide.isPending} aria-label={`Dismiss: ${FIELD_LABEL[u.field]} ${u.value}`} onClick={() => decide.mutate({ id: u.id, apply: false })}>
-              Dismiss
-            </button>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
+  return <Proposals slug={slug} updates={updates} />;
 }
 
 /** Risks or decisions: each with Remove, and a field to add one (Enter). */

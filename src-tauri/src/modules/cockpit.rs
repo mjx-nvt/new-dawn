@@ -58,6 +58,8 @@ pub struct Day {
     pub opportunities: Vec<ToClose>,
     /// Proposals waiting for the owner.
     pub waiting: Waiting,
+    /// The Projects module's work for today (D-085); empty when the module is off.
+    pub work: crate::modules::pm::home::WorkToday,
 }
 
 #[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
@@ -99,12 +101,14 @@ pub async fn today(hub: &WorkspaceHub) -> Result<Today> {
     let day = Local::now().date_naive();
     let start = formats::get(hub).await.map(|f| f.week_start).unwrap_or_default();
     let current = hub.current_workspace().await?.map(|w| w.slug);
+    // The Inbox's count as its sidebar shows it: the kinds the owner muted left out (D-075).
+    let muted = crate::modules::pm::prefs(hub).await.map(|p| p.muted).unwrap_or_default();
     let (mut workspaces, mut unread) = (Vec::new(), Vec::new());
     // Each active workspace from its own pool in the hub. One that can't be read (it failed to
     // open at launch, or a query failed) is named; the others still show.
     for w in hub.list().await?.into_iter().filter(|w| !w.archived) {
         let day = match hub.pool(&w.slug) {
-            Ok(pool) => read(&pool, day, start, w.slug.clone(), w.name.clone()).await,
+            Ok(pool) => read(&pool, day, start, &muted, w.slug.clone(), w.name.clone()).await,
             Err(err) => Err(err),
         };
         match day {
@@ -124,7 +128,7 @@ pub async fn today(hub: &WorkspaceHub) -> Result<Today> {
     })
 }
 
-async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, slug: String, name: String) -> Result<Day> {
+async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, muted: &[crate::modules::pm::inbox::NoticeKind], slug: String, name: String) -> Result<Day> {
     let tasks = tasks::list(pool).await?.today;
     let soon = (day + Duration::days(WATCH_DAYS)).to_string();
     let mut projects: Vec<Project> = projects::list(pool)
@@ -151,7 +155,7 @@ async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, slug: String,
     .fetch_all(pool)
     .await?;
     let mut waiting: Waiting = sqlx::query_as(
-        "SELECT (SELECT count(*) FROM project_update WHERE status = 'proposed') AS updates, \
+        "SELECT (SELECT count(*) FROM project_update WHERE status = 'proposed' AND project_id NOT IN (SELECT project_id FROM pm_project WHERE archived_at IS NOT NULL)) AS updates, \
          (SELECT count(*) FROM commitment WHERE status = 'proposed') AS commitments, \
          (SELECT count(*) FROM email_task WHERE status = 'proposed') AS email_tasks, \
          (SELECT count(*) FROM crm_proposal WHERE status = 'proposed') AS crm",
@@ -160,6 +164,7 @@ async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, slug: String,
     .await?;
     // A module that's off has nothing to show here (D-059).
     let modules = crate::modules::switches::enabled(pool).await?;
+    let work = if modules.projects { crate::modules::pm::home::today(pool, day, muted).await? } else { Default::default() };
     if !modules.projects {
         projects.clear();
         waiting.updates = 0;
@@ -202,6 +207,7 @@ async fn read(pool: &SqlitePool, day: NaiveDate, start: WeekStart, slug: String,
         meetings,
         opportunities,
         waiting,
+        work,
     })
 }
 

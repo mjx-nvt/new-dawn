@@ -12,6 +12,9 @@ export const FIELD_LABEL: Record<UpdateField, string> = {
   risk: "New risk",
   decision: "Decision",
   note: "Note",
+  work_item: "New work item",
+  item_state: "State",
+  comment: "Comment",
 };
 
 /** "15 Nov 2026" (or the owner's date format) for a YYYY-MM-DD calendar day (no time zone shift). */

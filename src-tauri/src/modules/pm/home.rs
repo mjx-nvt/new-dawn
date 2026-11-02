@@ -375,6 +375,77 @@ pub async fn search(pool: &SqlitePool, query: &str) -> Result<Vec<PmHit>> {
     .await?)
 }
 
+
+/// What Today shows of the Projects module (D-085), across its open projects.
+#[derive(Debug, Clone, Default, Serialize, Type)]
+pub struct WorkToday {
+    /// Your open work items due within a week or overdue, soonest first (the first 20).
+    pub due: Vec<DueWork>,
+    /// The cycles running that end within a week.
+    pub cycles: Vec<EndingCycle>,
+    /// Intake's requests waiting today.
+    pub requests: u32,
+    /// The Inbox's unread notices.
+    pub unread: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Type, sqlx::FromRow)]
+pub struct DueWork {
+    pub id: String,
+    pub project_id: String,
+    pub project_name: String,
+    /// "VIFC-12".
+    pub key: String,
+    pub name: String,
+    /// YYYY-MM-DD.
+    pub target_date: String,
+    pub state_name: String,
+    pub state_group: super::settings::StateGroup,
+}
+
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct EndingCycle {
+    pub id: String,
+    pub project_id: String,
+    pub project_name: String,
+    pub name: String,
+    /// YYYY-MM-DD.
+    pub end_date: String,
+    pub items: u32,
+    pub done: u32,
+    pub cancelled: u32,
+}
+
+/// Today's window: due or ending within this many days.
+const WEEK: i64 = 7;
+const DUE_SHOWN: u32 = 20;
+
+pub async fn today(pool: &SqlitePool, day: chrono::NaiveDate, muted: &[super::inbox::NoticeKind]) -> Result<WorkToday> {
+    let until = (day + chrono::Duration::days(WEEK)).to_string();
+    let due: Vec<DueWork> = sqlx::query_as(
+        "SELECT i.id, i.project_id, p.name AS project_name, m.identifier || '-' || i.sequence AS key, i.name, i.target_date, s.name AS state_name, s.state_group \
+         FROM pm_item i JOIN pm_item_assignee a ON a.item_id = i.id AND a.who = 'me' JOIN pm_state s ON s.id = i.state_id \
+         JOIN pm_project m ON m.project_id = i.project_id JOIN project p ON p.id = i.project_id \
+         WHERE m.archived_at IS NULL AND i.archived_at IS NULL AND s.state_group NOT IN ('completed', 'cancelled', 'triage') \
+         AND i.target_date IS NOT NULL AND i.target_date <= ? ORDER BY i.target_date, i.sequence LIMIT ?",
+    )
+    .bind(&until)
+    .bind(DUE_SHOWN)
+    .fetch_all(pool)
+    .await?;
+    // Read only: the names from the projects themselves (`list` may repair a project's Plane side).
+    let names: std::collections::HashMap<String, String> = sqlx::query_as::<_, (String, String)>("SELECT id, name FROM project").fetch_all(pool).await?.into_iter().collect();
+    let cycles = super::cycles::active(pool, day)
+        .await?
+        .into_iter()
+        .filter(|c| c.end_date.as_deref().is_some_and(|e| e <= until.as_str()))
+        .map(|c| EndingCycle { project_name: names.get(&c.project_id).cloned().unwrap_or_default(), end_date: c.end_date.unwrap_or_default(), id: c.id, project_id: c.project_id, name: c.name, items: c.items, done: c.done, cancelled: c.cancelled })
+        .collect();
+    let requests = super::analytics::overview(pool, None, day).await?.requests;
+    let unread = super::inbox::counts(pool, muted).await?.all;
+    Ok(WorkToday { due, cycles, requests, unread })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

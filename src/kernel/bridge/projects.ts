@@ -15,7 +15,8 @@ export function useProjects(slug: string | undefined) {
 
 /** A project's page: the project, the updates waiting for you, its history and meetings. */
 export function useProject(slug: string | undefined, id: string) {
-  return useQuery({ queryKey: projectKey(slug ?? "", id), queryFn: () => unwrap(commands.getProject(slug ?? "", id)), enabled: !!slug });
+  // Proposals arrive in the background after a summary: look again every minute, as the list.
+  return useQuery({ queryKey: projectKey(slug ?? "", id), queryFn: () => unwrap(commands.getProject(slug ?? "", id)), enabled: !!slug, refetchInterval: 60_000 });
 }
 
 function useRefresh(slug: string | undefined) {
@@ -23,9 +24,11 @@ function useRefresh(slug: string | undefined) {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["projects", slug ?? ""] });
     void queryClient.invalidateQueries({ queryKey: ["project", slug ?? ""] });
-    // Plane's side shows the name and the status too (D-073).
-    void queryClient.invalidateQueries({ queryKey: ["pm-projects", slug ?? ""] });
-    void queryClient.invalidateQueries({ queryKey: ["pm-project", slug ?? ""] });
+    // Plane's side shows the name and the status too (D-073), and an applied proposal makes or
+    // changes its work items (D-085).
+    for (const key of ["pm-projects", "pm-project", "pm-items", "pm-item", "pm-sub-items", "pm-activity", "pm-comments", "pm-cycles", "notices", "notice-counts", "today"]) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
   };
 }
 
