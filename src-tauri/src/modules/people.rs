@@ -273,12 +273,32 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
-    // And the CRM agent's proposals about them (D-072).
+    // And the CRM agent's proposals about them (D-072), and the projects they lead, are the
+    // default assignee of or follow (D-073).
     sqlx::query("UPDATE crm_proposal SET about_id = ?1 WHERE about_id = ?2")
         .bind(&k.id)
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
+    sqlx::query("UPDATE pm_project SET lead = ?1 WHERE lead = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE pm_project SET default_assignee = ?1 WHERE default_assignee = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "UPDATE pm_project SET subscribers_json = (SELECT json_group_array(DISTINCT CASE WHEN s.value = ?2 THEN ?1 ELSE s.value END) \
+         FROM json_each(pm_project.subscribers_json) AS s) \
+         WHERE EXISTS (SELECT 1 FROM json_each(pm_project.subscribers_json) AS s WHERE s.value = ?2)",
+    )
+    .bind(&k.id)
+    .bind(&o.id)
+    .execute(&mut *tx)
+    .await?;
     sqlx::query(
         "UPDATE person SET notes = trim(notes || char(10) || char(10) || \
          (SELECT notes FROM person WHERE id = ?2), char(10)) WHERE id = ?1",

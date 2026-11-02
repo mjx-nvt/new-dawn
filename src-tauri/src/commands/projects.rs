@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::error::AppError;
 use crate::kernel::hub::WorkspaceHub;
-use crate::modules::projects::{self, NewProject, Project, ProjectDossier, ProjectPatch};
+use crate::modules::projects::{self, Project, ProjectDossier, ProjectPatch};
 
 /// The workspace's projects: active first, then on hold, then done.
 #[tauri::command]
@@ -23,16 +23,6 @@ pub async fn get_project(
     id: String,
 ) -> Result<ProjectDossier, AppError> {
     Ok(projects::dossier(&hub.pool(&slug)?, &id).await?)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn create_project(
-    hub: State<'_, WorkspaceHub>,
-    slug: String,
-    project: NewProject,
-) -> Result<Project, AppError> {
-    Ok(projects::create(&hub.pool(&slug)?, project).await?)
 }
 
 #[tauri::command]

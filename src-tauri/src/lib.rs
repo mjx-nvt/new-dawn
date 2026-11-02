@@ -69,6 +69,7 @@ mod modules {
     pub mod memory;
     pub mod model_check;
     pub mod people;
+    pub mod pm;
     pub mod projects;
     pub mod switches;
     pub mod tasks;
@@ -107,6 +108,7 @@ mod commands {
     pub mod onboarding;
     pub mod people;
     pub mod profile;
+    pub mod pm;
     pub mod projects;
     pub mod switches;
     pub mod views;
@@ -214,12 +216,30 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::agents::forget_learned,
             commands::projects::list_projects,
             commands::projects::get_project,
-            commands::projects::create_project,
             commands::projects::update_project,
             commands::projects::delete_project,
             commands::projects::apply_project_update,
             commands::projects::dismiss_project_update,
             commands::projects::find_project_updates,
+            commands::pm::list_pm_projects,
+            commands::pm::get_pm_project,
+            commands::pm::create_pm_project,
+            commands::pm::update_pm_project,
+            commands::pm::archive_pm_project,
+            commands::pm::list_pm_states,
+            commands::pm::create_pm_state,
+            commands::pm::update_pm_state,
+            commands::pm::set_default_pm_state,
+            commands::pm::delete_pm_state,
+            commands::pm::move_pm_state,
+            commands::pm::list_pm_labels,
+            commands::pm::create_pm_label,
+            commands::pm::update_pm_label,
+            commands::pm::delete_pm_label,
+            commands::pm::list_pm_estimates,
+            commands::pm::create_pm_estimate,
+            commands::pm::update_pm_estimate,
+            commands::pm::disable_pm_estimates,
             commands::crm::list_people_cards,
             commands::crm::list_waiting_commitments,
             commands::crm::get_person,

@@ -7,8 +7,6 @@
 }
 .titles { min-width: 0; }
 .headActions { display: flex; align-items: center; gap: var(--space-3); }
-.lead { margin-top: var(--space-3); }
-
 .list {
   display: flex;
   flex-direction: column;
@@ -18,24 +16,8 @@
 .slot { height: 72px; border-radius: var(--radius-card); }
 .ghostRow { height: 44px; border-radius: var(--radius-control); }
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  color: var(--ink);
-  transition: border-color 150ms ease-out;
-}
 .row:hover { border-color: var(--ink-3); }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-.title { font-size: var(--t-lg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.meta { font-size: var(--t-sm); color: var(--ink-2); }
-
-.fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-5) var(--space-6);
-}
 @container content (max-width: 640px) {
   .fields { grid-template-columns: 1fr; }
 }
@@ -87,3 +69,254 @@
 }
 .confirmTitle { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
 .confirmActions { display: flex; gap: var(--space-2); }
+
+/* Plane's list (D-073) */
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: var(--space-5) 0;
+}
+
+.tools :global(select.input) {
+  width: auto;
+  min-width: 0;
+  max-width: 200px;
+}
+
+.search {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.pcard {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.cover {
+  height: 64px;
+  border-bottom: 0.5px solid var(--hair);
+}
+
+.coverNone {
+  height: 24px;
+}
+
+.coverSlate {
+  background: var(--surface-2);
+}
+
+.coverOrange {
+  background: var(--primary-tint);
+}
+
+
+.pcardBody {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+.logo {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-top: -20px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  border: 0.5px solid var(--hair);
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.pline .logo {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.pname {
+  font-size: var(--t-lg);
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.pname:hover {
+  color: var(--primary-text);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.pdesc {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--t-sm);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pfoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.pline .main {
+  flex: 1;
+  min-width: 0;
+}
+
+.coverPick {
+  height: 72px;
+  border-radius: var(--radius-card);
+  border: 0.5px solid var(--hair);
+  display: flex;
+  align-items: flex-end;
+  padding: 0 var(--space-4);
+}
+
+.coverPick .logo {
+  margin-bottom: -20px;
+}
+
+.emojiRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.emojiInput {
+  width: 64px;
+  text-align: center;
+}
+
+.ptitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ptabs {
+  margin-top: var(--space-7);
+}
+
+.ptable {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ptableHead {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.ptable .ghostRow {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+}
+
+.settingsBody {
+  margin-top: var(--space-5);
+}
+
+.stateMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+
+.child {
+  padding-left: var(--space-7);
+}
+
+.chipX {
+  border: none;
+  background: none;
+  color: inherit;
+  padding: 0 0 0 var(--space-1);
+  cursor: pointer;
+  font-size: var(--t-xs);
+}
+
+.valueInput {
+  width: 72px;
+}
+
+.stateText {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.stateText :global(.formError) {
+  grid-column: 1 / -1;
+}
+
+/* A settings section's one line, apart from the groups under it. */
+.hint {
+  margin: 0 0 var(--space-6);
+}
+
+.colorPick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.colorPick :global(select.input) {
+  width: auto;
+  min-width: 0;
+  max-width: 132px;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}

@@ -168,7 +168,6 @@ export const commands = {
 	listProjects: (slug: string) => typedError<Project_Serialize[], AppError>(__TAURI_INVOKE("list_projects", { slug })),
 	/**  A project's page: the project, the updates waiting, its history and meetings. */
 	getProject: (slug: string, id: string) => typedError<ProjectDossier_Serialize, AppError>(__TAURI_INVOKE("get_project", { slug, id })),
-	createProject: (slug: string, project: NewProject_Deserialize) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("create_project", { slug, project })),
 	updateProject: (slug: string, id: string, patch: ProjectPatch_Deserialize) => typedError<Project_Serialize, AppError>(__TAURI_INVOKE("update_project", { slug, id, patch })),
 	deleteProject: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_project", { slug, id })),
 	/**  Apply: the proposed change goes into the project. */
@@ -179,6 +178,25 @@ export const commands = {
 	 *  updates it proposed.
 	 */
 	findProjectUpdates: (slug: string, meetingId: string) => typedError<number, AppError>(__TAURI_INVOKE("find_project_updates", { slug, meetingId })),
+	listPmProjects: (slug: string) => typedError<PmProject_Serialize[], AppError>(__TAURI_INVOKE("list_pm_projects", { slug })),
+	getPmProject: (slug: string, id: string) => typedError<PmProject_Serialize, AppError>(__TAURI_INVOKE("get_pm_project", { slug, id })),
+	createPmProject: (slug: string, project: NewPmProject_Deserialize) => typedError<PmProject_Serialize, AppError>(__TAURI_INVOKE("create_pm_project", { slug, project })),
+	updatePmProject: (slug: string, id: string, patch: PmProjectPatch_Deserialize) => typedError<PmProject_Serialize, AppError>(__TAURI_INVOKE("update_pm_project", { slug, id, patch })),
+	archivePmProject: (slug: string, id: string, archived: boolean) => typedError<PmProject_Serialize, AppError>(__TAURI_INVOKE("archive_pm_project", { slug, id, archived })),
+	listPmStates: (slug: string, projectId: string) => typedError<PmState[], AppError>(__TAURI_INVOKE("list_pm_states", { slug, projectId })),
+	createPmState: (slug: string, projectId: string, input: StateInput) => typedError<PmState[], AppError>(__TAURI_INVOKE("create_pm_state", { slug, projectId, input })),
+	updatePmState: (slug: string, id: string, patch: StatePatch_Deserialize) => typedError<PmState[], AppError>(__TAURI_INVOKE("update_pm_state", { slug, id, patch })),
+	setDefaultPmState: (slug: string, id: string) => typedError<PmState[], AppError>(__TAURI_INVOKE("set_default_pm_state", { slug, id })),
+	deletePmState: (slug: string, id: string) => typedError<PmState[], AppError>(__TAURI_INVOKE("delete_pm_state", { slug, id })),
+	movePmState: (slug: string, id: string, up: boolean) => typedError<PmState[], AppError>(__TAURI_INVOKE("move_pm_state", { slug, id, up })),
+	listPmLabels: (slug: string, projectId: string) => typedError<PmLabel_Serialize[], AppError>(__TAURI_INVOKE("list_pm_labels", { slug, projectId })),
+	createPmLabel: (slug: string, projectId: string, input: LabelInput_Deserialize) => typedError<PmLabel_Serialize[], AppError>(__TAURI_INVOKE("create_pm_label", { slug, projectId, input })),
+	updatePmLabel: (slug: string, id: string, input: LabelInput_Deserialize) => typedError<PmLabel_Serialize[], AppError>(__TAURI_INVOKE("update_pm_label", { slug, id, input })),
+	deletePmLabel: (slug: string, id: string) => typedError<PmLabel_Serialize[], AppError>(__TAURI_INVOKE("delete_pm_label", { slug, id })),
+	listPmEstimates: (slug: string, projectId: string) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("list_pm_estimates", { slug, projectId })),
+	createPmEstimate: (slug: string, projectId: string, input: EstimateInput) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("create_pm_estimate", { slug, projectId, input })),
+	updatePmEstimate: (slug: string, id: string, input: EstimateInput) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("update_pm_estimate", { slug, id, input })),
+	disablePmEstimates: (slug: string, projectId: string) => typedError<PmEstimate_Serialize[], AppError>(__TAURI_INVOKE("disable_pm_estimates", { slug, projectId })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -806,6 +824,34 @@ export type Attendee_Serialize = {
 	 *  as attending, so their minutes don't change.
 	 */
 	attending: boolean,
+};
+
+/**
+ *  Plane's automations: archive what's closed after N months, close what's idle after N months
+ *  into a cancelled state, remind of due dates. 0 months = off.
+ */
+export type Automations = Automations_Serialize | Automations_Deserialize;
+
+/**
+ *  Plane's automations: archive what's closed after N months, close what's idle after N months
+ *  into a cancelled state, remind of due dates. 0 months = off.
+ */
+export type Automations_Deserialize = {
+	archive_in: number,
+	close_in: number,
+	close_state_id?: string | null,
+	due_reminders: boolean,
+};
+
+/**
+ *  Plane's automations: archive what's closed after N months, close what's idle after N months
+ *  into a cancelled state, remind of due dates. 0 months = off.
+ */
+export type Automations_Serialize = {
+	archive_in: number,
+	close_in: number,
+	close_state_id: string | null,
+	due_reminders: boolean,
 };
 
 /**
@@ -1523,6 +1569,22 @@ export type EmailThreads_Serialize = {
 	note: string,
 };
 
+export type EstimateInput = {
+	name: string,
+	kind: EstimateKind,
+	/**  In order, 1 to 6 of them; points are numbers. */
+	values: string[],
+};
+
+export type EstimateKind = "points" | "categories";
+
+export type EstimatePoint = {
+	id: string,
+	/**  Its place, 1 to 6. */
+	key: number,
+	value: string,
+};
+
 export type EventAttendee = EventAttendee_Serialize | EventAttendee_Deserialize;
 
 export type EventAttendee_Deserialize = {
@@ -1622,6 +1684,15 @@ export type Favorites_Deserialize = {
 export type Favorites_Serialize = {
 	folders: FavoriteFolder[],
 	items: Favorite_Serialize[],
+};
+
+/**  Cycles, Modules, Views, Pages and Intake, each on or off for a project. */
+export type Features = {
+	cycles: boolean,
+	modules: boolean,
+	views: boolean,
+	pages: boolean,
+	intake: boolean,
 };
 
 /**
@@ -1962,6 +2033,22 @@ export type Judged = {
 	judged: number,
 	changed: number,
 	dropped: number,
+};
+
+export type LabelInput = LabelInput_Serialize | LabelInput_Deserialize;
+
+export type LabelInput_Deserialize = {
+	name: string,
+	description: string,
+	color: string,
+	parent_id?: string | null,
+};
+
+export type LabelInput_Serialize = {
+	name: string,
+	description: string,
+	color: string,
+	parent_id: string | null,
 };
 
 /**  Priority order: a lower lane waits for every higher one. */
@@ -2514,6 +2601,8 @@ export type Neighbours_Serialize = {
 	next: string | null,
 };
 
+export type Network = "private" | "public";
+
 /**  A key just made: the record, and the key itself — shown this once. */
 export type NewApiKey = NewApiKey_Serialize | NewApiKey_Deserialize;
 
@@ -2529,20 +2618,31 @@ export type NewApiKey_Serialize = {
 	secret: string,
 };
 
-export type NewProject = NewProject_Serialize | NewProject_Deserialize;
+/**  Plane's create form: the project, its Plane side and the default states. */
+export type NewPmProject = NewPmProject_Serialize | NewPmProject_Deserialize;
 
-export type NewProject_Deserialize = {
+/**  Plane's create form: the project, its Plane side and the default states. */
+export type NewPmProject_Deserialize = {
 	name: string,
-	phase: string,
-	next_milestone: string,
-	milestone_due?: string | null,
+	identifier: string,
+	description: string,
+	emoji: string,
+	cover: string,
+	network: Network,
+	lead?: string | null,
+	features: Features,
 };
 
-export type NewProject_Serialize = {
+/**  Plane's create form: the project, its Plane side and the default states. */
+export type NewPmProject_Serialize = {
 	name: string,
-	phase: string,
-	next_milestone: string,
-	milestone_due: string | null,
+	identifier: string,
+	description: string,
+	emoji: string,
+	cover: string,
+	network: Network,
+	lead: string | null,
+	features: Features,
 };
 
 export type NumberFormat = 
@@ -2849,6 +2949,162 @@ export type PersonInput_Serialize = {
 };
 
 export type Pick = "a" | "b" | "same";
+
+export type PmEstimate = PmEstimate_Serialize | PmEstimate_Deserialize;
+
+export type PmEstimate_Deserialize = {
+	id: string,
+	name: string,
+	description: string,
+	kind: EstimateKind,
+	points: EstimatePoint[],
+	/**  The project's estimate now. */
+	active: boolean,
+	archived_at?: string | null,
+	created_at: string,
+};
+
+export type PmEstimate_Serialize = {
+	id: string,
+	name: string,
+	description: string,
+	kind: EstimateKind,
+	points: EstimatePoint[],
+	/**  The project's estimate now. */
+	active: boolean,
+	archived_at: string | null,
+	created_at: string,
+};
+
+export type PmLabel = PmLabel_Serialize | PmLabel_Deserialize;
+
+export type PmLabel_Deserialize = {
+	id: string,
+	project_id: string,
+	/**  The label group it is in. */
+	parent_id?: string | null,
+	name: string,
+	description: string,
+	color: string,
+	sort_order: number | null,
+};
+
+export type PmLabel_Serialize = {
+	id: string,
+	project_id: string,
+	/**  The label group it is in. */
+	parent_id: string | null,
+	name: string,
+	description: string,
+	color: string,
+	sort_order: number | null,
+};
+
+export type PmProject = PmProject_Serialize | PmProject_Deserialize;
+
+/**  The settings' edits: a field left out stays; an empty lead or assignee clears it. */
+export type PmProjectPatch = PmProjectPatch_Serialize | PmProjectPatch_Deserialize;
+
+/**  The settings' edits: a field left out stays; an empty lead or assignee clears it. */
+export type PmProjectPatch_Deserialize = {
+	name?: string | null,
+	identifier?: string | null,
+	description?: string | null,
+	emoji?: string | null,
+	cover?: string | null,
+	network?: Network | null,
+	lead?: string | null,
+	default_assignee?: string | null,
+	subscribers?: string[] | null,
+	time_zone?: string | null,
+	features?: Features | null,
+	automations?: Automations_Deserialize | null,
+	favorite?: boolean | null,
+	sort_order?: number | null,
+};
+
+/**  The settings' edits: a field left out stays; an empty lead or assignee clears it. */
+export type PmProjectPatch_Serialize = {
+	name: string | null,
+	identifier: string | null,
+	description: string | null,
+	emoji: string | null,
+	cover: string | null,
+	network: Network | null,
+	lead: string | null,
+	default_assignee: string | null,
+	subscribers: string[] | null,
+	time_zone: string | null,
+	features: Features | null,
+	automations: Automations_Serialize | null,
+	favorite: boolean | null,
+	sort_order: number | null,
+};
+
+export type PmProject_Deserialize = {
+	/**  The project's id (its dossier's too). */
+	id: string,
+	name: string,
+	/**  The dossier's status (D-054). */
+	status: ProjectStatus,
+	identifier: string,
+	description: string,
+	emoji: string,
+	cover: string,
+	network: Network,
+	/**  "me" (the owner) or a person's id. */
+	lead?: string | null,
+	default_assignee?: string | null,
+	subscribers: string[],
+	/**  An IANA zone; empty: the owner's (Formats). */
+	time_zone: string,
+	features: Features,
+	automations: Automations_Deserialize,
+	estimate_id?: string | null,
+	favorite: boolean,
+	sort_order: number | null,
+	archived_at?: string | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmProject_Serialize = {
+	/**  The project's id (its dossier's too). */
+	id: string,
+	name: string,
+	/**  The dossier's status (D-054). */
+	status: ProjectStatus,
+	identifier: string,
+	description: string,
+	emoji: string,
+	cover: string,
+	network: Network,
+	/**  "me" (the owner) or a person's id. */
+	lead: string | null,
+	default_assignee: string | null,
+	subscribers: string[],
+	/**  An IANA zone; empty: the owner's (Formats). */
+	time_zone: string,
+	features: Features,
+	automations: Automations_Serialize,
+	estimate_id: string | null,
+	favorite: boolean,
+	sort_order: number | null,
+	archived_at: string | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmState = {
+	id: string,
+	project_id: string,
+	name: string,
+	description: string,
+	color: string,
+	group: StateGroup,
+	sequence: number | null,
+	is_default: boolean,
+};
 
 export type Preview = Preview_Serialize | Preview_Deserialize;
 
@@ -3435,6 +3691,31 @@ export type SpeechJob =
 
 /**  Where a transcription job is; sent to the UI with a 0–100 percent. */
 export type Stage = "queued" | "decoding" | "detecting_speech" | "transcribing" | "saving";
+
+export type StateGroup = "backlog" | "unstarted" | "started" | "completed" | "cancelled" | 
+/**  Intake's (0.11.8): not shown among the project's states. */
+"triage";
+
+export type StateInput = {
+	name: string,
+	description: string,
+	color: string,
+	group: StateGroup,
+};
+
+export type StatePatch = StatePatch_Serialize | StatePatch_Deserialize;
+
+export type StatePatch_Deserialize = {
+	name?: string | null,
+	description?: string | null,
+	color?: string | null,
+};
+
+export type StatePatch_Serialize = {
+	name: string | null,
+	description: string | null,
+	color: string | null,
+};
 
 export type Status = Status_Serialize | Status_Deserialize;
 

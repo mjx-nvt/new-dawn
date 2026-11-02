@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands, type NewProject, type Project, type ProjectDossier, type ProjectPatch, type ProjectStatus, type ProjectUpdate, type UpdateField } from "../../bindings";
+import { commands, type Project, type ProjectDossier, type ProjectPatch, type ProjectStatus, type ProjectUpdate, type UpdateField } from "../../bindings";
 import { unwrap } from "./unwrap";
 
-export type { NewProject, Project, ProjectDossier, ProjectPatch, ProjectStatus, ProjectUpdate, UpdateField };
+export type { Project, ProjectDossier, ProjectPatch, ProjectStatus, ProjectUpdate, UpdateField };
 
 const listKey = (slug: string) => ["projects", slug] as const;
 const projectKey = (slug: string, id: string) => ["project", slug, id] as const;
@@ -23,12 +23,10 @@ function useRefresh(slug: string | undefined) {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["projects", slug ?? ""] });
     void queryClient.invalidateQueries({ queryKey: ["project", slug ?? ""] });
+    // Plane's side shows the name and the status too (D-073).
+    void queryClient.invalidateQueries({ queryKey: ["pm-projects", slug ?? ""] });
+    void queryClient.invalidateQueries({ queryKey: ["pm-project", slug ?? ""] });
   };
-}
-
-export function useCreateProject(slug: string | undefined) {
-  const refresh = useRefresh(slug);
-  return useMutation({ mutationFn: (project: NewProject) => unwrap(commands.createProject(slug ?? "", project)), onSuccess: refresh });
 }
 
 export function useUpdateProject(slug: string | undefined) {

@@ -146,14 +146,6 @@ pub struct ProjectDossier {
     pub meetings: Vec<LinkedMeeting>,
 }
 
-#[derive(Debug, Clone, Deserialize, Type)]
-pub struct NewProject {
-    pub name: String,
-    pub phase: String,
-    pub next_milestone: String,
-    pub milestone_due: Option<String>,
-}
-
 /// The owner's edits; a field left out stays as it is ("" clears a date).
 #[derive(Debug, Clone, Default, Deserialize, Type)]
 pub struct ProjectPatch {
@@ -186,10 +178,12 @@ macro_rules! update_select {
     };
 }
 
-/// Active first, then on hold, then done; by name.
+/// Active first, then on hold, then done; by name. An archived project (D-073) is out: the
+/// Projects agent doesn't read for it and Today doesn't show it.
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Project>> {
     let rows: Vec<ProjectRow> = sqlx::query_as(concat!(
         project_select!(),
+        " WHERE p.id NOT IN (SELECT project_id FROM pm_project WHERE archived_at IS NOT NULL)",
         " ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'on_hold' THEN 1 ELSE 2 END, p.name COLLATE NOCASE"
     ))
     .fetch_all(pool)
@@ -238,7 +232,7 @@ pub async fn dossier(pool: &SqlitePool, id: &str) -> Result<ProjectDossier> {
     })
 }
 
-fn clean_name(name: &str) -> Result<String> {
+pub(crate) fn clean_name(name: &str) -> Result<String> {
     let name = one_line(name);
     if fold(&name).is_empty() {
         bail!(AppError::invalid("A project needs a name"));
@@ -266,7 +260,7 @@ fn one_line(text: &str) -> String {
 }
 
 /// Two open projects can't share a name (the expert finds projects by name).
-async fn check_name(pool: &SqlitePool, name: &str, except: Option<&str>) -> Result<()> {
+pub(crate) async fn check_name(pool: &SqlitePool, name: &str, except: Option<&str>) -> Result<()> {
     let taken = list(pool).await?.into_iter().any(|p| {
         p.status != ProjectStatus::Done
             && Some(p.id.as_str()) != except
@@ -278,23 +272,6 @@ async fn check_name(pool: &SqlitePool, name: &str, except: Option<&str>) -> Resu
         ));
     }
     Ok(())
-}
-
-pub async fn create(pool: &SqlitePool, new: NewProject) -> Result<Project> {
-    let name = clean_name(&new.name)?;
-    check_name(pool, &name, None).await?;
-    let id = uuid::Uuid::now_v7().to_string();
-    sqlx::query(
-        "INSERT INTO project (id, name, phase, next_milestone, milestone_due) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&id)
-    .bind(name)
-    .bind(one_line(&new.phase))
-    .bind(one_line(&new.next_milestone))
-    .bind(clean_due(new.milestone_due.as_deref())?)
-    .execute(pool)
-    .await?;
-    get(pool, &id).await
 }
 
 /// The owner's edits, in one statement: only the fields given change, so an Apply landing at the

@@ -1,138 +1,167 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
-import { useCreateProject, useProjects, type Project } from "../../kernel/bridge/projects";
+import { useState } from "react";
+import { useArchivePmProject, usePmProjects, useUpdatePmProject, type PmProject } from "../../kernel/bridge/pm";
+import { usePeople } from "../../kernel/bridge/people";
+import { useProjects } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
-import { STATUS_LABEL, milestoneText } from "./format";
+import MenuButton from "../../kernel/shell/MenuButton";
+import NewProjectSheet from "./NewProjectSheet";
+import { STATUS_LABEL } from "./format";
+import { coverClass, whoName } from "./pm";
 import styles from "./Projects.module.css";
 
 const route = getRouteApi("/shell/projects");
 
-/** Projects (D-054): the projects you follow in this workspace. After each summary the Projects
- *  agent proposes their updates; nothing changes until you apply one on the project's page. */
+/** Projects (Plane's list, D-073; the dossier's agent, D-054): cards or a list, searched,
+ *  filtered and sorted; ★ favorites first; Archived apart. A project opens on its Overview —
+ *  the updates its meetings brought — beside Plane's work. */
 export default function ProjectsPage() {
   const { data: workspace } = useCurrentWorkspace();
-  const projects = useProjects(workspace?.slug);
-  const { new: adding } = route.useSearch();
+  const slug = workspace?.slug;
+  const search = route.useSearch();
   const navigate = useNavigate();
-  const list = projects.data;
+  const projects = usePmProjects(slug);
+  const dossiers = useProjects(slug);
+  const people = usePeople(slug ?? "").data ?? [];
+  const [q, setQ] = useState("");
+  const set = (patch: Partial<typeof search>) => void navigate({ to: "/projects", search: { ...search, ...patch }, replace: true });
+  const waiting = new Map((dossiers.data ?? []).map((d) => [d.id, d.waiting]));
+  const needle = q.trim().toLowerCase();
+  const list = (projects.data ?? [])
+    .filter((p) => (search.archived ? !!p.archived_at : !p.archived_at))
+    .filter((p) => !search.network || p.network === search.network)
+    .filter((p) => !needle || [p.name, p.identifier, p.description].some((t) => t.toLowerCase().includes(needle)))
+    .sort((a, b) =>
+      search.sort === "name" ? a.name.localeCompare(b.name) : search.sort === "created" ? b.created_at.localeCompare(a.created_at) : search.sort === "identifier" ? a.identifier.localeCompare(b.identifier) : Number(b.favorite) - Number(a.favorite),
+    );
+  const cards = search.layout !== "list";
 
   return (
     <div className="page">
       <div className={styles.header}>
         <div>
           <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-          <h1 className="pageTitle">Projects</h1>
+          <h1 className="pageTitle">{search.archived ? "Archived projects" : "Projects"}</h1>
         </div>
-        <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => void navigate({ to: "/projects", search: { new: true } })}>
-          New project…
+        <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => set({ new: true })}>
+          New project
         </button>
       </div>
-      <p className={`fieldHint ${styles.lead}`}>After each summary, New Dawn finds the projects a meeting touched and proposes their updates. Nothing changes until you apply them.</p>
+      <div className={styles.tools}>
+        <input className={`input ${styles.search}`} type="search" placeholder="Search projects…" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="input" aria-label="Network" value={search.network ?? ""} onChange={(e) => set({ network: e.target.value === "private" || e.target.value === "public" ? e.target.value : undefined })}>
+          <option value="">Any network</option>
+          <option value="private">Private</option>
+          <option value="public">Public</option>
+        </select>
+        <select className="input" aria-label="Order" value={search.sort ?? ""} onChange={(e) => set({ sort: e.target.value === "name" || e.target.value === "created" || e.target.value === "identifier" ? e.target.value : undefined })}>
+          <option value="">Favorites first</option>
+          <option value="name">Name</option>
+          <option value="created">Newest</option>
+          <option value="identifier">Identifier</option>
+        </select>
+        <button type="button" className={search.archived ? "btn btnSecondary btnCompact" : "btn btnGhost btnCompact"} aria-pressed={!!search.archived} onClick={() => set({ archived: search.archived ? undefined : true })}>
+          Archived
+        </button>
+        <div className="segmented" role="group" aria-label="Layout">
+          <button type="button" aria-pressed={cards} onClick={() => set({ layout: undefined })}>
+            Cards
+          </button>
+          <button type="button" aria-pressed={!cards} onClick={() => set({ layout: "list" })}>
+            List
+          </button>
+        </div>
+      </div>
       {projects.error && <p className="formError">{projects.error.message}</p>}
-      {list?.length ? (
-        <div className={styles.list}>
-          {list.map((p) => (
-            <ProjectRow key={p.id} project={p} />
-          ))}
+      {list.length ? (
+        <div className={cards ? styles.grid : styles.list}>
+          {list.map((p) => (cards ? <ProjectCard key={p.id} slug={slug ?? ""} project={p} lead={whoName(p.lead, people)} waiting={waiting.get(p.id) ?? 0} /> : <ProjectLine key={p.id} slug={slug ?? ""} project={p} lead={whoName(p.lead, people)} waiting={waiting.get(p.id) ?? 0} />))}
         </div>
       ) : (
-        <div className={styles.list}>
-          <p className="ghostText">{list ? "Not yet captured — add the projects you follow" : "Loading…"}</p>
+        <div className={cards ? styles.grid : styles.list}>
           {[0, 1, 2].map((i) => (
-            <div key={i} className={`${styles.slot} ghostCard`} />
+            <div key={i} className={`${styles.slot} ghostCard`}>
+              {i === 0 && <span className="ghostText">{projects.isError ? "Couldn't be read" : !projects.data ? "Loading…" : search.archived ? "No archived project" : needle || search.network ? "No project matches" : "Not yet captured — New project starts one"}</span>}
+            </div>
           ))}
         </div>
       )}
-      {adding && workspace && <NewProjectSheet slug={workspace.slug} onClose={() => void navigate({ to: "/projects", search: {} })} />}
+      {search.new && workspace && <NewProjectSheet slug={workspace.slug} onClose={() => set({ new: undefined })} />}
     </div>
   );
 }
 
-function ProjectRow({ project: p }: { project: Project }) {
-  const meta = [p.phase, milestoneText(p)].filter(Boolean).join(" · ");
+function Actions({ slug, project: p }: { slug: string; project: PmProject }) {
+  const update = useUpdatePmProject(slug);
+  const archive = useArchivePmProject(slug);
+  const navigate = useNavigate();
   return (
-    <Link to="/projects/$projectId" params={{ projectId: p.id }} className={`card ${styles.row}`}>
-      <div className={styles.main}>
-        <p className={styles.title}>{p.name}</p>
-        <p className={styles.meta}>
-          {meta || "No phase or milestone yet"}
-          {p.meetings > 0 && ` · ${p.meetings} meeting${p.meetings === 1 ? "" : "s"}`}
-          {p.risks.length > 0 && ` · ${p.risks.length} risk${p.risks.length === 1 ? "" : "s"}`}
-        </p>
-      </div>
-      {p.waiting > 0 && (
-        <span className="chip chipPrimary">
-          {p.waiting} update{p.waiting === 1 ? "" : "s"} waiting
-        </span>
-      )}
-      <span className="chip">{STATUS_LABEL[p.status]}</span>
-    </Link>
+    <span className={styles.actions}>
+      <button type="button" className="btn btnGhost btnCompact" aria-label={p.favorite ? `Remove ${p.name} from favorites` : `Add ${p.name} to favorites`} aria-pressed={p.favorite} disabled={update.isPending} onClick={() => update.mutate({ id: p.id, patch: { favorite: !p.favorite } })}>
+        {p.favorite ? "★" : "☆"}
+      </button>
+      <MenuButton
+        label={`More for ${p.name}`}
+        items={[
+          { label: "Settings", onSelect: () => void navigate({ to: "/projects/$projectId", params: { projectId: p.id }, search: { tab: "settings" } }) },
+          { label: p.archived_at ? "Restore" : "Archive", separator: true, onSelect: () => archive.mutate({ id: p.id, archived: !p.archived_at }) },
+        ]}
+      />
+    </span>
   );
 }
 
-/** New project: a name, and what you know of its phase and next milestone. */
-function NewProjectSheet({ slug, onClose }: { slug: string; onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [phase, setPhase] = useState("");
-  const [milestone, setMilestone] = useState("");
-  const [due, setDue] = useState("");
-  const create = useCreateProject(slug);
-  const navigate = useNavigate();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const close = () => !create.isPending && onClose();
-
-  useEffect(() => {
-    dialog.current?.showModal();
-  }, []);
-
-  function submit() {
-    create.mutate(
-      { name, phase, next_milestone: milestone, milestone_due: due || null },
-      { onSuccess: (p) => void navigate({ to: "/projects/$projectId", params: { projectId: p.id } }) },
-    );
-  }
-
+function Chips({ project: p, waiting }: { project: PmProject; waiting: number }) {
   return (
-    <dialog
-      ref={dialog}
-      className="glass sheet"
-      aria-labelledby="new-project-title"
-      onCancel={(e) => {
-        e.preventDefault();
-        close();
-      }}
-      onPointerDown={(e) => e.target === e.currentTarget && close()}
-    >
-      <div className="sheetBody">
-        <h2 id="new-project-title" className="sheetHeading">
-          New project
-        </h2>
-        <label className="field">
-          <span className="fieldLabel">Name</span>
-          <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)} placeholder="WiredScore certification" />
-        </label>
-        <label className="field">
-          <span className="fieldLabel">Phase</span>
-          <input className="input" value={phase} onChange={(e) => setPhase(e.target.value)} placeholder="Design, tender, construction…" />
-        </label>
-        <label className="field">
-          <span className="fieldLabel">Next milestone</span>
-          <input className="input" value={milestone} onChange={(e) => setMilestone(e.target.value)} placeholder="Audit visit" />
-        </label>
-        <label className="field">
-          <span className="fieldLabel">Milestone date</span>
-          <input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-        </label>
-        {create.error && <p className="formError">{create.error.message}</p>}
-        <div className="sheetActions">
-          <button type="button" className="btn btnGhost" disabled={create.isPending} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="btn btnPrimary" disabled={!name.trim() || create.isPending} onClick={submit}>
-            {create.isPending ? "Adding…" : "Add project"}
-          </button>
+    <>
+      <span className="chip">{p.identifier}</span>
+      {p.status !== "active" && <span className="chip">{STATUS_LABEL[p.status]}</span>}
+      {waiting > 0 && <span className="chip chipPrimary">{waiting === 1 ? "1 update waiting" : `${waiting} updates waiting`}</span>}
+    </>
+  );
+}
+
+function ProjectCard({ slug, project: p, lead, waiting }: { slug: string; project: PmProject; lead: string; waiting: number }) {
+  return (
+    <div className={`card ${styles.pcard}`}>
+      <div className={`${styles.cover} ${coverClass(p.cover)}`} />
+      <div className={styles.pcardBody}>
+        <span className={styles.logo} aria-hidden>
+          {p.emoji || p.identifier.slice(0, 2)}
+        </span>
+        <Link to="/projects/$projectId" params={{ projectId: p.id }} className={styles.pname}>
+          {p.name}
+        </Link>
+        <p className={styles.chips}>
+          <Chips project={p} waiting={waiting} />
+        </p>
+        <p className={styles.pdesc}>{p.description || <span className="ghostText">No description yet</span>}</p>
+        <div className={styles.pfoot}>
+          <span className="fieldHint">{[lead ? `Lead: ${lead}` : "No lead", p.network === "public" ? "Public" : "Private"].join(" · ")}</span>
+          <Actions slug={slug} project={p} />
         </div>
       </div>
-    </dialog>
+    </div>
+  );
+}
+
+function ProjectLine({ slug, project: p, lead, waiting }: { slug: string; project: PmProject; lead: string; waiting: number }) {
+  return (
+    <div className={`card ${styles.pline}`}>
+      <span className={styles.logo} aria-hidden>
+        {p.emoji || p.identifier.slice(0, 2)}
+      </span>
+      <div className={styles.main}>
+        <Link to="/projects/$projectId" params={{ projectId: p.id }} className={styles.pname}>
+          {p.name}
+        </Link>
+        <p className={styles.meta}>{p.description || <span className="ghostText">No description yet</span>}</p>
+      </div>
+      <p className={styles.chips}>
+        <Chips project={p} waiting={waiting} />
+      </p>
+      <span className="fieldHint">{[lead ? `Lead: ${lead}` : "No lead", p.network === "public" ? "Public" : "Private"].join(" · ")}</span>
+      <Actions slug={slug} project={p} />
+    </div>
   );
 }

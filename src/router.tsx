@@ -98,7 +98,14 @@ const tasksRoute = createRoute({
 const projectsRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects",
-  validateSearch: (search: Record<string, unknown>): { new?: true } => (search.new === true ? { new: true as const } : {}),
+  // Plane's list (D-073): the layout, the order and the filters are URL state.
+  validateSearch: (search: Record<string, unknown>): { new?: true; layout?: "list"; sort?: "name" | "created" | "identifier"; network?: "private" | "public"; archived?: true } => ({
+    ...(search.new === true ? { new: true as const } : {}),
+    ...(search.layout === "list" ? { layout: "list" as const } : {}),
+    ...(search.sort === "name" || search.sort === "created" || search.sort === "identifier" ? { sort: search.sort } : {}),
+    ...(search.network === "private" || search.network === "public" ? { network: search.network } : {}),
+    ...(search.archived === true || search.archived === "true" ? { archived: true as const } : {}),
+  }),
   component: () => (
     <ModuleGate module="projects">
       <ProjectsPage />
@@ -110,6 +117,11 @@ const projectsRoute = createRoute({
 const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
+  // The project's tab and, under Settings, its section (D-073).
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string } => ({
+    ...(typeof search.tab === "string" && search.tab ? { tab: search.tab } : {}),
+    ...(typeof search.section === "string" && search.section ? { section: search.section } : {}),
+  }),
   component: () => (
     <ModuleGate module="projects">
       <ProjectPage />

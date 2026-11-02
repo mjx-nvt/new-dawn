@@ -1,11 +1,13 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useArchivePmProject, usePmProject } from "../../kernel/bridge/pm";
 import { useDecideUpdate, useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
+import ProjectSettings from "./ProjectSettings";
 import styles from "./Projects.module.css";
 
 const route = getRouteApi("/shell/projects/$projectId");
@@ -13,30 +15,67 @@ const route = getRouteApi("/shell/projects/$projectId");
 /** An IME is still writing (Vietnamese): Enter confirms the composition, not the field. */
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
-/** A project's page (D-054): the updates its meetings brought, waiting for you; where it stands;
- *  its risks, decisions and meetings; and the history of what you applied. Every section shows
- *  even when empty. */
+/** The parts of a project Plane has that later releases fill (work items 0.11.1, cycles 0.11.5,
+ *  modules 0.11.6, views 0.11.4, pages 0.11.7, intake 0.11.8): their structure now. */
+const PLANE_TABS: Record<string, { title: string; hint: string; columns: string[]; none: string }> = {
+  items: { title: "Work items", hint: "The project's work, item by item — each with its state, priority, assignees and dates.", columns: ["ID", "Title", "State", "Priority", "Assignees", "Due date"], none: "No work items yet" },
+  cycles: { title: "Cycles", hint: "Short, repeating periods of work, each with its items and progress.", columns: ["Cycle", "Dates", "Progress", "Lead"], none: "No cycles yet" },
+  modules: { title: "Modules", hint: "Larger pieces of work, each grouping its items.", columns: ["Module", "Status", "Dates", "Lead"], none: "No modules yet" },
+  views: { title: "Views", hint: "Saved filters, orders and layouts of the work items.", columns: ["View", "Filters", "Layout"], none: "No views yet" },
+  pages: { title: "Pages", hint: "Documents kept beside the work.", columns: ["Page", "Updated", "Owner"], none: "No pages yet" },
+  intake: { title: "Intake", hint: "Requests to triage before they become work items.", columns: ["Request", "Status", "Received"], none: "No requests yet" },
+  archives: { title: "Archives", hint: "Archived work items, cycles and modules.", columns: ["Archived", "Kind", "When"], none: "Nothing archived" },
+};
+
+/** A project's page (D-054, D-073): its Overview — the updates its meetings brought, where it
+ *  stands, its risks, decisions, meetings and history (every section shown even when empty) —
+ *  beside Plane's work items, cycles, modules, views, pages and intake (as its features say),
+ *  archives and settings. The tab is URL state. */
 export default function ProjectPage() {
   const { projectId } = route.useParams();
+  const { tab: wanted, section } = route.useSearch();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug;
+  const navigate = useNavigate();
   const dossier = useProject(slug, projectId);
+  const plane = usePmProject(slug, projectId);
+  const pm = plane.data;
+  const archive = useArchivePmProject(slug);
+  const f = pm?.features;
+  const tabs: [string, string][] = [
+    ["overview", "Overview"],
+    ["items", "Work items"],
+    ...(f?.cycles ? ([["cycles", "Cycles"]] as [string, string][]) : []),
+    ...(f?.modules ? ([["modules", "Modules"]] as [string, string][]) : []),
+    ...(f?.views ? ([["views", "Views"]] as [string, string][]) : []),
+    ...(f?.pages ? ([["pages", "Pages"]] as [string, string][]) : []),
+    ...(f?.intake ? ([["intake", "Intake"]] as [string, string][]) : []),
+    ["archives", "Archives"],
+    ["settings", "Settings"],
+  ];
+  const tab = tabs.find(([t]) => t === wanted)?.[0] ?? "overview";
+  const showTab = (t: string) => void navigate({ to: "/projects/$projectId", params: { projectId }, search: t === "overview" ? {} : { tab: t }, replace: true });
   const update = useUpdateProject(slug);
   const remove = useDeleteProject(slug);
-  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const d = dossier.data;
   const p = d?.project;
   const save = (patch: ProjectPatch) => p && update.mutate({ id: p.id, patch });
-  const error = dossier.error ?? update.error ?? remove.error;
+  const error = dossier.error ?? plane.error ?? update.error ?? remove.error ?? archive.error;
 
   return (
     <div className="page">
       <div className={styles.header}>
         <div className={styles.titles}>
-          <p className="eyebrow">Project</p>
-          <h1 className="pageTitle">{p?.name ?? "…"}</h1>
+          <p className="eyebrow">
+            Project{pm ? ` · ${pm.identifier}` : ""}
+            {pm?.archived_at ? " · Archived" : ""}
+          </p>
+          <h1 className={`pageTitle ${styles.ptitle}`}>
+            {pm?.emoji && <span aria-hidden>{pm.emoji}</span>}
+            {p?.name ?? "…"}
+          </h1>
           {p && <p className={styles.meta}>{[p.phase, milestoneText(p)].filter(Boolean).join(" · ") || "No phase or milestone yet"}</p>}
         </div>
         {p && (
@@ -52,6 +91,8 @@ export default function ProjectPage() {
               className="btn btnGhost"
               items={[
                 { label: "Edit…", onSelect: () => setEditing(true) },
+                { label: "Settings", onSelect: () => showTab("settings") },
+                ...(pm ? [{ label: pm.archived_at ? "Restore project" : "Archive project", separator: true, onSelect: () => archive.mutate({ id: pm.id, archived: !pm.archived_at }) }] : []),
                 { label: "Delete project…", danger: true, separator: true, onSelect: () => setConfirmDelete(true) },
               ]}
             />
@@ -69,7 +110,7 @@ export default function ProjectPage() {
             <p id="delete-project-title" className={styles.confirmTitle}>
               Delete “{p.name}”?
             </p>
-            <p className="fieldHint">Its risks, decisions, notes, history and waiting updates go with it. Its meetings stay.</p>
+            <p className="fieldHint">Its risks, decisions, notes, history and waiting updates go with it, and its Plane side — states, labels, estimates, work items. Its meetings stay.</p>
           </div>
           <div className={styles.confirmActions}>
             <button type="button" className="btn btnGhost btnCompact" autoFocus onClick={() => setConfirmDelete(false)}>
@@ -87,6 +128,18 @@ export default function ProjectPage() {
         </div>
       )}
 
+      <div className={`segmented ${styles.ptabs}`} role="tablist" aria-label="Project">
+        {tabs.map(([t, label]) => (
+          <button key={t} type="button" role="tab" aria-selected={t === tab} onClick={() => showTab(t)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "settings" && pm && slug && <ProjectSettings slug={slug} project={pm} section={section} />}
+      {PLANE_TABS[tab] && <PlaneTab {...PLANE_TABS[tab]} />}
+      {tab === "overview" && (
+      <>
       <section className="section">
         <h2 className="sectionTitle">Updates waiting for you</h2>
         <p className="sectionSubtitle">Proposed from its meetings and the emails you read — nothing changes until you apply one</p>
@@ -150,6 +203,8 @@ export default function ProjectPage() {
           <Ghosts text="Not yet captured — what you apply is kept here" />
         )}
       </section>
+      </>
+      )}
 
       {editing && p && (
         <EditSheet
@@ -164,6 +219,30 @@ export default function ProjectPage() {
         />
       )}
     </div>
+  );
+}
+
+/** A part of the project still empty: its columns and ghost rows. */
+function PlaneTab({ title, hint, columns, none }: { title: string; hint: string; columns: string[]; none: string }) {
+  return (
+    <section className="section">
+      <h2 className="sectionTitle">{title}</h2>
+      <p className="sectionSubtitle">{hint}</p>
+      <div className={styles.ptable} role="table" aria-label={title}>
+        <div className={styles.ptableHead} role="row" style={{ "--cols": columns.length } as CSSProperties}>
+          {columns.map((c) => (
+            <span key={c} role="columnheader">
+              {c}
+            </span>
+          ))}
+        </div>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={`${styles.ghostRow} ghostCard`} role="row">
+            {i === 0 && <span className="ghostText">{none}</span>}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
