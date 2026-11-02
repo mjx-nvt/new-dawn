@@ -16,6 +16,7 @@ export const SHORTCUTS: { keys: string; what: string }[] = [
   { keys: "⌘,", what: "Settings" },
   { keys: "⌘N · ⇧⌘H", what: "Tasks: a new task, show or hide Completed" },
   { keys: "N · I", what: "A project's work items: a new work item" },
+  { keys: "N · C", what: "A project's cycles: a new cycle" },
 ];
 
 export function inField(target: EventTarget | null): boolean {

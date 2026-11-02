@@ -1,4 +1,5 @@
 import { usePmLabels, usePmStates } from "../../../kernel/bridge/pm";
+import { usePmCycles } from "../../../kernel/bridge/pmCycles";
 import { usePeople } from "../../../kernel/bridge/people";
 import type { PmRule } from "../../../kernel/bridge/pmViews";
 import { useState } from "react";
@@ -19,6 +20,7 @@ const FIELDS: { field: string; label: string; kind: Kind; project?: boolean }[] 
   { field: "priority", label: "Priority", kind: "list" },
   { field: "assignees", label: "Assignees", kind: "people" },
   { field: "labels", label: "Labels", kind: "list", project: true },
+  { field: "cycle", label: "Cycle", kind: "list", project: true },
   { field: "created_by", label: "Created by", kind: "people" },
   { field: "subscribers", label: "Subscribed by", kind: "people" },
   { field: "mentions", label: "Mentions", kind: "people" },
@@ -92,11 +94,12 @@ function TitleWords({ label, value, onChange }: { label: string; value: string; 
 /** Plane's filter bar (D-077): Filters adds a rule a field; each rule a chip saying what it keeps
  *  ("Due date is this week"), opened to change it, × to take it off; Clear all. The rules all
  *  hold; a rule's values, any one. */
-export default function FilterBar({ slug, projectId, rules, onChange }: { slug: string; projectId: string | null; rules: PmRule[]; onChange: (rules: PmRule[]) => void }) {
+export default function FilterBar({ slug, projectId, cycles: cyclesOn = false, rules, onChange }: { slug: string; projectId: string | null; cycles?: boolean; rules: PmRule[]; onChange: (rules: PmRule[]) => void }) {
   const states = (usePmStates(slug, projectId ?? "").data ?? []).filter((s) => s.group !== "triage");
   const labels = usePmLabels(slug, projectId ?? "").data ?? [];
+  const cycles = usePmCycles(slug, projectId ?? "").data ?? [];
   const people = usePeople(slug).data ?? [];
-  const fields = FIELDS.filter((f) => projectId || !f.project);
+  const fields = FIELDS.filter((f) => (projectId || !f.project) && (f.field !== "cycle" || cyclesOn));
   const set = (at: number, rule: PmRule) => onChange(rules.map((r, n) => (n === at ? rule : r)));
 
   const options = (field: string): { value: string; label: string }[] => {
@@ -109,6 +112,8 @@ export default function FilterBar({ slug, projectId, rules, onChange }: { slug: 
         return PRIORITIES.map((p) => ({ value: p.key, label: p.label }));
       case "labels":
         return [...labels.filter((l) => !labels.some((c) => c.parent_id === l.id)).map((l) => ({ value: l.id, label: l.name })), { value: "none", label: "No label" }];
+      case "cycle":
+        return [...cycles.map((c) => ({ value: c.id, label: c.name })), { value: "none", label: "No cycle" }];
       default:
         return [];
     }

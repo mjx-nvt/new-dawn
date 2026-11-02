@@ -3,10 +3,10 @@ import { useUpdatePmItem, type ItemPatch, type PmItem } from "../../../kernel/br
 import { formatDateTime } from "../../../kernel/format/format";
 import type { LayoutProps } from "./Board";
 import { PROPERTY_LABEL, type Group, type Property } from "./items";
-import { DateField, EstimatePick, LabelPick, PeoplePick, PriorityPick, StatePick } from "./Props";
+import { CyclePick, DateField, EstimatePick, LabelPick, PeoplePick, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
-const COLUMNS: Property[] = ["state", "priority", "assignees", "labels", "start", "due", "estimate", "sub_items", "attachments", "links", "created", "created_by", "updated"];
+const COLUMNS: Property[] = ["state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "sub_items", "attachments", "links", "created", "created_by", "updated"];
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
 /** Plane's spreadsheet (D-076): a row an item, a column a property the display shows (Created on
@@ -64,6 +64,8 @@ export default function Table({ slug, project, has, who, onPeek, groups, selecte
         return <DateField label={`Due date of ${i.key}`} value={i.target_date} disabled={ro} onSave={(target_date) => save(i, { target_date })} />;
       case "estimate":
         return <EstimatePick slug={slug} projectId={i.project_id} value={i.estimate_point_id} disabled={ro} onChange={(estimate_point_id) => save(i, { estimate_point_id })} />;
+      case "cycle":
+        return <CyclePick slug={slug} projectId={i.project_id} value={i.cycle_id} disabled={ro} onChange={(cycle_id) => save(i, { cycle_id })} />;
       case "sub_items":
         return i.sub_items ? `${i.sub_done}/${i.sub_items - i.sub_cancelled}` : "";
       case "attachments":

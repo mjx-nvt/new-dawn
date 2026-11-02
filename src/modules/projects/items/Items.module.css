@@ -1108,3 +1108,68 @@
   color: var(--on-primary-tint);
   font-weight: 500;
 }
+
+/* Cycles (0.11.5) */
+.cycleView {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.cycleBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@container content (max-width: 900px) {
+  .cycleBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.burndown {
+  margin: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.burndown svg {
+  width: 100%;
+  height: auto;
+}
+
+.grid {
+  stroke: var(--hair);
+  stroke-width: 1;
+}
+
+.axis {
+  fill: var(--ink-3);
+  font-size: var(--t-xs);
+}
+
+.ideal {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.breakdown {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--t-sm);
+}
+
+/* The bar fills its own column (the shared bar is 120 pt wide). */
+.shareRow > .progress {
+  width: 100%;
+}

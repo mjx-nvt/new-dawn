@@ -245,7 +245,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0034 | `pm_relation`, `pm_link`, `pm_attachment`, `pm_vote`, `notification` (preferences are an app setting, D-075) | 0.11.2 |
 | 0035 | `pm_display` (a project's layout and display options, one owner; D-076) | 0.11.3 |
 | 0036 | `pm_view` (a project's or the workspace's; rules as JSON), `favorite.pm_view_id` (D-077) | 0.11.4 |
-| 0037 | `cycle`, `cycle_issue` | 0.11.5 |
+| 0037 | `pm_cycle` (with a progress snapshot), `pm_cycle_item` (one cycle an item; D-078) | 0.11.5 |
 | 0038 | `module`, `module_issue`, `module_link`, `module_member` | 0.11.6 |
 | 0039 | `page`, `page_label`, `page_version` | 0.11.7 |
 | 0040 | `intake`, `intake_issue` | 0.11.8 |
@@ -395,7 +395,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.5 — Cycles (3 sittings)
 - **Same as:** §4.5 (cycles).
-- **Data:** 0037.
+- **Data:** 0037 (`pm_cycle`, `pm_cycle_item`).
 - **Screens and flows:** Cycles page with Active / Upcoming / Completed tabs, search and date filters; create (`N` `C`; both dates or none; no overlap); Draft · Upcoming · Active · Completed; start / complete early; add existing or create items; the Cycle property; transfer unfinished work (once); details panel: burn-down (after start), breakdowns by assignee / state / label, points when estimates are on; favorites; archive completed; delete (items stay); "Active cycles" page across projects.
 - **Done when:** a two-week cycle with five items shows the burn-down after two Done; transfer moves the three open items to the next cycle and is then disabled.
 

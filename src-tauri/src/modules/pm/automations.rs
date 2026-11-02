@@ -43,6 +43,19 @@ async fn idle(pool: &SqlitePool, project: &str, groups: &str, months: u32, at: &
     Ok(rows.into_iter().map(|(i,)| i).collect())
 }
 
+/// Held by a cycle that hasn't ended (a draft, an upcoming or the running one): Plane's
+/// automations leave such items alone (D-078).
+async fn held(pool: &SqlitePool, item: &str, today: NaiveDate) -> Result<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT 1 FROM pm_cycle_item x JOIN pm_cycle c ON c.id = x.cycle_id WHERE x.item_id = ? AND c.completed_at IS NULL AND (c.end_date IS NULL OR c.end_date >= ?)",
+    )
+    .bind(item)
+    .bind(today.to_string())
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.is_some())
+}
+
 /// One run as of `now` (the months count back from it) for the local day `today`. An item that
 /// can't be changed is logged and left; the others go on.
 pub async fn run(pool: &SqlitePool, now: DateTime<Utc>, today: NaiveDate) -> Result<Ran> {
@@ -53,6 +66,9 @@ pub async fn run(pool: &SqlitePool, now: DateTime<Utc>, today: NaiveDate) -> Res
     for (project, archive_in, close_in, close_state, reminders) in projects {
         if archive_in > 0 {
             for id in idle(pool, &project, "'completed', 'cancelled'", archive_in, &at).await? {
+                if held(pool, &id, today).await? {
+                    continue;
+                }
                 match items::archive(pool, &id, true, AUTOMATION).await {
                     Ok(_) => ran.archived += 1,
                     Err(e) => tracing::warn!("auto-archive {id}: {e:#}"),
@@ -68,6 +84,9 @@ pub async fn run(pool: &SqlitePool, now: DateTime<Utc>, today: NaiveDate) -> Res
                 .await?;
             if let Some((state,)) = state {
                 for id in idle(pool, &project, "'backlog', 'unstarted', 'started'", close_in, &at).await? {
+                    if held(pool, &id, today).await? {
+                        continue;
+                    }
                     match items::update(pool, &id, ItemPatch { state_id: Some(state.clone()), ..ItemPatch::default() }, AUTOMATION).await {
                         Ok(_) => ran.closed += 1,
                         Err(e) => tracing::warn!("auto-close {id}: {e:#}"),

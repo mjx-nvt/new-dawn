@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePmEstimates, usePmLabels, usePmStates, type PmLabel, type StateGroup } from "../../../kernel/bridge/pm";
+import { usePmCycles } from "../../../kernel/bridge/pmCycles";
 import { useCreatePmItem, usePmItems, type PmItem, type Priority } from "../../../kernel/bridge/pmItems";
 import { usePeople } from "../../../kernel/bridge/people";
 import { colorOf } from "../../../kernel/charts/Charts";
@@ -176,6 +177,7 @@ export function ItemProps({ item: i, has, labels, who }: { item: PmItem; has: (p
       {has("start") && i.start_date && <span className={styles.prop}>From {formatDay(i.start_date, { short: true })}</span>}
       {has("due") && i.target_date && <span className={styles.prop}>Due {formatDay(i.target_date, { short: true })}</span>}
       {has("estimate") && i.estimate_value && <span className="chip">{i.estimate_value}</span>}
+      {has("cycle") && i.cycle_name && <span className="chip">↻ {i.cycle_name}</span>}
       {has("sub_items") && i.sub_items > 0 && (
         <span className={styles.prop}>
           {i.sub_done}/{i.sub_items - i.sub_cancelled} done
@@ -200,7 +202,7 @@ export function QuickAdd({ slug, projectId, label, value }: { slug: string; proj
   const add = () =>
     name.trim() &&
     create.mutate(
-      { project_id: projectId, name, state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [] },
+      { project_id: projectId, name, state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null },
       { onSuccess: () => setName("") },
     );
   return (
@@ -225,5 +227,22 @@ export function DateField({ label, value, disabled, onSave }: { label: string; v
       onBlur={(e) => e.target.value !== (value ?? "") && onSave(e.target.value)}
       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
     />
+  );
+}
+
+/** A work item's cycle (D-078): the project's cycles that take work (active, upcoming, drafts)
+ *  and the one it is in; "No cycle". */
+export function CyclePick({ slug, projectId, value, disabled, onChange }: { slug: string; projectId: string; value: string | null; disabled?: boolean; onChange: (id: string) => void }) {
+  const cycles = (usePmCycles(slug, projectId).data ?? []).filter((c) => c.status !== "completed" || c.id === value);
+  return (
+    <select className="input" aria-label="Cycle" value={value ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <option value="">No cycle</option>
+      {cycles.map((c) => (
+        <option key={c.id} value={c.id} disabled={c.status === "completed"}>
+          {c.name}
+          {c.status === "completed" ? " (completed)" : ""}
+        </option>
+      ))}
+    </select>
   );
 }

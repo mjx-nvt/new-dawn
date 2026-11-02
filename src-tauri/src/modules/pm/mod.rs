@@ -7,6 +7,7 @@
 pub mod automations;
 pub mod bulk;
 pub mod comments;
+pub mod cycles;
 pub mod display;
 pub mod drafts;
 pub mod filters;

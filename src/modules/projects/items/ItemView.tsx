@@ -33,7 +33,7 @@ import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { RELATIONS, asPrompt, duration, progress, sentence, transitions, useWho } from "./items";
 import { Attachments, Links, RelationRow } from "./ItemTies";
-import { DateField, Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
+import { CyclePick, DateField, Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
 const EMOJI = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"];
@@ -349,6 +349,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
   const error = update.error ?? archive.error ?? remove.error ?? copyItem.error ?? subscribe.error ?? restore.error ?? vote.error;
   const following = item.subscribers.includes("me");
   const closed = item.state_group === "completed" || item.state_group === "cancelled";
+  const cyclesOn = !!projects.find((p) => p.id === item.project_id)?.features.cycles;
   const flash = (text: string) => {
     setNote(text);
     window.setTimeout(() => setNote(null), 1800);
@@ -402,6 +403,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
               disabled: !ro && !closed,
               onSelect: () => archive.mutate({ id: item.id, archived: !ro }),
             },
+            ...(item.cycle_id && !ro ? [{ label: `Remove from ${item.cycle_name ?? "its cycle"}`, separator: true, onSelect: () => save({ cycle_id: "" }) }] : []),
             { label: "Delete…", danger: true, onSelect: () => setConfirmDelete(true) },
           ]}
         />
@@ -513,8 +515,14 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
                 </dd>
               </Fragment>
             ))}
-            <dt>Cycle</dt>
-            <dd className="ghostText">No cycles yet</dd>
+            {cyclesOn && (
+              <>
+                <dt>Cycle</dt>
+                <dd>
+                  <CyclePick slug={slug} projectId={item.project_id} value={item.cycle_id} disabled={ro} onChange={(cycle_id) => save({ cycle_id })} />
+                </dd>
+              </>
+            )}
             <dt>Modules</dt>
             <dd className="ghostText">No modules yet</dd>
             <dt>Created</dt>

@@ -10,6 +10,7 @@ use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
+use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
 use crate::modules::pm::display::{self, PmDisplay};
 use crate::modules::pm::drafts::{self, PmDraft};
 use crate::modules::pm::filters::PmRule;
@@ -514,4 +515,76 @@ pub async fn delete_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: Stri
 #[specta::specta]
 pub async fn favorite_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: String, on: bool) -> Result<PmView, AppError> {
     Ok(views::favorite(&hub.pool(&slug)?, &id, on).await?)
+}
+
+// ── 0.11.5 (D-078): cycles ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_cycles(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<Vec<PmCycle>, AppError> {
+    Ok(cycles::list(&hub.pool(&slug)?, &project_id, cycles::today()).await?)
+}
+
+/// Every open project's active cycles.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_active_pm_cycles(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<PmCycle>, AppError> {
+    Ok(cycles::active(&hub.pool(&slug)?, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, input: CycleInput) -> Result<PmCycle, AppError> {
+    Ok(cycles::create(&hub.pool(&slug)?, input, ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: CyclePatch) -> Result<PmCycle, AppError> {
+    Ok(cycles::update(&hub.pool(&slug)?, &id, patch, cycles::today()).await?)
+}
+
+/// Plane's start now (an upcoming cycle) and complete now (an active one).
+#[tauri::command]
+#[specta::specta]
+pub async fn start_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmCycle, AppError> {
+    Ok(cycles::start_now(&hub.pool(&slug)?, &id, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn complete_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmCycle, AppError> {
+    Ok(cycles::complete_now(&hub.pool(&slug)?, &id, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_cycle_items(hub: State<'_, WorkspaceHub>, slug: String, id: String, item_ids: Vec<String>) -> Result<PmCycle, AppError> {
+    Ok(cycles::add_items(&hub.pool(&slug)?, &id, &item_ids, ME, cycles::today()).await?)
+}
+
+/// A completed cycle's open work into another cycle, once; how many moved.
+#[tauri::command]
+#[specta::specta]
+pub async fn transfer_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String, to: String) -> Result<u32, AppError> {
+    Ok(cycles::transfer(&hub.pool(&slug)?, &id, &to, ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String, archived: bool) -> Result<PmCycle, AppError> {
+    Ok(cycles::archive(&hub.pool(&slug)?, &id, archived, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    Ok(cycles::delete(&hub.pool(&slug)?, &id, ME, cycles::today()).await?)
+}
+
+/// The details panel: burn-down and breakdowns.
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_cycle_details(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<CycleDetails, AppError> {
+    Ok(cycles::details(&hub.pool(&slug)?, &id, cycles::today()).await?)
 }

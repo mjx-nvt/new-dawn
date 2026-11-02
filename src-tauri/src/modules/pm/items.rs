@@ -74,6 +74,9 @@ pub struct PmItem {
     pub parent_id: Option<String>,
     pub parent_key: Option<String>,
     pub parent_name: Option<String>,
+    /// Its cycle (D-078): one at most.
+    pub cycle_id: Option<String>,
+    pub cycle_name: Option<String>,
     /// "me" or people's ids.
     pub assignees: Vec<String>,
     pub labels: Vec<String>,
@@ -117,6 +120,8 @@ struct Row {
     parent_id: Option<String>,
     parent_key: Option<String>,
     parent_name: Option<String>,
+    cycle_id: Option<String>,
+    cycle_name: Option<String>,
     assignees: Option<String>,
     labels: Option<String>,
     subscribers: Option<String>,
@@ -167,6 +172,8 @@ impl From<Row> for PmItem {
             parent_id: r.parent_id,
             parent_key: r.parent_key,
             parent_name: r.parent_name,
+            cycle_id: r.cycle_id,
+            cycle_name: r.cycle_name,
             assignees: split(r.assignees),
             labels: split(r.labels),
             subscribers: split(r.subscribers),
@@ -194,6 +201,7 @@ macro_rules! select {
             "SELECT i.id, i.project_id, i.sequence, m.identifier || '-' || i.sequence AS key, i.name, i.description_json, i.description_text, \
              i.state_id, s.name AS state_name, s.state_group, s.color AS state_color, i.priority, i.start_date, i.target_date, \
              i.estimate_point_id, ep.value AS estimate_value, i.parent_id, pm.identifier || '-' || p.sequence AS parent_key, p.name AS parent_name, \
+             cy.id AS cycle_id, cy.name AS cycle_name, \
              (SELECT group_concat(who, char(31)) FROM pm_item_assignee a WHERE a.item_id = i.id) AS assignees, \
              (SELECT group_concat(label_id, char(31)) FROM pm_item_label l WHERE l.item_id = i.id) AS labels, \
              (SELECT group_concat(who, char(31)) FROM pm_item_subscriber b WHERE b.item_id = i.id) AS subscribers, \
@@ -207,7 +215,8 @@ macro_rules! select {
              i.sort_order, i.completed_at, i.archived_at, i.created_by, i.updated_by, i.created_at, i.updated_at \
              FROM pm_item i JOIN pm_project m ON m.project_id = i.project_id JOIN pm_state s ON s.id = i.state_id \
              LEFT JOIN pm_estimate_point ep ON ep.id = i.estimate_point_id \
-             LEFT JOIN pm_item p ON p.id = i.parent_id LEFT JOIN pm_project pm ON pm.project_id = p.project_id ",
+             LEFT JOIN pm_item p ON p.id = i.parent_id LEFT JOIN pm_project pm ON pm.project_id = p.project_id \
+             LEFT JOIN pm_cycle_item ci ON ci.item_id = i.id LEFT JOIN pm_cycle cy ON cy.id = ci.cycle_id ",
             $rest
         )
     };
@@ -271,6 +280,8 @@ pub struct ItemInput {
     pub target_date: Option<String>,
     pub estimate_point_id: Option<String>,
     pub parent_id: Option<String>,
+    /// Made in a cycle (D-078): one of the project's, not completed.
+    pub cycle_id: Option<String>,
 }
 
 fn clean_item_name(text: &str) -> Result<String> {
@@ -285,7 +296,7 @@ fn clean_item_name(text: &str) -> Result<String> {
 }
 
 /// A day, YYYY-MM-DD, of a year between 1900 and 2199 (a typed "0020" is a slip, not a date).
-fn clean_day(text: Option<&str>) -> Result<Option<String>> {
+pub(crate) fn clean_day(text: Option<&str>) -> Result<Option<String>> {
     use chrono::Datelike;
     match text.map(str::trim).filter(|t| !t.is_empty()) {
         None => Ok(None),
@@ -488,6 +499,16 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
         return Err(invalid("The project is archived — restore it to add work items"));
     }
     let name = clean_item_name(&input.name)?;
+    let cycle = match input.cycle_id.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+        Some(c) => {
+            let cy = super::cycles::get(pool, c, super::cycles::today()).await?;
+            if cy.project_id != input.project_id || cy.status == super::cycles::CycleStatus::Completed {
+                return Err(invalid("A work item is made in a cycle of its project that isn't completed"));
+            }
+            Some(cy)
+        }
+        None => None,
+    };
     let (description, text) = clean_description(input.description.as_deref())?;
     let state_id = match input.state_id.as_deref().filter(|s| !s.is_empty()) {
         Some(s) => s.to_owned(),
@@ -556,6 +577,9 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
         version(&mut tx, &item, description.as_deref(), &text, actor, true).await?;
     }
     activity(&mut tx, &item, "created", "", "", &name, (None, Some(&state_id)), actor).await?;
+    if let Some(cy) = &cycle {
+        super::cycles::set_cycle_in(&mut tx, &item, Some(cy), actor).await?;
+    }
     tx.commit().await?;
     get(pool, &item).await
 }
@@ -577,6 +601,8 @@ pub struct ItemPatch {
     pub estimate_point_id: Option<String>,
     pub parent_id: Option<String>,
     pub sort_order: Option<f64>,
+    /// A cycle of the item's project, not completed; "" takes it out of its cycle (D-078).
+    pub cycle_id: Option<String>,
 }
 
 /// Changes an item: everything checked first, then one transaction — the item, its assignees
@@ -609,6 +635,8 @@ pub(crate) struct Plan {
     point: Option<Option<String>>,
     parent: Option<Option<String>>,
     order: Option<f64>,
+    /// Into a cycle, or out of one.
+    cycle: Option<Option<super::cycles::PmCycle>>,
 }
 
 /// Checks an item's edits: an archived item is read-only; each field as the create form checks it.
@@ -731,7 +759,21 @@ pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Resul
         None => None,
     };
     let order = patch.sort_order.filter(|o| o.is_finite());
-    Ok(Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order })
+    let cycle = match patch.cycle_id.as_deref().map(str::trim) {
+        Some("") => item.cycle_id.is_some().then_some(None),
+        Some(c) if Some(c) != item.cycle_id.as_deref() => {
+            let cy = super::cycles::get(pool, c, super::cycles::today()).await?;
+            if cy.project_id != item.project_id {
+                return Err(invalid("That cycle is another project's"));
+            }
+            if cy.status == super::cycles::CycleStatus::Completed {
+                return Err(invalid(format!("“{}” is completed — work goes into a cycle that isn't", cy.name)));
+            }
+            Some(Some(cy))
+        }
+        _ => None,
+    };
+    Ok(Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle })
 }
 
 /// Writes checked edits in one transaction — the item, its assignees and labels, one activity row
@@ -739,12 +781,16 @@ pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Resul
 /// state sets when, leaving it clears it; the owner follows what they change. Whether anything
 /// changed. `merge`: see [`update_with`].
 pub(crate) async fn write(pool: &SqlitePool, plan: Plan, actor: &str, merge: bool) -> Result<bool> {
-    let Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order } = plan;
-    if changes.is_empty() && order.is_none() {
+    let Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle } = plan;
+    if changes.is_empty() && order.is_none() && cycle.is_none() {
         return Ok(false);
     }
     let id = item.id.as_str();
     let mut tx = pool.begin().await?;
+    if let Some(to) = &cycle {
+        // In the same transaction, with its own activity row.
+        super::cycles::set_cycle_in(&mut tx, id, to.as_ref(), actor).await?;
+    }
     let completed = match &state {
         Some((_, StateGroup::Completed)) => Some(true),
         Some(_) => Some(false),
@@ -887,6 +933,8 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
             target_date: item.target_date.clone(),
             estimate_point_id: if same { item.estimate_point_id.clone() } else { None },
             parent_id: if same { item.parent_id.clone() } else { None },
+            // A copy starts in no cycle (Plane's).
+            cycle_id: None,
         },
         actor,
     )

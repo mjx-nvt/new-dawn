@@ -2,6 +2,7 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { usePmLabels, usePmStates, type PmProject } from "../../../kernel/bridge/pm";
 import { usePmDisplay, useSetPmDisplay, useUpdatePmItem, type ItemInput, type ItemPatch, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
+import { usePmCycles } from "../../../kernel/bridge/pmCycles";
 import { readRules, usePmQuery, usePmViews, useViewMutations, type PmRule } from "../../../kernel/bridge/pmViews";
 import { usePeople } from "../../../kernel/bridge/people";
 import { inField } from "../../../kernel/shell/useShortcuts";
@@ -40,6 +41,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const [saving, setSaving] = useState(false);
   const states = usePmStates(slug, project.id).data ?? [];
   const labels = usePmLabels(slug, project.id).data ?? [];
+  const cycles = usePmCycles(slug, project.id).data ?? [];
   const people = usePeople(slug).data ?? [];
   const update = useUpdatePmItem(slug);
   const stored = usePmDisplay(slug, project.id);
@@ -84,7 +86,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const who = (w: string) => (w === "automation" ? "Automation" : whoName(w, people) || w);
   const all = items.data ?? [];
   const visible = ordered(display.sub_items ? all : all.filter((i) => !i.parent_id), order);
-  const groups = grouped(visible, group, states, labels, who).filter((g) => display.empty_groups || g.items.length);
+  const groups = grouped(visible, group, states, labels, who, cycles).filter((g) => display.empty_groups || g.items.length);
   const has = (p: Property) => display.properties.includes(p);
   const chosen = selected.filter((id) => all.some((i) => i.id === id)); // the selected still here
   const peek = (id: string) => set({ peek: id, activity: undefined });
@@ -109,7 +111,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
     const d = dragging;
     setDragging(null);
     const id = d?.id;
-    if (!d || !id || id === target?.id) return;
+    if (!d || !id || id === target?.id || g.closed) return;
     const moved = all.find((i) => i.id === id);
     if (!moved) return;
     const list = g.items.filter((i) => i.id !== id);
@@ -123,7 +125,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   };
 
   const create = (preset: Partial<ItemInput>) => setCreating(preset);
-  const layoutProps = { slug, project, items: visible, labels, states, display, has, who, onPeek: peek, onCreate: create };
+  const layoutProps = { slug, project, items: visible, labels, states, cycles, display, has, who, onPeek: peek, onCreate: create };
 
   return (
     <section className={styles.list} aria-label="Work items">
@@ -139,7 +141,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <label className={styles.tool}>
             <span className="fieldLabel">Group by</span>
             <select className="input" value={group} disabled={!ready} onChange={(e) => choose("group", e.target.value)}>
-              {GROUP_BY.map((g) => (
+              {GROUP_BY.filter((g) => g.key !== "cycle" || project.features.cycles).map((g) => (
                 <option key={g.key} value={g.key}>
                   {g.label}
                 </option>
@@ -151,7 +153,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <label className={styles.tool}>
             <span className="fieldLabel">Sub-group by</span>
             <select className="input" value={sub} disabled={!ready} onChange={(e) => choose("sub", e.target.value)}>
-              {GROUP_BY.filter((g) => g.key === "none" || !clash(g.key, group)).map((g) => (
+              {GROUP_BY.filter((g) => (g.key === "none" || !clash(g.key, group)) && (g.key !== "cycle" || project.features.cycles)).map((g) => (
                 <option key={g.key} value={g.key}>
                   {g.key === "none" ? "None" : g.label}
                 </option>
@@ -175,7 +177,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <summary className="btn btnGhost btnCompact">Display</summary>
           <div className={`glass ${styles.displayPanel}`}>
             <p className="fieldLabel">Properties</p>
-            {PROPERTIES.map((p) => (
+            {PROPERTIES.filter((p) => p !== "cycle" || project.features.cycles).map((p) => (
               <label key={p} className={styles.check}>
                 <input type="checkbox" checked={has(p)} onChange={(e) => remember({ properties: e.target.checked ? [...display.properties, p] : display.properties.filter((x) => x !== p) })} /> {PROPERTY_LABEL[p]}
               </label>
@@ -229,7 +231,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
         </div>
       )}
       <div className={styles.inline}>
-        <FilterBar slug={slug} projectId={project.id} rules={rules} onChange={filter} />
+        <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} rules={rules} onChange={filter} />
         {!view && (
           <button type="button" className="btn btnGhost btnCompact" disabled={!ready || ro} onClick={() => setSaving(true)}>
             Save as a view
@@ -270,7 +272,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
               {g.color && <Dot color={g.color} />}
               <span className={styles.groupName}>{g.label}</span>
               <span className="fieldHint">{g.items.length}</span>
-              <button type="button" className="btn btnGhost btnCompact" aria-label={`New work item in ${g.label}`} disabled={ro} onClick={() => setCreating({ state_id: g.value.state_id ?? null, priority: g.value.priority ?? null, assignees: g.value.assignees ?? [], labels: g.value.labels ?? [] })}>
+              <button type="button" className="btn btnGhost btnCompact" aria-label={`New work item in ${g.label}`} disabled={ro || g.closed} onClick={() => setCreating({ state_id: g.value.state_id ?? null, priority: g.value.priority ?? null, assignees: g.value.assignees ?? [], labels: g.value.labels ?? [], cycle_id: g.value.cycle_id ?? null })}>
                 +
               </button>
             </div>
@@ -301,7 +303,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
                 <span className="ghostText">{all.length ? "Nothing here" : "No work items yet — press N, or type one below"}</span>
               </div>
             )}
-            {!ro && <QuickAdd slug={slug} projectId={project.id} label={g.label} value={g.value} />}
+            {!ro && !g.closed && <QuickAdd slug={slug} projectId={project.id} label={g.label} value={g.value} />}
           </div>
         ))}
       {ready &&

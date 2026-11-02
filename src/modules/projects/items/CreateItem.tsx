@@ -3,7 +3,7 @@ import { usePmProjects } from "../../../kernel/bridge/pm";
 import { useCreatePmItem, useDraftMutations, type ItemInput, type PmDraft, type PmItem } from "../../../kernel/bridge/pmItems";
 import { richPlain } from "../../../kernel/editor/plain";
 import Editor from "../../../kernel/editor/Editor";
-import { EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityPick, StatePick } from "./Props";
+import { CyclePick, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
 const blank = (projectId: string, preset?: Partial<ItemInput>): ItemInput => ({
@@ -48,6 +48,7 @@ export default function CreateItem({ slug, projectId, preset, draft, onClose, on
   const busy = create.isPending || drafts.save.isPending || drafts.publish.isPending;
   const error = create.error ?? drafts.save.error ?? drafts.publish.error;
   const set = (patch: Partial<ItemInput>) => setInput({ ...input, ...patch });
+  const cyclesOn = !!projects.find((p) => p.id === input.project_id)?.features.cycles;
   const written = draft ? JSON.stringify(input) !== opened.current : !!input.name.trim() || !!richPlain(input.description ?? "").trim();
   useEffect(() => {
     dialog.current?.showModal();
@@ -116,7 +117,7 @@ export default function CreateItem({ slug, projectId, preset, draft, onClose, on
           <>
             <label className="field">
               <span className="fieldLabel">Project</span>
-              <select className="input" value={input.project_id} onChange={(e) => set({ project_id: e.target.value, state_id: null, labels: [], estimate_point_id: null, parent_id: null })}>
+              <select className="input" value={input.project_id} onChange={(e) => set({ project_id: e.target.value, state_id: null, labels: [], estimate_point_id: null, parent_id: null, cycle_id: null })}>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.identifier} · {p.name}
@@ -149,6 +150,7 @@ export default function CreateItem({ slug, projectId, preset, draft, onClose, on
               </label>
               <EstimatePick slug={slug} projectId={input.project_id} value={input.estimate_point_id ?? null} onChange={(id) => set({ estimate_point_id: id || null })} />
               <ParentPick slug={slug} projectId={input.project_id} value={input.parent_id ?? null} onChange={(id) => set({ parent_id: id || null })} />
+              {cyclesOn && <CyclePick slug={slug} projectId={input.project_id} value={input.cycle_id ?? null} onChange={(id) => set({ cycle_id: id || null })} />}
             </div>
             {error && (
               <p className="formError" role="alert">

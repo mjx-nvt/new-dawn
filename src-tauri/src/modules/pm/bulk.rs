@@ -38,8 +38,8 @@ fn unique(ids: &[String]) -> Vec<String> {
     out
 }
 
-/// The same edits on every item; how many changed. Only what Plane's bar sets — not a title, a
-/// description, a parent or an order.
+/// The same edits on every item; how many changed. Only what Plane's bar sets (the cycle too,
+/// D-078) — not a title, a description, a parent or an order.
 pub async fn update(pool: &SqlitePool, ids: &[String], patch: &ItemPatch, actor: &str) -> Result<u32> {
     let patch = ItemPatch {
         state_id: patch.state_id.clone(),
@@ -49,6 +49,7 @@ pub async fn update(pool: &SqlitePool, ids: &[String], patch: &ItemPatch, actor:
         start_date: patch.start_date.clone(),
         target_date: patch.target_date.clone(),
         estimate_point_id: patch.estimate_point_id.clone(),
+        cycle_id: patch.cycle_id.clone(),
         ..ItemPatch::default()
     };
     let ids = unique(ids);

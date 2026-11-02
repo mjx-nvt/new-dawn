@@ -1,6 +1,6 @@
 //! Plane's filters for work items (D-077): a rule a field — the title, the state or its group, the
-//! priority, assignees, labels, who made it, who follows it, whom its comments mention, the start,
-//! due, created and updated dates — with Plane's operators (any of, none of, contains; is,
+//! priority, assignees, labels, who made it, who follows it, whom its comments mention, its cycle,
+//! the start, due, created and updated dates — with Plane's operators (any of, none of, contains; is,
 //! before, after, on or before, on or after, between, not, empty, not empty); the rules all hold,
 //! a rule's values any one. Dates are days (YYYY-MM-DD) or words for the owner's days — today,
 //! tomorrow, yesterday, this, next or last week (from the owner's first day of the week), this,
@@ -21,7 +21,7 @@ pub struct PmRule {
     pub values: Vec<String>,
 }
 
-pub const FIELDS: [&str; 13] = ["title", "state", "state_group", "priority", "assignees", "labels", "created_by", "subscribers", "mentions", "start", "due", "created", "updated"];
+pub const FIELDS: [&str; 14] = ["title", "state", "state_group", "priority", "assignees", "labels", "created_by", "subscribers", "mentions", "cycle", "start", "due", "created", "updated"];
 const LIST_OPS: [&str; 2] = ["in", "not_in"];
 const DATE_OPS: [&str; 9] = ["is", "before", "after", "on_or_before", "on_or_after", "between", "not", "empty", "not_empty"];
 
@@ -111,7 +111,7 @@ pub fn sql(rules: &[PmRule], today: NaiveDate, start: WeekStart) -> Result<(Stri
                 out.push_str(&format!(" AND {column} {}IN ({})", if r.op == "not_in" { "NOT " } else { "" }, marks(values.len())));
                 binds.extend(values);
             }
-            "assignees" | "labels" | "subscribers" | "mentions" => {
+            "assignees" | "labels" | "subscribers" | "mentions" | "cycle" => {
                 if !LIST_OPS.contains(&r.op.as_str()) {
                     return Err(invalid(format!("\"{}\" isn't a way to filter {}", r.op, r.field)));
                 }
@@ -122,6 +122,7 @@ pub fn sql(rules: &[PmRule], today: NaiveDate, start: WeekStart) -> Result<(Stri
                     "assignees" => ("pm_item_assignee x WHERE x.item_id = i.id", "x.who"),
                     "labels" => ("pm_item_label x WHERE x.item_id = i.id", "x.label_id"),
                     "subscribers" => ("pm_item_subscriber x WHERE x.item_id = i.id", "x.who"),
+                    "cycle" => ("pm_cycle_item x WHERE x.item_id = i.id", "x.cycle_id"),
                     _ => ("pm_comment c JOIN pm_mention x ON x.comment_id = c.id WHERE c.item_id = i.id", "x.who"),
                 };
                 // "none": no assignee / no label at all.

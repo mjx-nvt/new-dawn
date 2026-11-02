@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { PmLabel, PmProject, PmState } from "../../../kernel/bridge/pm";
+import type { PmCycle } from "../../../kernel/bridge/pmCycles";
 import { useUpdatePmItem, type ItemInput, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
 import { grouped, moveTo, type Group, type GroupBy, type Property } from "./items";
 import { Dot, ItemProps, QuickAdd } from "./Props";
@@ -12,6 +13,7 @@ export interface LayoutProps {
   items: PmItem[];
   labels: PmLabel[];
   states: PmState[];
+  cycles?: PmCycle[];
   display: PmDisplay;
   has: (p: Property) => boolean;
   who: (w: string) => string;
@@ -21,16 +23,16 @@ export interface LayoutProps {
 
 /** A column's and a row's values together: what an item made in that cell takes. */
 function both(a: Group["value"], b: Group["value"]): Group["value"] {
-  return { state_id: b.state_id ?? a.state_id, priority: b.priority ?? a.priority, labels: [...(a.labels ?? []), ...(b.labels ?? [])], assignees: [...(a.assignees ?? []), ...(b.assignees ?? [])] };
+  return { state_id: b.state_id ?? a.state_id, priority: b.priority ?? a.priority, labels: [...(a.labels ?? []), ...(b.labels ?? [])], assignees: [...(a.assignees ?? []), ...(b.assignees ?? [])], cycle_id: b.cycle_id ?? a.cycle_id };
 }
 
 /** Plane's Board (D-076): a column a group, a row a sub-group when there is one; a card dragged
  *  to another column and row takes both at once (a state and an assignee, say) — one change;
  *  columns fold (remembered); each cell ends with a quick add. */
-export default function Board({ slug, project, items, labels, states, display, has, who, onPeek, onCreate, groups, group, sub, onCollapse }: LayoutProps & { groups: Group[]; group: GroupBy; sub: GroupBy; onCollapse: (collapsed: string[]) => void }) {
+export default function Board({ slug, project, items, labels, states, cycles = [], display, has, who, onPeek, onCreate, groups, group, sub, onCollapse }: LayoutProps & { groups: Group[]; group: GroupBy; sub: GroupBy; onCollapse: (collapsed: string[]) => void }) {
   const update = useUpdatePmItem(slug);
   const [drag, setDrag] = useState<{ id: string; column: string; lane: string } | null>(null);
-  const lanes: Group[] = sub === "none" ? [{ key: "all", label: "", value: {}, items }] : grouped(items, sub, states, labels, who).filter((l) => display.empty_groups || l.items.length);
+  const lanes: Group[] = sub === "none" ? [{ key: "all", label: "", value: {}, items }] : grouped(items, sub, states, labels, who, cycles).filter((l) => display.empty_groups || l.items.length);
   const folded = display.collapsed;
   const fold = (key: string) => onCollapse(folded.includes(key) ? folded.filter((k) => k !== key) : [...folded, key]);
   const ro = !!project.archived_at;
@@ -38,6 +40,7 @@ export default function Board({ slug, project, items, labels, states, display, h
   const drop = (column: Group, lane: Group) => {
     const d = drag;
     setDrag(null);
+    if (column.closed || lane.closed) return;
     const item = d && items.find((i) => i.id === d.id);
     if (!d || !item) return;
     const patch = {
@@ -86,8 +89,8 @@ export default function Board({ slug, project, items, labels, states, display, h
                       type="button"
                       className="btn btnGhost btnCompact"
                       aria-label={`New work item in ${column.label}${lane.label ? ` · ${lane.label}` : ""}`}
-                      disabled={ro}
-                      onClick={() => onCreate({ state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [] })}
+                      disabled={ro || column.closed || lane.closed}
+                      onClick={() => onCreate({ state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null })}
                     >
                       +
                     </button>
@@ -110,7 +113,7 @@ export default function Board({ slug, project, items, labels, states, display, h
                       <span className="ghostText">Nothing here</span>
                     </div>
                   )}
-                  {!ro && <QuickAdd slug={slug} projectId={project.id} label={`${column.label}${lane.label ? ` · ${lane.label}` : ""}`} value={value} />}
+                  {!ro && !column.closed && !lane.closed && <QuickAdd slug={slug} projectId={project.id} label={`${column.label}${lane.label ? ` · ${lane.label}` : ""}`} value={value} />}
                 </div>
               );
             })}

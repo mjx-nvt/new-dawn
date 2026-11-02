@@ -91,6 +91,23 @@ _2026-11-02_
 
 ---
 
+## D-078 — Plane's cycles: dates make the status, one cycle an item, the open work moved on once, a burn-down from completion days
+_2026-11-02_
+
+**Context** (plan v4 §4.5, 0.11.5): Plane's cycles — a title, a description, both dates or none (a draft), never overlapping in a project; Draft, Upcoming, Active, Completed; tabs Active / Upcoming / Completed with search and date filters; items added or made in a cycle, one cycle an item; the unfinished work of a completed cycle transferred once; a details panel with the burn-down and breakdowns by assignee, state and label (points when estimates are on); favorites; archive when completed; delete leaving the items; `N` `C`; Active cycles across projects. Start and complete early are Plane's paid tier; ours.
+
+**Decision — the dates make the status** (0037 `pm_cycle`): a cycle has both days or none (a CHECK, with the days as YYYY-MM-DD so their text order is their order, and the start not after the end); its status is read on this Mac's day — Draft without days, Upcoming before its start, Active within, Completed after its end or once completed early. No two cycles of a project overlap (checked in Rust; a cycle completed early frees its last day for the next). Start now moves an upcoming cycle's start to today; Complete now ends an active one today.
+
+**Decision — one cycle an item** (`pm_cycle_item`, the item its key): putting an item in a cycle moves it from its other one, with an activity row ("cycle: Sprint 1 → Sprint 2"); only a cycle of the item's project that isn't completed takes work — from the cycle's Add existing, the item's Cycle property (and the create modal's), a bulk change, a group dropped into, or an item made in it — each in the same transaction as the rest of the edit. A completed cycle's group takes no drop and no quick add; a draft saved in a cycle that has since ended loses it. Deleting a cycle leaves its items in none, each with its activity row. The open work (not completed, not cancelled) of a completed cycle moves on once into a cycle that isn't completed; its counts and its details are kept as they stood (Plane's progress snapshot), so it still reads "2 of 5 done" with its whole burn-down. Archived items aren't counted. The automations (D-075) neither archive nor close what a cycle that hasn't ended holds.
+
+**Decision — the burn-down reads completion days**: no snapshots a day — each day from the start to the end (up to today) counts the cycle's items not completed by that day's end (`completed_at`, set entering a Completed state and cleared leaving it, as this Mac's day), cancelled ones out of scope; the ideal line runs from all the scope to none; points instead of items when the project's active estimate is in points (an item without one weighs nothing). The breakdowns count the items done of all by assignee, state and label.
+
+**Where the owner sees it**: a project's **Cycles** tab — Active · Upcoming · Completed · Draft (with counts), search, a From–To range, Archived too on Completed, ★ first; each row its days and progress; New cycle (`N` or `C`). A cycle opens with Start now or Complete now, Move open work to… (a completed one, once), ⋯ Edit, Favorite, Archive, and Delete; its progress; its work items (Add existing, New work item, × to take one out); the burn-down (inline SVG: dashed ideal, solid remaining) and the breakdowns. Work items gain Cycle as a property, a display property, a grouping (List and Board), a filter and a bulk change. Projects → **Active cycles** lists every open project's running cycle with its days left. With a project's Cycles feature off, none of this shows. A starred cycle is a favorite in the Cycles tab; the sidebar's Favorites take cycles with modules (0038).
+
+**Means for future work**: modules (0.11.6) take the same membership shape, several a work item; analytics (0.11.10) read the same burn-down; the Projects agent (0.11.12) can propose an item's cycle.
+
+---
+
 ## D-077 — Plane's filters and views: rules turned into SQL, views as rows a project or the workspace, pinned like records
 _2026-11-02_
 

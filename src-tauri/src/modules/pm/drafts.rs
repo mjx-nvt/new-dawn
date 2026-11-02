@@ -118,6 +118,14 @@ async fn sanitize(pool: &SqlitePool, mut input: ItemInput) -> Result<ItemInput> 
         let ok = sqlx::query_as::<_, (String,)>("SELECT id FROM pm_state WHERE id = ? AND project_id = ? AND state_group <> 'triage'").bind(&s).bind(&project).fetch_optional(pool).await?.is_some();
         input.state_id = ok.then_some(s);
     }
+    // A cycle of the project that still takes work (a sprint may have ended since).
+    if let Some(c) = input.cycle_id.clone().filter(|c| !c.is_empty()) {
+        let ok = match super::cycles::get(pool, &c, super::cycles::today()).await {
+            Ok(cy) => cy.project_id == project && cy.status != super::cycles::CycleStatus::Completed,
+            Err(_) => false,
+        };
+        input.cycle_id = ok.then_some(c);
+    }
     if let Some(e) = input.estimate_point_id.clone() {
         let ok = sqlx::query_as::<_, (String,)>("SELECT ep.id FROM pm_estimate_point ep JOIN pm_project m ON m.estimate_id = ep.estimate_id WHERE ep.id = ? AND m.project_id = ?").bind(&e).bind(&project).fetch_optional(pool).await?.is_some();
         input.estimate_point_id = ok.then_some(e);

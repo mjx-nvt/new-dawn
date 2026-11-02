@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePmEstimates, usePmProjects, usePmStates, type PmProject, type StateGroup } from "../../../kernel/bridge/pm";
+import { usePmCycles } from "../../../kernel/bridge/pmCycles";
 import { useBulkPmItems, type ItemPatch } from "../../../kernel/bridge/pmItems";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import { GROUP_LABEL, PRIORITIES } from "./items";
@@ -15,6 +16,7 @@ export default function BulkBar({ slug, project, ids, onClear }: { slug: string;
   const states = (usePmStates(slug, project.id).data ?? []).filter((s) => s.group !== "triage");
   const groups = [...new Set(states.map((s) => s.group))] as StateGroup[];
   const estimate = (usePmEstimates(slug, project.id).data ?? []).find((e) => e.active);
+  const cycles = (usePmCycles(slug, project.id).data ?? []).filter((c) => c.status !== "completed");
   const projects = (usePmProjects(slug).data ?? []).filter((p) => !p.archived_at);
   const [patch, setPatch] = useState<ItemPatch>({});
   const set = (p: ItemPatch) => setPatch({ ...patch, ...p });
@@ -67,6 +69,17 @@ export default function BulkBar({ slug, project, ids, onClear }: { slug: string;
               </option>
             ))}
             <option value="none">No estimate</option>
+          </select>
+        )}
+        {project.features.cycles && cycles.length > 0 && (
+          <select className="input" aria-label="Cycle for the selected" value={patch.cycle_id == null ? "" : patch.cycle_id || "none"} onChange={(e) => set({ cycle_id: e.target.value === "none" ? "" : e.target.value || undefined })}>
+            <option value="">Cycle</option>
+            {cycles.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            <option value="none">No cycle</option>
           </select>
         )}
         <button type="button" className="btn btnPrimary btnCompact" disabled={busy || !Object.values(patch).some((v) => v !== undefined)} onClick={() => bulk.update.mutate({ ids, patch }, { onSuccess: () => (setPatch({}), onClear()) })}>

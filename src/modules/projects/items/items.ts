@@ -18,7 +18,7 @@ export const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, med
 export const GROUP_LABEL: Record<StateGroup, string> = { backlog: "Backlog", unstarted: "Unstarted", started: "Started", completed: "Completed", cancelled: "Cancelled", triage: "Triage" };
 const GROUP_RANK: Record<StateGroup, number> = { triage: 0, backlog: 1, unstarted: 2, started: 3, completed: 4, cancelled: 5 };
 
-export type GroupBy = "state" | "group" | "priority" | "labels" | "assignees" | "created_by" | "none";
+export type GroupBy = "state" | "group" | "priority" | "labels" | "assignees" | "cycle" | "created_by" | "none";
 export type OrderBy = "manual" | "created" | "updated" | "start" | "due" | "priority";
 
 export const GROUP_BY: { key: GroupBy; label: string }[] = [
@@ -27,6 +27,7 @@ export const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "priority", label: "Priority" },
   { key: "labels", label: "Labels" },
   { key: "assignees", label: "Assignees" },
+  { key: "cycle", label: "Cycle" },
   { key: "created_by", label: "Created by" },
   { key: "none", label: "None" },
 ];
@@ -42,7 +43,7 @@ export const ORDER_BY: { key: OrderBy; label: string }[] = [
 
 /** What a row, a card or a table shows besides the title (Plane's display properties; the
  *  table's created and updated columns too). */
-export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "sub_items", "attachments", "links", "created", "created_by", "updated"] as const;
+export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "sub_items", "attachments", "links", "created", "created_by", "updated"] as const;
 export type Property = (typeof PROPERTIES)[number];
 export const PROPERTY_LABEL: Record<Property, string> = {
   id: "ID",
@@ -53,6 +54,7 @@ export const PROPERTY_LABEL: Record<Property, string> = {
   start: "Start date",
   due: "Due date",
   estimate: "Estimate",
+  cycle: "Cycle",
   sub_items: "Sub-work items",
   attachments: "Attachments",
   links: "Links",
@@ -108,6 +110,8 @@ export function moveTo(item: PmItem, by: GroupBy, from: Group | undefined, to: G
       const assignees = swap(item.assignees, from?.value.assignees?.[0], to.value.assignees?.[0], to.key === "none");
       return assignees ? { assignees } : {};
     }
+    case "cycle":
+      return (to.value.cycle_id ?? "") !== (item.cycle_id ?? "") ? { cycle_id: to.value.cycle_id ?? "" } : {};
     default:
       return {};
   }
@@ -143,14 +147,16 @@ export interface Group {
   key: string;
   label: string;
   /** What quick add gives an item made in this group. */
-  value: { state_id?: string; priority?: Priority; labels?: string[]; assignees?: string[] };
+  value: { state_id?: string; priority?: Priority; labels?: string[]; assignees?: string[]; cycle_id?: string };
   /** The state's colour (state groups). */
   color?: string;
+  /** Takes no work: a completed cycle's group (no quick add, no drop). */
+  closed?: boolean;
   items: PmItem[];
 }
 
 /** The groups, every one the project has (the empty ones too), in their order. */
-export function grouped(items: PmItem[], by: GroupBy, states: PmState[], labels: PmLabel[], who: (w: string) => string): Group[] {
+export function grouped(items: PmItem[], by: GroupBy, states: PmState[], labels: PmLabel[], who: (w: string) => string, cycles: { id: string; name: string; status: string }[] = []): Group[] {
   const visible = states.filter((s) => s.group !== "triage");
   switch (by) {
     case "state":
@@ -172,6 +178,17 @@ export function grouped(items: PmItem[], by: GroupBy, states: PmState[], labels:
       return [
         ...all.map((w) => ({ key: w, label: who(w), value: { assignees: [w] }, items: items.filter((i) => i.assignees.includes(w)) })),
         { key: "none", label: "No assignee", value: {}, items: items.filter((i) => !i.assignees.length) },
+      ];
+    }
+    case "cycle": {
+      // The cycles items can go into; a completed one shows while it holds some, closed; one not
+      // read yet is named from its items.
+      const known = cycles.filter((c) => c.status !== "completed" || items.some((i) => i.cycle_id === c.id));
+      const unread = [...new Map(items.filter((i) => i.cycle_id && !cycles.some((c) => c.id === i.cycle_id)).map((i) => [i.cycle_id as string, i.cycle_name ?? ""])).entries()];
+      return [
+        ...known.map((c) => ({ key: c.id, label: c.name, value: { cycle_id: c.id }, closed: c.status === "completed", items: items.filter((i) => i.cycle_id === c.id) })),
+        ...unread.map(([id, name]) => ({ key: id, label: name, value: { cycle_id: id }, items: items.filter((i) => i.cycle_id === id) })),
+        { key: "none", label: "No cycle", value: {}, items: items.filter((i) => !i.cycle_id) },
       ];
     }
     case "created_by": {

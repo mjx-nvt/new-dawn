@@ -17,6 +17,7 @@ import Drafts from "./modules/projects/items/Drafts";
 import ItemPage from "./modules/projects/items/ItemPage";
 import InboxPage from "./modules/projects/InboxPage";
 import WorkspaceViews from "./modules/projects/WorkspaceViews";
+import ActiveCycles from "./modules/projects/ActiveCycles";
 import CrmPage from "./modules/crm/CrmPage";
 import RecordPage from "./modules/crm/record/RecordPage";
 import EmailPage from "./modules/email/EmailPage";
@@ -122,11 +123,11 @@ const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
   // The project's tab and, under Settings, its section (D-073).
-  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string } => {
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string; cycle?: string; ctab?: string; cfrom?: string; cto?: string; carch?: string } => {
     const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
-    // The tab, Settings' section, and the work items' open view, filters, layout, group,
-    // sub-group, order, peek and its activity tab (D-073, D-074, D-076, D-077).
-    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity") };
+    // The tab, Settings' section, the work items' open view, filters, layout, group, sub-group,
+    // order, peek and its activity tab, and the Cycles tab's own tab and open cycle (D-073 … D-078).
+    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity"), ...text("cycle"), ...text("ctab"), ...text("cfrom"), ...text("cto"), ...text("carch") };
   },
   component: () => (
     <ModuleGate module="projects">
@@ -176,6 +177,18 @@ const workspaceViewsRoute = createRoute({
     </ModuleGate>
   ),
   staticData: { title: "Views", breadcrumb: "Projects" },
+});
+
+// Every open project's running cycle (D-078).
+const activeCyclesRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/cycles",
+  component: () => (
+    <ModuleGate module="projects">
+      <ActiveCycles />
+    </ModuleGate>
+  ),
+  staticData: { title: "Active cycles", breadcrumb: "Projects" },
 });
 
 // The Inbox (D-075): Plane's notifications — the tab, what it shows, the type filters, the work
@@ -305,7 +318,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

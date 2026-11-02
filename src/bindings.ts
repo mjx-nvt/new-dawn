@@ -266,6 +266,21 @@ export const commands = {
 	deletePmView: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_view", { slug, id })),
 	/**  Into the sidebar's Favorites, or out. */
 	favoritePmView: (slug: string, id: string, on: boolean) => typedError<PmView_Serialize, AppError>(__TAURI_INVOKE("favorite_pm_view", { slug, id, on })),
+	listPmCycles: (slug: string, projectId: string) => typedError<PmCycle_Serialize[], AppError>(__TAURI_INVOKE("list_pm_cycles", { slug, projectId })),
+	/**  Every open project's active cycles. */
+	listActivePmCycles: (slug: string) => typedError<PmCycle_Serialize[], AppError>(__TAURI_INVOKE("list_active_pm_cycles", { slug })),
+	createPmCycle: (slug: string, input: CycleInput_Deserialize) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("create_pm_cycle", { slug, input })),
+	updatePmCycle: (slug: string, id: string, patch: CyclePatch_Deserialize) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("update_pm_cycle", { slug, id, patch })),
+	/**  Plane's start now (an upcoming cycle) and complete now (an active one). */
+	startPmCycle: (slug: string, id: string) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("start_pm_cycle", { slug, id })),
+	completePmCycle: (slug: string, id: string) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("complete_pm_cycle", { slug, id })),
+	addPmCycleItems: (slug: string, id: string, itemIds: string[]) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("add_pm_cycle_items", { slug, id, itemIds })),
+	/**  A completed cycle's open work into another cycle, once; how many moved. */
+	transferPmCycle: (slug: string, id: string, to: string) => typedError<number, AppError>(__TAURI_INVOKE("transfer_pm_cycle", { slug, id, to })),
+	archivePmCycle: (slug: string, id: string, archived: boolean) => typedError<PmCycle_Serialize, AppError>(__TAURI_INVOKE("archive_pm_cycle", { slug, id, archived })),
+	deletePmCycle: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_cycle", { slug, id })),
+	/**  The details panel: burn-down and breakdowns. */
+	pmCycleDetails: (slug: string, id: string) => typedError<CycleDetails_Serialize, AppError>(__TAURI_INVOKE("pm_cycle_details", { slug, id })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -1077,6 +1092,24 @@ export type BrandView_Serialize = {
 	logo_version: string,
 };
 
+export type BurnDay = BurnDay_Serialize | BurnDay_Deserialize;
+
+export type BurnDay_Deserialize = {
+	day: string,
+	/**  The ideal line: all the scope at the start, none at the end. */
+	ideal: number | null,
+	/**  What was still open at the day's end (none for days to come). */
+	remaining?: number | null,
+};
+
+export type BurnDay_Serialize = {
+	day: string,
+	/**  The ideal line: all the scope at the start, none at the end. */
+	ideal: number | null,
+	/**  What was still open at the day's end (none for days to come). */
+	remaining: number | null,
+};
+
 export type Button = Button_Serialize | Button_Deserialize;
 
 export type Button_Deserialize = {
@@ -1423,6 +1456,77 @@ export type CrmProposal_Serialize = {
 	source_title: string,
 	created_at: string,
 };
+
+/**
+ *  The details panel: the burn-down (work items, or points when the project's active estimate is
+ *  in points — an item without one weighs nothing) and the breakdowns by assignee, state and label.
+ */
+export type CycleDetails = CycleDetails_Serialize | CycleDetails_Deserialize;
+
+/**
+ *  The details panel: the burn-down (work items, or points when the project's active estimate is
+ *  in points — an item without one weighs nothing) and the breakdowns by assignee, state and label.
+ */
+export type CycleDetails_Deserialize = {
+	points: boolean,
+	burndown: BurnDay_Deserialize[],
+	assignees: Share[],
+	states: Share[],
+	labels: Share[],
+};
+
+/**
+ *  The details panel: the burn-down (work items, or points when the project's active estimate is
+ *  in points — an item without one weighs nothing) and the breakdowns by assignee, state and label.
+ */
+export type CycleDetails_Serialize = {
+	points: boolean,
+	burndown: BurnDay_Serialize[],
+	assignees: Share[],
+	states: Share[],
+	labels: Share[],
+};
+
+export type CycleInput = CycleInput_Serialize | CycleInput_Deserialize;
+
+export type CycleInput_Deserialize = {
+	project_id: string,
+	name: string,
+	description: string,
+	start_date?: string | null,
+	end_date?: string | null,
+};
+
+export type CycleInput_Serialize = {
+	project_id: string,
+	name: string,
+	description: string,
+	start_date: string | null,
+	end_date: string | null,
+};
+
+/**  The edits; a field left out stays (dates: both, or both cleared with ""). */
+export type CyclePatch = CyclePatch_Serialize | CyclePatch_Deserialize;
+
+/**  The edits; a field left out stays (dates: both, or both cleared with ""). */
+export type CyclePatch_Deserialize = {
+	name?: string | null,
+	description?: string | null,
+	start_date?: string | null,
+	end_date?: string | null,
+	is_favorite?: boolean | null,
+};
+
+/**  The edits; a field left out stays (dates: both, or both cleared with ""). */
+export type CyclePatch_Serialize = {
+	name: string | null,
+	description: string | null,
+	start_date: string | null,
+	end_date: string | null,
+	is_favorite: boolean | null,
+};
+
+export type CycleStatus = "draft" | "upcoming" | "active" | "completed";
 
 export type DateFormat = 
 /**  "24 Oct 2026" — New Dawn's own. */
@@ -2130,6 +2234,8 @@ export type ItemInput_Deserialize = {
 	target_date?: string | null,
 	estimate_point_id?: string | null,
 	parent_id?: string | null,
+	/**  Made in a cycle (D-078): one of the project's, not completed. */
+	cycle_id?: string | null,
 };
 
 /**  What the create form and a draft hold. */
@@ -2146,6 +2252,8 @@ export type ItemInput_Serialize = {
 	target_date: string | null,
 	estimate_point_id: string | null,
 	parent_id: string | null,
+	/**  Made in a cycle (D-078): one of the project's, not completed. */
+	cycle_id: string | null,
 };
 
 /**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
@@ -2164,6 +2272,8 @@ export type ItemPatch_Deserialize = {
 	estimate_point_id?: string | null,
 	parent_id?: string | null,
 	sort_order?: number | null,
+	/**  A cycle of the item's project, not completed; "" takes it out of its cycle (D-078). */
+	cycle_id?: string | null,
 };
 
 /**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
@@ -2179,6 +2289,8 @@ export type ItemPatch_Serialize = {
 	estimate_point_id: string | null,
 	parent_id: string | null,
 	sort_order: number | null,
+	/**  A cycle of the item's project, not completed; "" takes it out of its cycle (D-078). */
+	cycle_id: string | null,
 };
 
 /**  A meeting's long job: the activity list shows its progress and can stop it. */
@@ -3236,6 +3348,48 @@ export type PmComment_Serialize = {
 	reactions: Reaction[],
 };
 
+export type PmCycle = PmCycle_Serialize | PmCycle_Deserialize;
+
+export type PmCycle_Deserialize = {
+	id: string,
+	project_id: string,
+	name: string,
+	description: string,
+	start_date?: string | null,
+	end_date?: string | null,
+	status: CycleStatus,
+	completed_at?: string | null,
+	transferred_at?: string | null,
+	archived_at?: string | null,
+	is_favorite: boolean,
+	/**  Its work items, those completed, those cancelled. */
+	items: number,
+	done: number,
+	cancelled: number,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmCycle_Serialize = {
+	id: string,
+	project_id: string,
+	name: string,
+	description: string,
+	start_date: string | null,
+	end_date: string | null,
+	status: CycleStatus,
+	completed_at: string | null,
+	transferred_at: string | null,
+	archived_at: string | null,
+	is_favorite: boolean,
+	/**  Its work items, those completed, those cancelled. */
+	items: number,
+	done: number,
+	cancelled: number,
+	created_at: string,
+	updated_at: string,
+};
+
 export type PmDisplay = {
 	layout: string,
 	group: string,
@@ -3334,6 +3488,9 @@ export type PmItem_Deserialize = {
 	parent_id?: string | null,
 	parent_key?: string | null,
 	parent_name?: string | null,
+	/**  Its cycle (D-078): one at most. */
+	cycle_id?: string | null,
+	cycle_name?: string | null,
 	/**  "me" or people's ids. */
 	assignees: string[],
 	labels: string[],
@@ -3378,6 +3535,9 @@ export type PmItem_Serialize = {
 	parent_id: string | null,
 	parent_key: string | null,
 	parent_name: string | null,
+	/**  Its cycle (D-078): one at most. */
+	cycle_id: string | null,
+	cycle_name: string | null,
 	/**  "me" or people's ids. */
 	assignees: string[],
 	labels: string[],
@@ -4180,6 +4340,13 @@ export type Series = {
 };
 
 export type SettingsTab = "general" | "accounts" | "workspaces" | "models" | "converters" | "backup" | "storage" | "about";
+
+export type Share = {
+	key: string,
+	label: string,
+	total: number,
+	done: number,
+};
 
 export type Slogan = Slogan_Serialize | Slogan_Deserialize;
 
