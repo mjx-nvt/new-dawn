@@ -77,6 +77,8 @@ pub struct PmItem {
     /// Its cycle (D-078): one at most.
     pub cycle_id: Option<String>,
     pub cycle_name: Option<String>,
+    /// Its modules (D-079): several, by name.
+    pub modules: Vec<PmItemModule>,
     /// "me" or people's ids.
     pub assignees: Vec<String>,
     pub labels: Vec<String>,
@@ -122,6 +124,7 @@ struct Row {
     parent_name: Option<String>,
     cycle_id: Option<String>,
     cycle_name: Option<String>,
+    modules: Option<String>,
     assignees: Option<String>,
     labels: Option<String>,
     subscribers: Option<String>,
@@ -150,6 +153,20 @@ fn split(list: Option<String>) -> Vec<String> {
     list.map(|l| l.split('\u{1f}').filter(|s| !s.is_empty()).map(str::to_owned).collect()).unwrap_or_default()
 }
 
+/// A module an item is in (D-079).
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct PmItemModule {
+    pub id: String,
+    pub name: String,
+}
+
+/// "id␞name" pairs, by name.
+fn module_refs(list: Option<String>) -> Vec<PmItemModule> {
+    let mut all: Vec<PmItemModule> = split(list).iter().filter_map(|m| m.split_once('\u{1e}')).map(|(id, name)| PmItemModule { id: id.into(), name: name.into() }).collect();
+    all.sort_by_key(|m| m.name.to_lowercase());
+    all
+}
+
 impl From<Row> for PmItem {
     fn from(r: Row) -> Self {
         PmItem {
@@ -174,6 +191,7 @@ impl From<Row> for PmItem {
             parent_name: r.parent_name,
             cycle_id: r.cycle_id,
             cycle_name: r.cycle_name,
+            modules: module_refs(r.modules),
             assignees: split(r.assignees),
             labels: split(r.labels),
             subscribers: split(r.subscribers),
@@ -202,6 +220,7 @@ macro_rules! select {
              i.state_id, s.name AS state_name, s.state_group, s.color AS state_color, i.priority, i.start_date, i.target_date, \
              i.estimate_point_id, ep.value AS estimate_value, i.parent_id, pm.identifier || '-' || p.sequence AS parent_key, p.name AS parent_name, \
              cy.id AS cycle_id, cy.name AS cycle_name, \
+             (SELECT group_concat(d.id || char(30) || d.name, char(31)) FROM pm_module_item x JOIN pm_module d ON d.id = x.module_id WHERE x.item_id = i.id) AS modules, \
              (SELECT group_concat(who, char(31)) FROM pm_item_assignee a WHERE a.item_id = i.id) AS assignees, \
              (SELECT group_concat(label_id, char(31)) FROM pm_item_label l WHERE l.item_id = i.id) AS labels, \
              (SELECT group_concat(who, char(31)) FROM pm_item_subscriber b WHERE b.item_id = i.id) AS subscribers, \
@@ -282,6 +301,8 @@ pub struct ItemInput {
     pub parent_id: Option<String>,
     /// Made in a cycle (D-078): one of the project's, not completed.
     pub cycle_id: Option<String>,
+    /// And in modules (D-079): the project's, not archived.
+    pub modules: Vec<String>,
 }
 
 fn clean_item_name(text: &str) -> Result<String> {
@@ -376,7 +397,7 @@ async fn check_labels(pool: &SqlitePool, project_id: &str, labels: &[String]) ->
     Ok(kept)
 }
 
-async fn check_people(pool: &SqlitePool, who: &[String], already: &[String]) -> Result<Vec<String>> {
+pub(super) async fn check_people(pool: &SqlitePool, who: &[String], already: &[String]) -> Result<Vec<String>> {
     let mut kept: Vec<String> = Vec::new();
     for w in who {
         let r = if already.iter().any(|a| a == w.trim()) { Some(w.trim().to_owned()) } else { super::check_ref(pool, Some(w)).await? };
@@ -528,6 +549,7 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
     }
     let point = check_point(pool, &project.id, input.estimate_point_id.as_deref()).await?;
     let parent = check_parent(pool, &project.id, input.parent_id.as_deref(), None).await?;
+    let modules = super::modules::check(pool, &project.id, &input.modules, &[]).await?;
     // The owner follows what they make (an agent or an automation doesn't subscribe).
     let mut subscribers: Vec<String> = if actor == "me" { vec!["me".to_owned()] } else { Vec::new() };
     for s in assignees.iter().chain(project.subscribers.iter()) {
@@ -580,6 +602,7 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
     if let Some(cy) = &cycle {
         super::cycles::set_cycle_in(&mut tx, &item, Some(cy), actor).await?;
     }
+    super::modules::set_modules_in(&mut tx, &item, &modules, actor).await?;
     tx.commit().await?;
     get(pool, &item).await
 }
@@ -603,6 +626,8 @@ pub struct ItemPatch {
     pub sort_order: Option<f64>,
     /// A cycle of the item's project, not completed; "" takes it out of its cycle (D-078).
     pub cycle_id: Option<String>,
+    /// Its modules, the whole set (D-079): the project's; one added must not be archived.
+    pub modules: Option<Vec<String>>,
 }
 
 /// Changes an item: everything checked first, then one transaction — the item, its assignees
@@ -637,6 +662,8 @@ pub(crate) struct Plan {
     order: Option<f64>,
     /// Into a cycle, or out of one.
     cycle: Option<Option<super::cycles::PmCycle>>,
+    /// Its modules' new set.
+    modules: Option<Vec<String>>,
 }
 
 /// Checks an item's edits: an archived item is read-only; each field as the create form checks it.
@@ -773,7 +800,15 @@ pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Resul
         }
         _ => None,
     };
-    Ok(Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle })
+    let held: Vec<String> = item.modules.iter().map(|m| m.id.clone()).collect();
+    let modules = match &patch.modules {
+        Some(m) => {
+            let kept = super::modules::check(pool, &item.project_id, m, &held).await?;
+            (!same_set(&kept, &held)).then_some(kept)
+        }
+        None => None,
+    };
+    Ok(Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle, modules })
 }
 
 /// Writes checked edits in one transaction — the item, its assignees and labels, one activity row
@@ -781,8 +816,8 @@ pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Resul
 /// state sets when, leaving it clears it; the owner follows what they change. Whether anything
 /// changed. `merge`: see [`update_with`].
 pub(crate) async fn write(pool: &SqlitePool, plan: Plan, actor: &str, merge: bool) -> Result<bool> {
-    let Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle } = plan;
-    if changes.is_empty() && order.is_none() && cycle.is_none() {
+    let Plan { item, changes, name, description, state, priority, assignees, labels, start, target, point, parent, order, cycle, modules } = plan;
+    if changes.is_empty() && order.is_none() && cycle.is_none() && modules.is_none() {
         return Ok(false);
     }
     let id = item.id.as_str();
@@ -790,6 +825,10 @@ pub(crate) async fn write(pool: &SqlitePool, plan: Plan, actor: &str, merge: boo
     if let Some(to) = &cycle {
         // In the same transaction, with its own activity row.
         super::cycles::set_cycle_in(&mut tx, id, to.as_ref(), actor).await?;
+    }
+    if let Some(m) = &modules {
+        // The same: an activity row a module joined or left.
+        super::modules::set_modules_in(&mut tx, id, m, actor).await?;
     }
     let completed = match &state {
         Some((_, StateGroup::Completed)) => Some(true),
@@ -919,6 +958,12 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
     let item = get(pool, id).await?;
     let target = project_id.filter(|p| !p.is_empty()).unwrap_or(&item.project_id).to_owned();
     let same = target == item.project_id;
+    // Its modules that still take work (an archived one takes no new item).
+    let modules: Vec<(String,)> = if same {
+        sqlx::query_as("SELECT x.module_id FROM pm_module_item x JOIN pm_module d ON d.id = x.module_id WHERE x.item_id = ? AND d.archived_at IS NULL").bind(&item.id).fetch_all(pool).await?
+    } else {
+        Vec::new()
+    };
     let made = create(
         pool,
         ItemInput {
@@ -933,8 +978,9 @@ pub async fn copy(pool: &SqlitePool, folder: &str, id: &str, project_id: Option<
             target_date: item.target_date.clone(),
             estimate_point_id: if same { item.estimate_point_id.clone() } else { None },
             parent_id: if same { item.parent_id.clone() } else { None },
-            // A copy starts in no cycle (Plane's).
+            // A copy starts in no cycle (Plane's), in the same open modules.
             cycle_id: None,
+            modules: modules.into_iter().map(|(m,)| m).collect(),
         },
         actor,
     )

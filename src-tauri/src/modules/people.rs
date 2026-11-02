@@ -280,8 +280,9 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
-    // Work items (D-074): assigned to, followed by, mentioning — the kept person, once.
-    for table in ["pm_item_assignee", "pm_item_subscriber"] {
+    // Work items (D-074): assigned to, followed by, mentioning — the kept person, once; and
+    // modules' members (D-079).
+    for table in ["pm_item_assignee", "pm_item_subscriber", "pm_module_member"] {
         sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE OR IGNORE {table} SET who = ?1 WHERE who = ?2")))
             .bind(&k.id)
             .bind(&o.id)
@@ -305,6 +306,11 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE pm_project SET lead = ?1 WHERE lead = ?2")
+        .bind(&k.id)
+        .bind(&o.id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE pm_module SET lead = ?1 WHERE lead = ?2")
         .bind(&k.id)
         .bind(&o.id)
         .execute(&mut *tx)

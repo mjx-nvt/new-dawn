@@ -150,6 +150,21 @@ pub async fn favorites(pool: &SqlitePool) -> Result<Favorites> {
             items.push(Favorite { id, folder_id, position, object: "pm-views".into(), object_label: "Views".into(), record_id: project_id, view_id: Some(pm_view), label: name });
             continue;
         }
+        // A cycle or a module (D-079): "pm-cycles" / "pm-modules", the record their project, the
+        // view the cycle or module.
+        let mut found_pm = None;
+        for (column, object, label, table) in [("pm_cycle_id", "pm-cycles", "Cycles", "pm_cycle"), ("pm_module_id", "pm-modules", "Modules", "pm_module")] {
+            if let Some(pm_id) = row.try_get::<Option<String>, _>(column)? {
+                found_pm = Some((pm_id, object, label, table));
+                break;
+            }
+        }
+        if let Some((pm_id, object, label, table)) = found_pm {
+            let named: Option<(String, String)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT name, project_id FROM {table} WHERE id = ?"))).bind(&pm_id).fetch_optional(pool).await?;
+            let Some((name, project_id)) = named else { continue };
+            items.push(Favorite { id, folder_id, position, object: object.into(), object_label: label.into(), record_id: Some(project_id), view_id: Some(pm_id), label: name });
+            continue;
+        }
         let view_id: Option<String> = row.try_get("view_id")?;
         if let Some(view_id) = view_id {
             let view: Option<(String, String)> = sqlx::query_as("SELECT v.name, o.id FROM view v JOIN object_meta o ON o.id = v.object_id WHERE v.id = ?").bind(&view_id).fetch_optional(pool).await?;

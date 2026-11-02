@@ -68,6 +68,16 @@ export default function CrmNav({ slug, iconsOnly }: { slug: string | undefined; 
 
 function FavoriteLink({ favorite: p }: { favorite: Favorite }) {
   const mark = <span className={nav.mark}>{(p.label || "?").slice(0, 1).toUpperCase()}</span>;
+  // A starred cycle or module (D-079): its project's tab, opened on it.
+  if ((p.object === "pm-cycles" || p.object === "pm-modules") && p.view_id && p.record_id) {
+    const search = p.object === "pm-cycles" ? { tab: "cycles", cycle: p.view_id } : { tab: "modules", module: p.view_id };
+    return (
+      <Link to="/projects/$projectId" params={{ projectId: p.record_id }} search={search} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={`${p.label} · ${p.object_label}`}>
+        {mark}
+        <span className={styles.label}>{p.label}</span>
+      </Link>
+    );
+  }
   // A Projects view (D-077): the workspace's views page, or its project's Work items.
   if (p.object === "pm-views" && p.view_id) {
     return p.record_id ? (

@@ -14,10 +14,10 @@ use crate::error::AppError;
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 pub const LAYOUTS: [&str; 5] = ["list", "board", "calendar", "table", "timeline"];
-pub const GROUPS: [&str; 8] = ["state", "group", "priority", "labels", "assignees", "cycle", "created_by", "none"];
+pub const GROUPS: [&str; 9] = ["state", "group", "priority", "labels", "assignees", "cycle", "module", "created_by", "none"];
 pub const ORDERS: [&str; 6] = ["manual", "created", "updated", "start", "due", "priority"];
 /// Plane's display properties (Table adds its created and updated columns).
-pub const PROPERTIES: [&str; 15] = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "sub_items", "attachments", "links", "created", "created_by", "updated"];
+pub const PROPERTIES: [&str; 16] = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "modules", "sub_items", "attachments", "links", "created", "created_by", "updated"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 pub struct PmDisplay {

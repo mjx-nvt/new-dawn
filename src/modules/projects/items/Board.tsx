@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PmLabel, PmProject, PmState } from "../../../kernel/bridge/pm";
 import type { PmCycle } from "../../../kernel/bridge/pmCycles";
+import type { PmModule } from "../../../kernel/bridge/pmModules";
 import { useUpdatePmItem, type ItemInput, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
 import { grouped, moveTo, type Group, type GroupBy, type Property } from "./items";
 import { Dot, ItemProps, QuickAdd } from "./Props";
@@ -14,6 +15,7 @@ export interface LayoutProps {
   labels: PmLabel[];
   states: PmState[];
   cycles?: PmCycle[];
+  modules?: PmModule[];
   display: PmDisplay;
   has: (p: Property) => boolean;
   who: (w: string) => string;
@@ -23,16 +25,16 @@ export interface LayoutProps {
 
 /** A column's and a row's values together: what an item made in that cell takes. */
 function both(a: Group["value"], b: Group["value"]): Group["value"] {
-  return { state_id: b.state_id ?? a.state_id, priority: b.priority ?? a.priority, labels: [...(a.labels ?? []), ...(b.labels ?? [])], assignees: [...(a.assignees ?? []), ...(b.assignees ?? [])], cycle_id: b.cycle_id ?? a.cycle_id };
+  return { state_id: b.state_id ?? a.state_id, priority: b.priority ?? a.priority, labels: [...(a.labels ?? []), ...(b.labels ?? [])], assignees: [...(a.assignees ?? []), ...(b.assignees ?? [])], cycle_id: b.cycle_id ?? a.cycle_id, modules: [...(a.modules ?? []), ...(b.modules ?? [])] };
 }
 
 /** Plane's Board (D-076): a column a group, a row a sub-group when there is one; a card dragged
  *  to another column and row takes both at once (a state and an assignee, say) — one change;
  *  columns fold (remembered); each cell ends with a quick add. */
-export default function Board({ slug, project, items, labels, states, cycles = [], display, has, who, onPeek, onCreate, groups, group, sub, onCollapse }: LayoutProps & { groups: Group[]; group: GroupBy; sub: GroupBy; onCollapse: (collapsed: string[]) => void }) {
+export default function Board({ slug, project, items, labels, states, cycles = [], modules = [], display, has, who, onPeek, onCreate, groups, group, sub, onCollapse }: LayoutProps & { groups: Group[]; group: GroupBy; sub: GroupBy; onCollapse: (collapsed: string[]) => void }) {
   const update = useUpdatePmItem(slug);
   const [drag, setDrag] = useState<{ id: string; column: string; lane: string } | null>(null);
-  const lanes: Group[] = sub === "none" ? [{ key: "all", label: "", value: {}, items }] : grouped(items, sub, states, labels, who, cycles).filter((l) => display.empty_groups || l.items.length);
+  const lanes: Group[] = sub === "none" ? [{ key: "all", label: "", value: {}, items }] : grouped(items, sub, states, labels, who, cycles, modules).filter((l) => display.empty_groups || l.items.length);
   const folded = display.collapsed;
   const fold = (key: string) => onCollapse(folded.includes(key) ? folded.filter((k) => k !== key) : [...folded, key]);
   const ro = !!project.archived_at;
@@ -43,6 +45,9 @@ export default function Board({ slug, project, items, labels, states, cycles = [
     if (column.closed || lane.closed) return;
     const item = d && items.find((i) => i.id === d.id);
     if (!d || !item) return;
+    // Nothing leaves an archived module's group (D-079).
+    const left = (by: GroupBy, all: Group[], key: string, to: Group) => by === "module" && key !== to.key && !!all.find((g) => g.key === key)?.closed;
+    if (left(group, groups, d.column, column) || left(sub, lanes, d.lane, lane)) return;
     const patch = {
       ...(d.column === column.key ? {} : moveTo(item, group, groups.find((g) => g.key === d.column), column)),
       ...(sub === "none" || d.lane === lane.key ? {} : moveTo(item, sub, lanes.find((l) => l.key === d.lane), lane)),
@@ -90,7 +95,7 @@ export default function Board({ slug, project, items, labels, states, cycles = [
                       className="btn btnGhost btnCompact"
                       aria-label={`New work item in ${column.label}${lane.label ? ` · ${lane.label}` : ""}`}
                       disabled={ro || column.closed || lane.closed}
-                      onClick={() => onCreate({ state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null })}
+                      onClick={() => onCreate({ state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null, modules: value.modules ?? [] })}
                     >
                       +
                     </button>

@@ -33,7 +33,7 @@ import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { RELATIONS, asPrompt, duration, progress, sentence, transitions, useWho } from "./items";
 import { Attachments, Links, RelationRow } from "./ItemTies";
-import { CyclePick, DateField, Dot, EstimatePick, LabelPick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
+import { CyclePick, DateField, Dot, EstimatePick, LabelPick, ModulePick, ParentPick, PeoplePick, PriorityMark, PriorityPick, StatePick } from "./Props";
 import styles from "./Items.module.css";
 
 const EMOJI = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"];
@@ -279,7 +279,7 @@ function SubItems({ slug, item, onOpen }: { slug: string; item: PmItem; onOpen: 
   const create = useCreatePmItem(slug);
   const [name, setName] = useState("");
   const share = progress(item);
-  const add = () => name.trim() && create.mutate({ project_id: item.project_id, name, parent_id: item.id, assignees: [], labels: [] }, { onSuccess: () => setName("") });
+  const add = () => name.trim() && create.mutate({ project_id: item.project_id, name, parent_id: item.id, assignees: [], labels: [], modules: [] }, { onSuccess: () => setName("") });
   return (
     <section className={styles.subs} aria-label="Sub-work items">
       <div className={styles.subsHead}>
@@ -350,6 +350,7 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
   const following = item.subscribers.includes("me");
   const closed = item.state_group === "completed" || item.state_group === "cancelled";
   const cyclesOn = !!projects.find((p) => p.id === item.project_id)?.features.cycles;
+  const modulesOn = !!projects.find((p) => p.id === item.project_id)?.features.modules;
   const flash = (text: string) => {
     setNote(text);
     window.setTimeout(() => setNote(null), 1800);
@@ -523,8 +524,14 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
                 </dd>
               </>
             )}
-            <dt>Modules</dt>
-            <dd className="ghostText">No modules yet</dd>
+            {modulesOn && (
+              <>
+                <dt>Modules</dt>
+                <dd>
+                  <ModulePick slug={slug} projectId={item.project_id} value={item.modules.map((m) => m.id)} disabled={ro} onChange={(modules) => save({ modules })} />
+                </dd>
+              </>
+            )}
             <dt>Created</dt>
             <dd className="fieldHint">
               {who(item.created_by)} · {formatDateTime(item.created_at)}

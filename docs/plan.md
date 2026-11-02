@@ -246,7 +246,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0035 | `pm_display` (a project's layout and display options, one owner; D-076) | 0.11.3 |
 | 0036 | `pm_view` (a project's or the workspace's; rules as JSON), `favorite.pm_view_id` (D-077) | 0.11.4 |
 | 0037 | `pm_cycle` (with a progress snapshot), `pm_cycle_item` (one cycle an item; D-078) | 0.11.5 |
-| 0038 | `module`, `module_issue`, `module_link`, `module_member` | 0.11.6 |
+| 0038 | `pm_module`, `pm_module_item` (several modules an item), `pm_module_member`, `pm_module_link`; `favorite.pm_cycle_id` / `pm_module_id` (cycle stars copied; D-079) | 0.11.6 |
 | 0039 | `page`, `page_label`, `page_version` | 0.11.7 |
 | 0040 | `intake`, `intake_issue` | 0.11.8 |
 | 0041 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
@@ -401,7 +401,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.6 — Modules (2 sittings)
 - **Same as:** §4.5 (modules).
-- **Data:** 0038.
+- **Data:** 0038 (`pm_module`, `pm_module_item`, `pm_module_member`, `pm_module_link`; Projects stars as favorite rows).
 - **Screens and flows:** Modules page with List / Gallery / Timeline, search, sort, filters (favorites, status, lead, members, dates); create (title unique, description, dates, state, lead, members); items in several modules; details: progress, breakdown by state group, Needs attention (overdue, blocked), breakdown by state / assignee / label / priority, links; favorites; archive (completed / cancelled); delete.
 - **Done when:** a module with three items, one overdue and one blocked, lists both under Needs attention; the timeline drags its dates.
 

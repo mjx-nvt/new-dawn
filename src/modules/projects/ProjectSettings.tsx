@@ -27,6 +27,7 @@ import { timeZones } from "../../kernel/format/format";
 import DangerButton from "../../kernel/shell/DangerButton";
 import OnOff from "../workspace-settings/OnOff";
 import { COVERS, EMOJI, ESTIMATE_PRESETS, FEATURES, GROUPS, whoName } from "./pm";
+import { PersonPick } from "./items/Props";
 import styles from "./Projects.module.css";
 
 const SECTIONS: [string, string][] = [
@@ -212,32 +213,15 @@ function General({ slug, project: p, save }: { slug: string; project: PmProject;
   );
 }
 
-function Who({ label, value, slug, disabled, onChange }: { label: string; value: string | null; slug: string; disabled?: boolean; onChange: (v: string) => void }) {
-  const people = usePeople(slug).data ?? [];
-  const gone = !!value && value !== "me" && !people.some((x) => x.id === value);
-  return (
-    <select className="input" aria-label={label} value={value ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-      <option value="">No one</option>
-      <option value="me">You</option>
-      {gone && value && <option value={value}>{whoName(value, people)}</option>}
-      {people.map((x) => (
-        <option key={x.id} value={x.id}>
-          {x.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 function Members({ slug, project: p, busy, save }: { slug: string; project: PmProject; busy: boolean; save: (patch: PmProjectPatch) => void }) {
   const people = usePeople(slug).data ?? [];
   return (
     <div className="group">
       <Row label="Lead" hint="Who leads the project — you or someone in the people memory.">
-        <Who label="Lead" value={p.lead} slug={slug} disabled={busy} onChange={(lead) => save({ lead })} />
+        <PersonPick label="Lead" value={p.lead} slug={slug} disabled={busy} onChange={(lead) => save({ lead })} />
       </Row>
       <Row label="Default assignee" hint="New work items go to them.">
-        <Who label="Default assignee" value={p.default_assignee} slug={slug} disabled={busy} onChange={(default_assignee) => save({ default_assignee })} />
+        <PersonPick label="Default assignee" value={p.default_assignee} slug={slug} disabled={busy} onChange={(default_assignee) => save({ default_assignee })} />
       </Row>
       <Row label="Default subscribers" hint="They follow every new work item.">
         <div className={styles.emojiRow}>

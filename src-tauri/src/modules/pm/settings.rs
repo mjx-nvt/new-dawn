@@ -39,7 +39,7 @@ fn clean_name(text: &str, what: &str) -> Result<String> {
 }
 
 /// How two names compare: in full, any case (accents count: "Bán" isn't "Bàn").
-fn same(a: &str, b: &str) -> bool {
+pub(crate) fn same(a: &str, b: &str) -> bool {
     a.nfc().collect::<String>().to_lowercase() == b.nfc().collect::<String>().to_lowercase()
 }
 

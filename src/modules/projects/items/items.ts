@@ -2,6 +2,7 @@ import type { ItemPatch, PmActivity, PmDisplay, PmItem, PmRelationKind, Priority
 import { usePeople } from "../../../kernel/bridge/people";
 import { whoName } from "../pm";
 import type { PmLabel, PmState, StateGroup } from "../../../kernel/bridge/pm";
+import type { ModuleStatus } from "../../../kernel/bridge/pmModules";
 
 /** Plane's work items in New Dawn (D-074): the choices the list and the forms offer. */
 
@@ -18,7 +19,17 @@ export const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, med
 export const GROUP_LABEL: Record<StateGroup, string> = { backlog: "Backlog", unstarted: "Unstarted", started: "Started", completed: "Completed", cancelled: "Cancelled", triage: "Triage" };
 const GROUP_RANK: Record<StateGroup, number> = { triage: 0, backlog: 1, unstarted: 2, started: 3, completed: 4, cancelled: 5 };
 
-export type GroupBy = "state" | "group" | "priority" | "labels" | "assignees" | "cycle" | "created_by" | "none";
+/** Plane's module statuses (D-079), in their order, each with its colour's name. */
+export const MODULE_STATUS: { key: ModuleStatus; label: string; color: string }[] = [
+  { key: "backlog", label: "Backlog", color: "gray" },
+  { key: "planned", label: "Planned", color: "blue" },
+  { key: "in_progress", label: "In progress", color: "orange" },
+  { key: "paused", label: "Paused", color: "yellow" },
+  { key: "completed", label: "Completed", color: "green" },
+  { key: "cancelled", label: "Cancelled", color: "red" },
+];
+
+export type GroupBy = "state" | "group" | "priority" | "labels" | "assignees" | "cycle" | "module" | "created_by" | "none";
 export type OrderBy = "manual" | "created" | "updated" | "start" | "due" | "priority";
 
 export const GROUP_BY: { key: GroupBy; label: string }[] = [
@@ -28,6 +39,7 @@ export const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "labels", label: "Labels" },
   { key: "assignees", label: "Assignees" },
   { key: "cycle", label: "Cycle" },
+  { key: "module", label: "Module" },
   { key: "created_by", label: "Created by" },
   { key: "none", label: "None" },
 ];
@@ -43,7 +55,7 @@ export const ORDER_BY: { key: OrderBy; label: string }[] = [
 
 /** What a row, a card or a table shows besides the title (Plane's display properties; the
  *  table's created and updated columns too). */
-export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "sub_items", "attachments", "links", "created", "created_by", "updated"] as const;
+export const PROPERTIES = ["id", "state", "priority", "assignees", "labels", "start", "due", "estimate", "cycle", "modules", "sub_items", "attachments", "links", "created", "created_by", "updated"] as const;
 export type Property = (typeof PROPERTIES)[number];
 export const PROPERTY_LABEL: Record<Property, string> = {
   id: "ID",
@@ -55,6 +67,7 @@ export const PROPERTY_LABEL: Record<Property, string> = {
   due: "Due date",
   estimate: "Estimate",
   cycle: "Cycle",
+  modules: "Modules",
   sub_items: "Sub-work items",
   attachments: "Attachments",
   links: "Links",
@@ -112,6 +125,15 @@ export function moveTo(item: PmItem, by: GroupBy, from: Group | undefined, to: G
     }
     case "cycle":
       return (to.value.cycle_id ?? "") !== (item.cycle_id ?? "") ? { cycle_id: to.value.cycle_id ?? "" } : {};
+    case "module": {
+      const modules = swap(
+        item.modules.map((m) => m.id),
+        from?.value.modules?.[0],
+        to.value.modules?.[0],
+        to.key === "none",
+      );
+      return modules ? { modules } : {};
+    }
     default:
       return {};
   }
@@ -147,16 +169,24 @@ export interface Group {
   key: string;
   label: string;
   /** What quick add gives an item made in this group. */
-  value: { state_id?: string; priority?: Priority; labels?: string[]; assignees?: string[]; cycle_id?: string };
+  value: { state_id?: string; priority?: Priority; labels?: string[]; assignees?: string[]; cycle_id?: string; modules?: string[] };
   /** The state's colour (state groups). */
   color?: string;
-  /** Takes no work: a completed cycle's group (no quick add, no drop). */
+  /** Takes no work: a completed cycle's or an archived module's group (no quick add, no drop). */
   closed?: boolean;
   items: PmItem[];
 }
 
 /** The groups, every one the project has (the empty ones too), in their order. */
-export function grouped(items: PmItem[], by: GroupBy, states: PmState[], labels: PmLabel[], who: (w: string) => string, cycles: { id: string; name: string; status: string }[] = []): Group[] {
+export function grouped(
+  items: PmItem[],
+  by: GroupBy,
+  states: PmState[],
+  labels: PmLabel[],
+  who: (w: string) => string,
+  cycles: { id: string; name: string; status: string }[] = [],
+  modules: { id: string; name: string; archived_at: string | null }[] = [],
+): Group[] {
   const visible = states.filter((s) => s.group !== "triage");
   switch (by) {
     case "state":
@@ -189,6 +219,18 @@ export function grouped(items: PmItem[], by: GroupBy, states: PmState[], labels:
         ...known.map((c) => ({ key: c.id, label: c.name, value: { cycle_id: c.id }, closed: c.status === "completed", items: items.filter((i) => i.cycle_id === c.id) })),
         ...unread.map(([id, name]) => ({ key: id, label: name, value: { cycle_id: id }, items: items.filter((i) => i.cycle_id === id) })),
         { key: "none", label: "No cycle", value: {}, items: items.filter((i) => !i.cycle_id) },
+      ];
+    }
+    case "module": {
+      // An item in several modules sits in each group (D-079); an archived module shows while it
+      // holds some, closed; one not read yet is named from its items.
+      const has = (i: PmItem, id: string) => i.modules.some((m) => m.id === id);
+      const known = modules.filter((m) => !m.archived_at || items.some((i) => has(i, m.id)));
+      const unread = [...new Map(items.flatMap((i) => i.modules).filter((m) => !modules.some((x) => x.id === m.id)).map((m) => [m.id, m.name])).entries()];
+      return [
+        ...known.map((m) => ({ key: m.id, label: m.name, value: { modules: [m.id] }, closed: !!m.archived_at, items: items.filter((i) => has(i, m.id)) })),
+        ...unread.map(([id, name]) => ({ key: id, label: name, value: { modules: [id] }, items: items.filter((i) => has(i, id)) })),
+        { key: "none", label: "No module", value: {}, items: items.filter((i) => !i.modules.length) },
       ];
     }
     case "created_by": {
@@ -286,6 +328,8 @@ export function sentence(a: Pick<PmActivity, "kind" | "field" | "old_value" | "n
       return `${actor} made it as a copy of ${a.new_value}`;
     default:
       if (a.field === "description") return `${actor} updated the description`;
+      // An item joins and leaves modules one at a time (it is in several).
+      if (a.field === "module") return a.new_value ? `${actor} added it to the module ${a.new_value}` : `${actor} took it out of the module ${a.old_value}`;
       if (!a.new_value) return `${actor} removed the ${a.field}${a.old_value ? ` (${a.old_value})` : ""}`;
       if (!a.old_value) return `${actor} set the ${a.field} to ${a.new_value}`;
       return `${actor} changed the ${a.field} from ${a.old_value} to ${a.new_value}`;

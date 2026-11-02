@@ -281,6 +281,17 @@ export const commands = {
 	deletePmCycle: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_cycle", { slug, id })),
 	/**  The details panel: burn-down and breakdowns. */
 	pmCycleDetails: (slug: string, id: string) => typedError<CycleDetails_Serialize, AppError>(__TAURI_INVOKE("pm_cycle_details", { slug, id })),
+	listPmModules: (slug: string, projectId: string) => typedError<PmModule_Serialize[], AppError>(__TAURI_INVOKE("list_pm_modules", { slug, projectId })),
+	createPmModule: (slug: string, input: ModuleInput_Deserialize) => typedError<PmModule_Serialize, AppError>(__TAURI_INVOKE("create_pm_module", { slug, input })),
+	updatePmModule: (slug: string, id: string, patch: ModulePatch_Deserialize) => typedError<PmModule_Serialize, AppError>(__TAURI_INVOKE("update_pm_module", { slug, id, patch })),
+	favoritePmModule: (slug: string, id: string, on: boolean) => typedError<PmModule_Serialize, AppError>(__TAURI_INVOKE("favorite_pm_module", { slug, id, on })),
+	addPmModuleItems: (slug: string, id: string, itemIds: string[]) => typedError<PmModule_Serialize, AppError>(__TAURI_INVOKE("add_pm_module_items", { slug, id, itemIds })),
+	archivePmModule: (slug: string, id: string, archived: boolean) => typedError<PmModule_Serialize, AppError>(__TAURI_INVOKE("archive_pm_module", { slug, id, archived })),
+	deletePmModule: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_module", { slug, id })),
+	/**  The details panel: progress, Needs attention, breakdowns, links. */
+	pmModuleDetails: (slug: string, id: string) => typedError<ModuleDetails, AppError>(__TAURI_INVOKE("pm_module_details", { slug, id })),
+	addPmModuleLink: (slug: string, id: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("add_pm_module_link", { slug, id, url, title })),
+	removePmModuleLink: (slug: string, linkId: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_module_link", { slug, linkId })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -908,6 +919,13 @@ export type Attendee_Serialize = {
 	 *  as attending, so their minutes don't change.
 	 */
 	attending: boolean,
+};
+
+/**  What needs attention in a module: an open item overdue, or blocked by an open one. */
+export type Attention = {
+	item: PmItemRef,
+	overdue: boolean,
+	blocked: boolean,
 };
 
 /**
@@ -2236,6 +2254,8 @@ export type ItemInput_Deserialize = {
 	parent_id?: string | null,
 	/**  Made in a cycle (D-078): one of the project's, not completed. */
 	cycle_id?: string | null,
+	/**  And in modules (D-079): the project's, not archived. */
+	modules: string[],
 };
 
 /**  What the create form and a draft hold. */
@@ -2254,6 +2274,8 @@ export type ItemInput_Serialize = {
 	parent_id: string | null,
 	/**  Made in a cycle (D-078): one of the project's, not completed. */
 	cycle_id: string | null,
+	/**  And in modules (D-079): the project's, not archived. */
+	modules: string[],
 };
 
 /**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
@@ -2274,6 +2296,8 @@ export type ItemPatch_Deserialize = {
 	sort_order?: number | null,
 	/**  A cycle of the item's project, not completed; "" takes it out of its cycle (D-078). */
 	cycle_id?: string | null,
+	/**  Its modules, the whole set (D-079): the project's; one added must not be archived. */
+	modules?: string[] | null,
 };
 
 /**  The edits: a field left out stays; an empty date, estimate or parent clears it. */
@@ -2291,6 +2315,8 @@ export type ItemPatch_Serialize = {
 	sort_order: number | null,
 	/**  A cycle of the item's project, not completed; "" takes it out of its cycle (D-078). */
 	cycle_id: string | null,
+	/**  Its modules, the whole set (D-079): the project's; one added must not be archived. */
+	modules: string[] | null,
 };
 
 /**  A meeting's long job: the activity list shows its progress and can stop it. */
@@ -2805,6 +2831,70 @@ export type ModelStats_Serialize = {
 	runs: number,
 	avg_ms: number | null,
 };
+
+export type ModuleDetails = {
+	/**  Work items by state group (Backlog … Cancelled), in that order. */
+	groups: Share[],
+	attention: Attention[],
+	states: Share[],
+	assignees: Share[],
+	labels: Share[],
+	priorities: Share[],
+	links: PmLink[],
+};
+
+export type ModuleInput = ModuleInput_Serialize | ModuleInput_Deserialize;
+
+export type ModuleInput_Deserialize = {
+	project_id: string,
+	name: string,
+	description: string,
+	start_date?: string | null,
+	target_date?: string | null,
+	status: ModuleStatus,
+	lead?: string | null,
+	members: string[],
+};
+
+export type ModuleInput_Serialize = {
+	project_id: string,
+	name: string,
+	description: string,
+	start_date: string | null,
+	target_date: string | null,
+	status: ModuleStatus,
+	lead: string | null,
+	members: string[],
+};
+
+/**  The edits; a field left out stays (an empty date clears it; members replace). */
+export type ModulePatch = ModulePatch_Serialize | ModulePatch_Deserialize;
+
+/**  The edits; a field left out stays (an empty date clears it; members replace). */
+export type ModulePatch_Deserialize = {
+	name?: string | null,
+	description?: string | null,
+	start_date?: string | null,
+	target_date?: string | null,
+	status?: ModuleStatus | null,
+	lead?: string | null,
+	members?: string[] | null,
+	sort_order?: number | null,
+};
+
+/**  The edits; a field left out stays (an empty date clears it; members replace). */
+export type ModulePatch_Serialize = {
+	name: string | null,
+	description: string | null,
+	start_date: string | null,
+	target_date: string | null,
+	status: ModuleStatus | null,
+	lead: string | null,
+	members: string[] | null,
+	sort_order: number | null,
+};
+
+export type ModuleStatus = "backlog" | "planned" | "in_progress" | "paused" | "completed" | "cancelled";
 
 export type Modules = {
 	projects: boolean,
@@ -3455,6 +3545,12 @@ export type PmEstimate_Serialize = {
 
 export type PmItem = PmItem_Serialize | PmItem_Deserialize;
 
+/**  A module an item is in (D-079). */
+export type PmItemModule = {
+	id: string,
+	name: string,
+};
+
 /**  Another work item, as a relation or a search shows it. */
 export type PmItemRef = {
 	id: string,
@@ -3491,6 +3587,8 @@ export type PmItem_Deserialize = {
 	/**  Its cycle (D-078): one at most. */
 	cycle_id?: string | null,
 	cycle_name?: string | null,
+	/**  Its modules (D-079): several, by name. */
+	modules: PmItemModule[],
 	/**  "me" or people's ids. */
 	assignees: string[],
 	labels: string[],
@@ -3538,6 +3636,8 @@ export type PmItem_Serialize = {
 	/**  Its cycle (D-078): one at most. */
 	cycle_id: string | null,
 	cycle_name: string | null,
+	/**  Its modules (D-079): several, by name. */
+	modules: PmItemModule[],
 	/**  "me" or people's ids. */
 	assignees: string[],
 	labels: string[],
@@ -3591,6 +3691,52 @@ export type PmLink = {
 	title: string,
 	created_by: string,
 	created_at: string,
+};
+
+export type PmModule = PmModule_Serialize | PmModule_Deserialize;
+
+export type PmModule_Deserialize = {
+	id: string,
+	project_id: string,
+	name: string,
+	description: string,
+	start_date?: string | null,
+	target_date?: string | null,
+	status: ModuleStatus,
+	lead?: string | null,
+	members: string[],
+	archived_at?: string | null,
+	/**  In the sidebar's Favorites. */
+	is_favorite: boolean,
+	sort_order: number | null,
+	/**  Its work items, completed, cancelled. */
+	items: number,
+	done: number,
+	cancelled: number,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmModule_Serialize = {
+	id: string,
+	project_id: string,
+	name: string,
+	description: string,
+	start_date: string | null,
+	target_date: string | null,
+	status: ModuleStatus,
+	lead: string | null,
+	members: string[],
+	archived_at: string | null,
+	/**  In the sidebar's Favorites. */
+	is_favorite: boolean,
+	sort_order: number | null,
+	/**  Its work items, completed, cancelled. */
+	items: number,
+	done: number,
+	cancelled: number,
+	created_at: string,
+	updated_at: string,
 };
 
 /**

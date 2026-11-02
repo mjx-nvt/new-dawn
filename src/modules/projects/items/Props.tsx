@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { usePmEstimates, usePmLabels, usePmStates, type PmLabel, type StateGroup } from "../../../kernel/bridge/pm";
 import { usePmCycles } from "../../../kernel/bridge/pmCycles";
+import { usePmModules } from "../../../kernel/bridge/pmModules";
 import { useCreatePmItem, usePmItems, type PmItem, type Priority } from "../../../kernel/bridge/pmItems";
 import { usePeople } from "../../../kernel/bridge/people";
 import { colorOf } from "../../../kernel/charts/Charts";
@@ -178,6 +179,12 @@ export function ItemProps({ item: i, has, labels, who }: { item: PmItem; has: (p
       {has("due") && i.target_date && <span className={styles.prop}>Due {formatDay(i.target_date, { short: true })}</span>}
       {has("estimate") && i.estimate_value && <span className="chip">{i.estimate_value}</span>}
       {has("cycle") && i.cycle_name && <span className="chip">↻ {i.cycle_name}</span>}
+      {has("modules") &&
+        i.modules.map((m) => (
+          <span key={m.id} className="chip">
+            ▦ {m.name}
+          </span>
+        ))}
       {has("sub_items") && i.sub_items > 0 && (
         <span className={styles.prop}>
           {i.sub_done}/{i.sub_items - i.sub_cancelled} done
@@ -202,7 +209,7 @@ export function QuickAdd({ slug, projectId, label, value }: { slug: string; proj
   const add = () =>
     name.trim() &&
     create.mutate(
-      { project_id: projectId, name, state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null },
+      { project_id: projectId, name, state_id: value.state_id ?? null, priority: value.priority ?? null, assignees: value.assignees ?? [], labels: value.labels ?? [], cycle_id: value.cycle_id ?? null, modules: value.modules ?? [] },
       { onSuccess: () => setName("") },
     );
   return (
@@ -241,6 +248,54 @@ export function CyclePick({ slug, projectId, value, disabled, onChange }: { slug
         <option key={c.id} value={c.id} disabled={c.status === "completed"}>
           {c.name}
           {c.status === "completed" ? " (completed)" : ""}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** A work item's modules (D-079): several — the ones it is in (an archived one stays) and the
+ *  project's others not archived. */
+export function ModulePick({ slug, projectId, value, disabled, onChange }: { slug: string; projectId: string; value: string[]; disabled?: boolean; onChange: (modules: string[]) => void }) {
+  const modules = usePmModules(slug, projectId).data ?? [];
+  const open = modules.filter((m) => !m.archived_at && !value.includes(m.id));
+  return (
+    <span className={styles.chips}>
+      {value.map((id) => {
+        const m = modules.find((x) => x.id === id);
+        return (
+          <span key={id} className="chip" title={m?.archived_at ? "Archived — restore the module to take work out" : undefined}>
+            {m?.name ?? "A module"}
+            <button type="button" className={styles.chipX} aria-label={`Remove ${m?.name ?? "module"}`} disabled={disabled || !!m?.archived_at} onClick={() => onChange(value.filter((x) => x !== id))}>
+              ✕
+            </button>
+          </span>
+        );
+      })}
+      <select className={`input ${styles.add}`} aria-label="Add to a module" value="" disabled={disabled || !open.length} onChange={(e) => e.target.value && onChange([...value, e.target.value])}>
+        <option value="">{open.length ? (value.length ? "Add…" : "No module — add…") : "No other modules in this project"}</option>
+        {open.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
+/** One person — "No one", you, or someone in the people memory (one gone since: by its name). */
+export function PersonPick({ label, value, slug, disabled, onChange }: { label: string; value: string | null; slug: string; disabled?: boolean; onChange: (v: string) => void }) {
+  const people = usePeople(slug).data ?? [];
+  const gone = !!value && value !== "me" && !people.some((x) => x.id === value);
+  return (
+    <select className="input" aria-label={label} value={value ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+      <option value="">No one</option>
+      <option value="me">You</option>
+      {gone && value && <option value={value}>{whoName(value, people)}</option>}
+      {people.map((x) => (
+        <option key={x.id} value={x.id}>
+          {x.name}
         </option>
       ))}
     </select>

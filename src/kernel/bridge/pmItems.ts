@@ -36,7 +36,7 @@ export type { PmAttachment, PmBulkAction, PmDisplay, PmItemRef, PmLink, PmRelati
 function useRefresh() {
   const queryClient = useQueryClient();
   return () => {
-    for (const key of ["pm-items", "pm-item", "pm-sub-items", "pm-activity", "pm-versions", "pm-comments", "pm-reactions", "pm-drafts", "pm-relations", "pm-links", "pm-attachments", "notices", "notice-counts", "pm-cycles"]) void queryClient.invalidateQueries({ queryKey: [key] });
+    for (const key of ["pm-items", "pm-item", "pm-sub-items", "pm-activity", "pm-versions", "pm-comments", "pm-reactions", "pm-drafts", "pm-relations", "pm-links", "pm-attachments", "notices", "notice-counts", "pm-cycles", "pm-modules"]) void queryClient.invalidateQueries({ queryKey: [key] });
   };
 }
 
@@ -65,7 +65,7 @@ export function useUpdatePmItem(slug: string | undefined) {
     // parent's progress), not this one, just written. Autosaves of a description come here.
     onSuccess: (item) => {
       queryClient.setQueryData(["pm-item", slug ?? "", item.id], item);
-      for (const key of ["pm-items", "pm-sub-items", "pm-activity", "pm-versions", "pm-cycles"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ["pm-items", "pm-sub-items", "pm-activity", "pm-versions", "pm-cycles", "pm-modules"]) void queryClient.invalidateQueries({ queryKey: [key] });
       void queryClient.invalidateQueries({ queryKey: ["pm-item"], predicate: (q) => q.queryKey[2] !== item.id });
     },
   });

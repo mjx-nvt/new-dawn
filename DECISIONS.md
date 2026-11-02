@@ -91,6 +91,25 @@ _2026-11-02_
 
 ---
 
+## D-079 — Plane's modules: several a work item, Needs attention from dates and blockers, every Projects star a favorite row
+_2026-11-02_
+
+**Context** (plan v4 §4.5, 0.11.6): Plane's modules — a project's larger pieces of work: a name unique in the project, a description, a start and a target date (either or both), a status (Backlog, Planned, In progress, Paused, Completed, Cancelled), a lead and members, links; work items in several modules; List, Gallery and Timeline layouts with search, sort and filters; a module's details — progress, the work by state group, what needs attention (overdue, blocked), breakdowns by state, assignee, label and priority, links; favorites; archive when completed or cancelled; delete leaving the items.
+
+**Decision — several a work item** (0038 `pm_module`, `pm_module_item` keyed by the pair, `pm_module_member`, `pm_module_link`): an item's modules are a set — the item's Modules property and the create sheet replace it, a module's Add existing and a bulk change add to it, a group dropped into moves it there from the group it left (Plane's) — each join and leave an activity row ("added it to the module …"), in the same transaction as the rest of the edit. Only the project's modules take work. An archived module is read-only: nothing joins or leaves it (an item keeps it; a copy of the item doesn't join it), its links stay and it takes no star. An item carries its modules by name (`PmItem.modules`), so every layout and the workspace's views show them without another query. A module's name is unique in its project compared as the app compares names (NFC, any case; the index backs it up for ASCII), its control characters dropped (the names are read joined by them). Dates are optional, either alone, the start not after the target (CHECKs as 0037's). The status is the owner's — dates don't make it, unlike a cycle's (D-078) — and archiving takes a completed or cancelled module only, which is then read-only. Deleting a module leaves its items, each with its activity row. Archived items aren't counted.
+
+**Decision — Needs attention is computed**: an open item of the module (not completed, not cancelled, not archived) whose due date has passed on this Mac's day, or that is blocked by an item still open (a Blocking is stored as the other item's Blocked by, D-075). Nothing is stored; marking the blocker Done takes the item off the list. The details read the work by state group (Backlog to Cancelled) and the breakdowns as cycles' do.
+
+**Decision — every Projects star is a favorite row**: the sidebar's Favorites hold a cycle or a module as they hold a view (0036): `favorite.pm_cycle_id`, `favorite.pm_module_id`, each cascading. 0038 copies the cycles starred under 0.11.5 (not archived ones) and `pm_cycle.is_favorite` is read no more; archiving a cycle or a module unstars it (Plane's). A starred cycle or module opens its project's tab on it. A custom object can't take a name whose link column would be one of these (`create_object`).
+
+**Decision — one Gantt**: the Work items Timeline's axis, bars and drag (D-076) became one component (`Gantt.tsx`) that the Modules timeline uses too — a bar dragged moves both dates, an end one, and only the dates a row has are written.
+
+**Where the owner sees it**: a project's **Modules** tab — List · Gallery · Timeline (in the address), Search, Sort (name, progress, start, target, newest), filters (status, lead, member, From–To, Favorites, Archived too), ★ first; **New module** (`N` or `M`) with a name, a description, the status, the dates, a lead and members. A module opens with its ★, its status (a select), its dates, ⋯ Edit and Archive, and Delete; its description, lead and members and progress; its work items (Add existing, New work item, × to take one out); Needs attention (Overdue, Blocked), Progress by state group, Assignees, Labels, Priorities, States, and Links (add, remove). Work items gain **Modules**: in their properties and the create sheet, as a display property, as a grouping (an item in several modules sits in each group; an archived module's group takes nothing), as a filter and in the bulk bar (Add to module). With a project's Modules feature off, none of this shows.
+
+**Means for future work**: analytics (0.11.10) read modules' progress; Plane's API (0.11.11) serves modules and their items; the Projects agent (0.11.12) can propose an item's module.
+
+---
+
 ## D-078 — Plane's cycles: dates make the status, one cycle an item, the open work moved on once, a burn-down from completion days
 _2026-11-02_
 

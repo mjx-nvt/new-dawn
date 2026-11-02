@@ -123,11 +123,12 @@ const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
   // The project's tab and, under Settings, its section (D-073).
-  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string; cycle?: string; ctab?: string; cfrom?: string; cto?: string; carch?: string } => {
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string; cycle?: string; ctab?: string; cfrom?: string; cto?: string; carch?: string; module?: string; mlayout?: string; msort?: string; mstatus?: string; mlead?: string; mmember?: string; mfav?: string; march?: string; mfrom?: string; mto?: string } => {
     const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
     // The tab, Settings' section, the work items' open view, filters, layout, group, sub-group,
-    // order, peek and its activity tab, and the Cycles tab's own tab and open cycle (D-073 … D-078).
-    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity"), ...text("cycle"), ...text("ctab"), ...text("cfrom"), ...text("cto"), ...text("carch") };
+    // order, peek and its activity tab, the Cycles tab's own tab and open cycle, and the Modules
+    // tab's layout, sort, filters and open module (D-073 … D-079).
+    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity"), ...text("cycle"), ...text("ctab"), ...text("cfrom"), ...text("cto"), ...text("carch"), ...["module", "mlayout", "msort", "mstatus", "mlead", "mmember", "mfav", "march", "mfrom", "mto"].reduce((all, k) => ({ ...all, ...text(k) }), {}) };
   },
   component: () => (
     <ModuleGate module="projects">

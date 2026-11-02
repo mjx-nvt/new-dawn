@@ -485,6 +485,10 @@ pub async fn create_object(pool: &SqlitePool, input: ObjectInput) -> Result<Obje
             return Err(invalid(format!("An object named “{taken}” exists")));
         }
     }
+    // Projects' own favorite columns (D-077, D-079) are no custom object's link column.
+    if ["pm_view_id", "pm_cycle_id", "pm_module_id"].contains(&format!("{}_id", snake(&name)).as_str()) {
+        return Err(invalid(format!("“{label_singular}” is a name New Dawn uses")));
+    }
     let id = uuid::Uuid::now_v7().to_string();
     let (position,): (f64,) = sqlx::query_as("SELECT coalesce(max(position), 0.0) + 1.0 FROM object_meta").fetch_one(pool).await?;
     sqlx::query(

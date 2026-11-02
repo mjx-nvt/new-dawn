@@ -26,8 +26,8 @@ export function usePmCycleDetails(slug: string | undefined, id: string | undefin
 
 export function useCycleMutations(slug: string | undefined) {
   const queryClient = useQueryClient();
-  // The cycles, and the items (their cycle, the lists filtered by it).
-  const refresh = () => Promise.all([queryClient.invalidateQueries({ queryKey: ["pm-cycles", slug ?? ""] }), queryClient.invalidateQueries({ queryKey: ["pm-items"] }), queryClient.invalidateQueries({ queryKey: ["pm-item"] })]);
+  // The cycles, the items (their cycle, the lists filtered by it) and the sidebar's stars (D-079).
+  const refresh = () => Promise.all([queryClient.invalidateQueries({ queryKey: ["pm-cycles", slug ?? ""] }), ...["pm-items", "pm-item", "favorites"].map((key) => queryClient.invalidateQueries({ queryKey: [key] }))]);
   return {
     create: useMutation({ mutationFn: (input: CycleInput) => unwrap(commands.createPmCycle(slug ?? "", input)), onSuccess: refresh }),
     update: useMutation({ mutationFn: ({ id, patch }: { id: string; patch: CyclePatch }) => unwrap(commands.updatePmCycle(slug ?? "", id, patch)), onSuccess: refresh }),

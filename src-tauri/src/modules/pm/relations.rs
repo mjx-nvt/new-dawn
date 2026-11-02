@@ -89,7 +89,7 @@ struct RelationRow {
     item: PmItemRef,
 }
 
-const REF: &str = "o.id, o.project_id, m.identifier || '-' || o.sequence AS key, o.name, s.name AS state_name, s.state_group, s.color AS state_color";
+pub(crate) const REF: &str = "o.id, o.project_id, m.identifier || '-' || o.sequence AS key, o.name, s.name AS state_name, s.state_group, s.color AS state_color";
 
 /// An item's relations, both ways, oldest first.
 pub async fn relations(pool: &SqlitePool, item: &str) -> Result<Vec<PmRelation>> {
@@ -223,7 +223,7 @@ fn same_link(e: sqlx::Error) -> anyhow::Error {
     }
 }
 
-fn clean_title(title: &str) -> Result<String> {
+pub(crate) fn clean_title(title: &str) -> Result<String> {
     let t = title.trim();
     if t.chars().count() > items::NAME_MAX {
         return Err(invalid(format!("A link's title is at most {} characters", items::NAME_MAX)));

@@ -87,7 +87,8 @@ pub fn status(start: Option<&str>, end: Option<&str>, completed: bool, today: Na
     }
 }
 
-const SELECT: &str = "SELECT c.id, c.project_id, c.name, c.description, c.start_date, c.end_date, c.completed_at, c.transferred_at, c.progress_json, c.archived_at, c.is_favorite, \
+const SELECT: &str = "SELECT c.id, c.project_id, c.name, c.description, c.start_date, c.end_date, c.completed_at, c.transferred_at, c.progress_json, c.archived_at, \
+     EXISTS (SELECT 1 FROM favorite f WHERE f.pm_cycle_id = c.id AND f.deleted_at IS NULL) AS is_favorite, \
      (SELECT count(*) FROM pm_cycle_item x JOIN pm_item i ON i.id = x.item_id WHERE x.cycle_id = c.id AND i.archived_at IS NULL) AS items, \
      (SELECT count(*) FROM pm_cycle_item x JOIN pm_item i ON i.id = x.item_id JOIN pm_state s ON s.id = i.state_id WHERE x.cycle_id = c.id AND i.archived_at IS NULL AND s.state_group = 'completed') AS done, \
      (SELECT count(*) FROM pm_cycle_item x JOIN pm_item i ON i.id = x.item_id JOIN pm_state s ON s.id = i.state_id WHERE x.cycle_id = c.id AND i.archived_at IS NULL AND s.state_group = 'cancelled') AS cancelled, \
@@ -130,7 +131,7 @@ fn cycle(r: Row, today: NaiveDate) -> PmCycle {
 
 /// A project's cycles (the archived ones too: the page sorts them), favorites first, then by start.
 pub async fn list(pool: &SqlitePool, project_id: &str, today: NaiveDate) -> Result<Vec<PmCycle>> {
-    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.project_id = ? ORDER BY c.is_favorite DESC, c.start_date IS NULL, c.start_date, c.created_at")))
+    let rows: Vec<Row> = sqlx::query_as(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.project_id = ? ORDER BY is_favorite DESC, c.start_date IS NULL, c.start_date, c.created_at")))
         .bind(project_id)
         .fetch_all(pool)
         .await?;
@@ -257,7 +258,7 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: CyclePatch, today: Naive
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "UPDATE pm_cycle SET name = coalesce(?, name), description = coalesce(?, description), \
          start_date = CASE WHEN ? THEN ? ELSE start_date END, end_date = CASE WHEN ? THEN ? ELSE end_date END, \
-         is_favorite = coalesce(?, is_favorite), updated_at = {NOW} WHERE id = ?"
+         updated_at = {NOW} WHERE id = ?"
     )))
     .bind(&name)
     .bind(patch.description.as_deref().map(|d| d.trim().chars().take(2000).collect::<String>()))
@@ -265,10 +266,13 @@ pub async fn update(pool: &SqlitePool, id: &str, patch: CyclePatch, today: Naive
     .bind(dates.as_ref().and_then(|(s, _)| s.clone()))
     .bind(dates.is_some())
     .bind(dates.as_ref().and_then(|(_, e)| e.clone()))
-    .bind(patch.is_favorite)
     .bind(id)
     .execute(pool)
     .await?;
+    // A star is a favorite row (D-079).
+    if let Some(on) = patch.is_favorite {
+        super::views::pin(pool, super::views::Pin::Cycle, id, on).await?;
+    }
     get(pool, id, today).await
 }
 
@@ -382,6 +386,10 @@ pub async fn archive(pool: &SqlitePool, id: &str, on: bool, today: NaiveDate) ->
     }
     let sql = if on { format!("UPDATE pm_cycle SET archived_at = {NOW}, updated_at = {NOW} WHERE id = ?") } else { format!("UPDATE pm_cycle SET archived_at = NULL, updated_at = {NOW} WHERE id = ?") };
     sqlx::query(sqlx::AssertSqlSafe(sql)).bind(id).execute(pool).await?;
+    // Archiving unstars (Plane's).
+    if on {
+        super::views::pin(pool, super::views::Pin::Cycle, id, false).await?;
+    }
     get(pool, id, today).await
 }
 

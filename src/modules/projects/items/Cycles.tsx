@@ -281,7 +281,7 @@ export default function Cycles({ slug, project }: { slug: string; project: PmPro
                 </button>
               ))}
             </div>
-            <input className="input" aria-label="Search cycles" placeholder="Search" value={words} onChange={(e) => setWords(e.target.value)} />
+            <input className={`input ${styles.search}`} aria-label="Search cycles" placeholder="Search" value={words} onChange={(e) => setWords(e.target.value)} />
             <label className={styles.date}>
               <span className="fieldLabel">From</span>
               <input className="input" type="date" value={from} onChange={(e) => set({ cfrom: e.target.value || undefined })} />

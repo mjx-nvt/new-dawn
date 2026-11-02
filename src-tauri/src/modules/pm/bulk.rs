@@ -39,7 +39,8 @@ fn unique(ids: &[String]) -> Vec<String> {
 }
 
 /// The same edits on every item; how many changed. Only what Plane's bar sets (the cycle too,
-/// D-078) — not a title, a description, a parent or an order.
+/// D-078; modules, D-079, which it adds to: an item keeps the others) — not a title, a
+/// description, a parent or an order.
 pub async fn update(pool: &SqlitePool, ids: &[String], patch: &ItemPatch, actor: &str) -> Result<u32> {
     let patch = ItemPatch {
         state_id: patch.state_id.clone(),
@@ -50,12 +51,19 @@ pub async fn update(pool: &SqlitePool, ids: &[String], patch: &ItemPatch, actor:
         target_date: patch.target_date.clone(),
         estimate_point_id: patch.estimate_point_id.clone(),
         cycle_id: patch.cycle_id.clone(),
+        modules: patch.modules.clone(),
         ..ItemPatch::default()
     };
     let ids = unique(ids);
     let mut plans = Vec::with_capacity(ids.len());
     for id in &ids {
-        let plan = items::plan(pool, id, patch.clone()).await;
+        let mut patch = patch.clone();
+        if let (Some(add), Ok(item)) = (&patch.modules, items::get(pool, id).await) {
+            let mut all: Vec<String> = item.modules.into_iter().map(|m| m.id).collect();
+            all.extend(add.iter().cloned());
+            patch.modules = Some(all);
+        }
+        let plan = items::plan(pool, id, patch).await;
         let key = match &plan {
             Ok(p) => p.item.key.clone(),
             // Gone meanwhile: named by its id.

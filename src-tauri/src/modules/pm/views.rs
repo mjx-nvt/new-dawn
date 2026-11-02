@@ -246,11 +246,30 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<()> {
 /// Into the sidebar's Favorites, or out.
 pub async fn favorite(pool: &SqlitePool, id: &str, on: bool) -> Result<PmView> {
     get(pool, id).await?;
+    pin(pool, Pin::View, id, on).await?;
+    get(pool, id).await
+}
+
+/// What the sidebar's Favorites hold of Projects: a view, a cycle (D-078) or a module (D-079).
+#[derive(Clone, Copy)]
+pub(crate) enum Pin {
+    View,
+    Cycle,
+    Module,
+}
+
+/// Starred (once, last) or not.
+pub(crate) async fn pin(pool: &SqlitePool, what: Pin, id: &str, on: bool) -> Result<()> {
+    let column = match what {
+        Pin::View => "pm_view_id",
+        Pin::Cycle => "pm_cycle_id",
+        Pin::Module => "pm_module_id",
+    };
     if on {
-        let there: Option<(String,)> = sqlx::query_as("SELECT id FROM favorite WHERE pm_view_id = ? AND deleted_at IS NULL").bind(id).fetch_optional(pool).await?;
+        let there: Option<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT id FROM favorite WHERE {column} = ? AND deleted_at IS NULL"))).bind(id).fetch_optional(pool).await?;
         if there.is_none() {
             let (position,): (f64,) = sqlx::query_as("SELECT coalesce(max(position), 0.0) + 1.0 FROM favorite").fetch_one(pool).await?;
-            sqlx::query("INSERT INTO favorite (id, position, workspace_member_id, pm_view_id) VALUES (?, ?, ?, ?)")
+            sqlx::query(sqlx::AssertSqlSafe(format!("INSERT INTO favorite (id, position, workspace_member_id, {column}) VALUES (?, ?, ?, ?)")))
                 .bind(uuid::Uuid::now_v7().to_string())
                 .bind(position)
                 .bind(crate::kernel::records::member_id(pool).await?)
@@ -259,9 +278,9 @@ pub async fn favorite(pool: &SqlitePool, id: &str, on: bool) -> Result<PmView> {
                 .await?;
         }
     } else {
-        sqlx::query("DELETE FROM favorite WHERE pm_view_id = ?").bind(id).execute(pool).await?;
+        sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM favorite WHERE {column} = ?"))).bind(id).execute(pool).await?;
     }
-    get(pool, id).await
+    Ok(())
 }
 
 #[cfg(test)]

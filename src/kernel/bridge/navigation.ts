@@ -14,8 +14,8 @@ function useRefreshFavorites(slug: string | undefined) {
   const queryClient = useQueryClient();
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["favorites", slug ?? ""] });
-    // A Projects view's ★ reads the favorites too (D-077).
-    void queryClient.invalidateQueries({ queryKey: ["pm-views", slug ?? ""] });
+    // A Projects view's, cycle's or module's ★ reads the favorites too (D-077, D-079).
+    for (const key of ["pm-views", "pm-cycles", "pm-modules"]) void queryClient.invalidateQueries({ queryKey: [key, slug ?? ""] });
   };
 }
 

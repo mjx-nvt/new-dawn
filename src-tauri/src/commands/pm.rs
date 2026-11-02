@@ -11,6 +11,7 @@ use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
 use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
+use crate::modules::pm::modules::{self, ModuleDetails, ModuleInput, ModulePatch, PmModule};
 use crate::modules::pm::display::{self, PmDisplay};
 use crate::modules::pm::drafts::{self, PmDraft};
 use crate::modules::pm::filters::PmRule;
@@ -587,4 +588,67 @@ pub async fn delete_pm_cycle(hub: State<'_, WorkspaceHub>, slug: String, id: Str
 #[specta::specta]
 pub async fn pm_cycle_details(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<CycleDetails, AppError> {
     Ok(cycles::details(&hub.pool(&slug)?, &id, cycles::today()).await?)
+}
+
+// ── 0.11.6 (D-079): modules ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_modules(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<Vec<PmModule>, AppError> {
+    Ok(modules::list(&hub.pool(&slug)?, &project_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_pm_module(hub: State<'_, WorkspaceHub>, slug: String, input: ModuleInput) -> Result<PmModule, AppError> {
+    Ok(modules::create(&hub.pool(&slug)?, input, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_pm_module(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: ModulePatch) -> Result<PmModule, AppError> {
+    Ok(modules::update(&hub.pool(&slug)?, &id, patch).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn favorite_pm_module(hub: State<'_, WorkspaceHub>, slug: String, id: String, on: bool) -> Result<PmModule, AppError> {
+    Ok(modules::favorite(&hub.pool(&slug)?, &id, on).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_module_items(hub: State<'_, WorkspaceHub>, slug: String, id: String, item_ids: Vec<String>) -> Result<PmModule, AppError> {
+    Ok(modules::add_items(&hub.pool(&slug)?, &id, &item_ids, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn archive_pm_module(hub: State<'_, WorkspaceHub>, slug: String, id: String, archived: bool) -> Result<PmModule, AppError> {
+    Ok(modules::archive(&hub.pool(&slug)?, &id, archived).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_module(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    Ok(modules::delete(&hub.pool(&slug)?, &id, ME).await?)
+}
+
+/// The details panel: progress, Needs attention, breakdowns, links.
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_module_details(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<ModuleDetails, AppError> {
+    Ok(modules::details(&hub.pool(&slug)?, &id, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_pm_module_link(hub: State<'_, WorkspaceHub>, slug: String, id: String, url: String, title: String) -> Result<PmLink, AppError> {
+    Ok(modules::add_link(&hub.pool(&slug)?, &id, &url, &title, ME).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn remove_pm_module_link(hub: State<'_, WorkspaceHub>, slug: String, link_id: String) -> Result<(), AppError> {
+    Ok(modules::remove_link(&hub.pool(&slug)?, &link_id).await?)
 }

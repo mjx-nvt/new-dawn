@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { usePmLabels, usePmStates, type PmProject } from "../../../kernel/bridge/pm";
 import { usePmDisplay, useSetPmDisplay, useUpdatePmItem, type ItemInput, type ItemPatch, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
 import { usePmCycles } from "../../../kernel/bridge/pmCycles";
+import { usePmModules } from "../../../kernel/bridge/pmModules";
 import { readRules, usePmQuery, usePmViews, useViewMutations, type PmRule } from "../../../kernel/bridge/pmViews";
 import { usePeople } from "../../../kernel/bridge/people";
 import { inField } from "../../../kernel/shell/useShortcuts";
@@ -42,6 +43,9 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const states = usePmStates(slug, project.id).data ?? [];
   const labels = usePmLabels(slug, project.id).data ?? [];
   const cycles = usePmCycles(slug, project.id).data ?? [];
+  const modules = usePmModules(slug, project.id).data ?? [];
+  // Cycles and modules only where the project has them on.
+  const on = (key: string) => (key !== "cycle" || project.features.cycles) && (!["module", "modules"].includes(key) || project.features.modules);
   const people = usePeople(slug).data ?? [];
   const update = useUpdatePmItem(slug);
   const stored = usePmDisplay(slug, project.id);
@@ -66,9 +70,9 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   // With a view open the URL's layout choices don't apply: the view's working display does.
   const url = view ? {} : search;
   const layout: Layout = LAYOUTS.find((l) => l.key === (url.layout ?? display.layout))?.key ?? "list";
-  const group: GroupBy = GROUP_BY.find((g) => g.key === (url.group ?? display.group))?.key ?? "state";
+  const group: GroupBy = GROUP_BY.find((g) => g.key === (url.group ?? display.group) && on(g.key))?.key ?? "state";
   const clash = (a: GroupBy, b: GroupBy) => a === b || (["state", "group"].includes(a) && ["state", "group"].includes(b));
-  const wantedSub: GroupBy = GROUP_BY.find((g) => g.key === (url.sub ?? display.sub_group))?.key ?? "none";
+  const wantedSub: GroupBy = GROUP_BY.find((g) => g.key === (url.sub ?? display.sub_group) && on(g.key))?.key ?? "none";
   // A sub-group that repeats the grouping (or state with state group) is none.
   const sub: GroupBy = wantedSub !== "none" && clash(wantedSub, group) ? "none" : wantedSub;
   const order: OrderBy = ORDER_BY.find((o) => o.key === (url.order ?? display.order))?.key ?? "manual";
@@ -86,8 +90,8 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   const who = (w: string) => (w === "automation" ? "Automation" : whoName(w, people) || w);
   const all = items.data ?? [];
   const visible = ordered(display.sub_items ? all : all.filter((i) => !i.parent_id), order);
-  const groups = grouped(visible, group, states, labels, who, cycles).filter((g) => display.empty_groups || g.items.length);
-  const has = (p: Property) => display.properties.includes(p);
+  const groups = grouped(visible, group, states, labels, who, cycles, modules).filter((g) => display.empty_groups || g.items.length);
+  const has = (p: Property) => on(p) && display.properties.includes(p);
   const chosen = selected.filter((id) => all.some((i) => i.id === id)); // the selected still here
   const peek = (id: string) => set({ peek: id, activity: undefined });
   const ro = !!project.archived_at;
@@ -119,13 +123,15 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
     const before = list[at - 1]?.sort_order ?? null;
     const after = list[at]?.sort_order ?? null;
     const from = groups.find((x) => x.key === d.from);
+    // Nothing leaves an archived module's group (D-079).
+    if (group === "module" && from?.closed && from.key !== g.key) return;
     const patch: ItemPatch = from?.key === g.key ? {} : moveTo(moved, group, from, g);
     if (order === "manual") patch.sort_order = before != null && after != null ? (before + after) / 2 : after != null ? after - 1000 : (before ?? 0) + 1000;
     if (Object.keys(patch).length) update.mutate({ id, patch });
   };
 
   const create = (preset: Partial<ItemInput>) => setCreating(preset);
-  const layoutProps = { slug, project, items: visible, labels, states, cycles, display, has, who, onPeek: peek, onCreate: create };
+  const layoutProps = { slug, project, items: visible, labels, states, cycles, modules, display, has, who, onPeek: peek, onCreate: create };
 
   return (
     <section className={styles.list} aria-label="Work items">
@@ -141,7 +147,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <label className={styles.tool}>
             <span className="fieldLabel">Group by</span>
             <select className="input" value={group} disabled={!ready} onChange={(e) => choose("group", e.target.value)}>
-              {GROUP_BY.filter((g) => g.key !== "cycle" || project.features.cycles).map((g) => (
+              {GROUP_BY.filter((g) => on(g.key)).map((g) => (
                 <option key={g.key} value={g.key}>
                   {g.label}
                 </option>
@@ -153,7 +159,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <label className={styles.tool}>
             <span className="fieldLabel">Sub-group by</span>
             <select className="input" value={sub} disabled={!ready} onChange={(e) => choose("sub", e.target.value)}>
-              {GROUP_BY.filter((g) => (g.key === "none" || !clash(g.key, group)) && (g.key !== "cycle" || project.features.cycles)).map((g) => (
+              {GROUP_BY.filter((g) => (g.key === "none" || !clash(g.key, group)) && on(g.key)).map((g) => (
                 <option key={g.key} value={g.key}>
                   {g.key === "none" ? "None" : g.label}
                 </option>
@@ -177,7 +183,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           <summary className="btn btnGhost btnCompact">Display</summary>
           <div className={`glass ${styles.displayPanel}`}>
             <p className="fieldLabel">Properties</p>
-            {PROPERTIES.filter((p) => p !== "cycle" || project.features.cycles).map((p) => (
+            {PROPERTIES.filter((p) => on(p)).map((p) => (
               <label key={p} className={styles.check}>
                 <input type="checkbox" checked={has(p)} onChange={(e) => remember({ properties: e.target.checked ? [...display.properties, p] : display.properties.filter((x) => x !== p) })} /> {PROPERTY_LABEL[p]}
               </label>
@@ -231,7 +237,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
         </div>
       )}
       <div className={styles.inline}>
-        <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} rules={rules} onChange={filter} />
+        <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} modules={project.features.modules} rules={rules} onChange={filter} />
         {!view && (
           <button type="button" className="btn btnGhost btnCompact" disabled={!ready || ro} onClick={() => setSaving(true)}>
             Save as a view
@@ -272,7 +278,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
               {g.color && <Dot color={g.color} />}
               <span className={styles.groupName}>{g.label}</span>
               <span className="fieldHint">{g.items.length}</span>
-              <button type="button" className="btn btnGhost btnCompact" aria-label={`New work item in ${g.label}`} disabled={ro || g.closed} onClick={() => setCreating({ state_id: g.value.state_id ?? null, priority: g.value.priority ?? null, assignees: g.value.assignees ?? [], labels: g.value.labels ?? [], cycle_id: g.value.cycle_id ?? null })}>
+              <button type="button" className="btn btnGhost btnCompact" aria-label={`New work item in ${g.label}`} disabled={ro || g.closed} onClick={() => setCreating({ state_id: g.value.state_id ?? null, priority: g.value.priority ?? null, assignees: g.value.assignees ?? [], labels: g.value.labels ?? [], cycle_id: g.value.cycle_id ?? null, modules: g.value.modules ?? [] })}>
                 +
               </button>
             </div>

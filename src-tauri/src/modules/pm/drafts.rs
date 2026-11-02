@@ -126,6 +126,14 @@ async fn sanitize(pool: &SqlitePool, mut input: ItemInput) -> Result<ItemInput> 
         };
         input.cycle_id = ok.then_some(c);
     }
+    // Modules of the project, not archived.
+    let mut modules = Vec::new();
+    for m in input.modules {
+        if sqlx::query_as::<_, (String,)>("SELECT id FROM pm_module WHERE id = ? AND project_id = ? AND archived_at IS NULL").bind(&m).bind(&project).fetch_optional(pool).await?.is_some() && !modules.contains(&m) {
+            modules.push(m);
+        }
+    }
+    input.modules = modules;
     if let Some(e) = input.estimate_point_id.clone() {
         let ok = sqlx::query_as::<_, (String,)>("SELECT ep.id FROM pm_estimate_point ep JOIN pm_project m ON m.estimate_id = ep.estimate_id WHERE ep.id = ? AND m.project_id = ?").bind(&e).bind(&project).fetch_optional(pool).await?.is_some();
         input.estimate_point_id = ok.then_some(e);
