@@ -43,11 +43,14 @@ async fn idle(pool: &SqlitePool, project: &str, groups: &str, months: u32, at: &
     Ok(rows.into_iter().map(|(i,)| i).collect())
 }
 
-/// Held by a cycle that hasn't ended (a draft, an upcoming or the running one): Plane's
-/// automations leave such items alone (D-078).
+/// Held by a cycle that hasn't ended (a draft, an upcoming or the running one) or by a module
+/// still under way (not archived, completed or cancelled, its target date not past): Plane's
+/// automations leave such items alone (D-075, D-078).
 async fn held(pool: &SqlitePool, item: &str, today: NaiveDate) -> Result<bool> {
     let row: Option<(i64,)> = sqlx::query_as(
-        "SELECT 1 FROM pm_cycle_item x JOIN pm_cycle c ON c.id = x.cycle_id WHERE x.item_id = ? AND c.completed_at IS NULL AND (c.end_date IS NULL OR c.end_date >= ?)",
+        "SELECT 1 FROM pm_cycle_item x JOIN pm_cycle c ON c.id = x.cycle_id WHERE x.item_id = ?1 AND c.completed_at IS NULL AND (c.end_date IS NULL OR c.end_date >= ?2) \
+         UNION ALL SELECT 1 FROM pm_module_item y JOIN pm_module m ON m.id = y.module_id WHERE y.item_id = ?1 AND m.archived_at IS NULL \
+         AND m.status NOT IN ('completed', 'cancelled') AND (m.target_date IS NULL OR m.target_date >= ?2) LIMIT 1",
     )
     .bind(item)
     .bind(today.to_string())
@@ -165,6 +168,32 @@ pub fn spawn(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
+    /// An item in a module still under way is held as one in a running cycle is; once the
+    /// module is completed, it isn't.
+    #[test]
+    fn a_module_under_way_holds_its_items() {
+        use crate::modules::pm::modules::{self as pm_modules, ModuleInput, ModulePatch, ModuleStatus};
+        let root = std::env::temp_dir().join(format!("newdawn-pm-held-{}", uuid::Uuid::now_v7()));
+        tauri::async_runtime::block_on(async {
+            let hub = WorkspaceHub::open(root.clone()).await.unwrap();
+            hub.create_workspace("VIFC", "test").await.unwrap();
+            let pool = hub.pool("test").unwrap();
+            let p = pm::create(&pool, NewPmProject { name: "VIFC Fintech Hub".into(), identifier: "VIFC".into(), description: String::new(), emoji: String::new(), cover: String::new(), network: Network::Private, lead: None, features: Features { modules: true, ..Default::default() } })
+                .await
+                .unwrap();
+            let it = items::create(&pool, ItemInput { project_id: p.id.clone(), name: "Draft the rules".into(), ..ItemInput::default() }, "me").await.unwrap();
+            let today = pm::cycles::today();
+            assert!(!held(&pool, &it.id, today).await.unwrap());
+            let m = pm_modules::create(&pool, ModuleInput { project_id: p.id.clone(), name: "Licensing".into(), description: String::new(), start_date: None, target_date: None, status: ModuleStatus::InProgress, lead: None, members: Vec::new() }, "me").await.unwrap();
+            pm_modules::add_items(&pool, &m.id, std::slice::from_ref(&it.id), "me").await.unwrap();
+            assert!(held(&pool, &it.id, today).await.unwrap(), "in a module under way");
+            pm_modules::update(&pool, &m.id, ModulePatch { status: Some(ModuleStatus::Completed), ..ModulePatch::default() }, "me").await.unwrap();
+            assert!(!held(&pool, &it.id, today).await.unwrap(), "its module completed");
+            hub.close_all().await;
+        });
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     use chrono::{Duration as Days, Local, Months, Utc};
 
     use super::*;

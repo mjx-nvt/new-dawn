@@ -1,3 +1,48 @@
+# Last Build — Parity audit: plan v4 closed · release 0.12.0
+_2026-11-03_
+
+## What changed
+- **docs/parity.md** (D-086), the living record of plan v4's rule (the same features and flows as Twenty and Plane, in our own code). It holds every one of the 99 feature rows of plan §3 (Twenty) and §4 (Plane), checked against the built app, with:
+  - its mark: ✔ the same, ≈ ours with a difference, ✗ not built, ◌ later;
+  - where it's built;
+  - the exact difference.
+
+  Plan §3–§4's marks now follow it (45 changed). The count:
+  - 26 the same;
+  - 3 the same with a part later;
+  - 60 ours with a stated difference;
+  - 8 not built, all as planned except Twenty's Time in stage and Plane's Create via a URL;
+  - 2 for later.
+- **Fixed from the audit:**
+  - CRM: a Phones field's default country fills a new number; the **iFrame** widget can go on record pages; **Run workflow** on a table's selected records.
+  - Projects: automations leave alone items in a module still under way; a work item's ⋯ has **Remove from <module>**; activity can be read **newest first**; a project's archived work items can be **searched**.
+- **Written down for later**, in parity.md's "Known differences": a unique field made of parts compares each part on its own (a whole-value check was tried and set aside: it made the record engine's database worker panic in its test), exporting a selection, actor names on the timeline, Intake filters, more Analytics tabs, the Plane API's comments, and others.
+- No migration. No new dependency.
+- Seen in the dev app (light), on a check project "Parity check" with a module and an archived item:
+  - the work item's ⋯ offered "Remove from Licensing", which took it out of the module;
+  - "Newest first" put "You took it out of the module Licensing" on top;
+  - the Archives tab's search for "room" left "Book the room";
+  - the item view showed its "Proposed from meetings" section with "Nothing proposed from meetings";
+  - in CRM → People, selecting a row showed "1 selected · Delete · Clear". The dev workspace has no manual workflow for People, so the Run workflow menu didn't show; it appears beside Delete when one exists.
+
+  The check project was removed.
+- Review: the architecture review found two must-fixes, both taken:
+  1. The Run workflow menu would have opened under the table's sticky header; the selection bar now sits above it.
+  2. A default country saved with every number made a unique Phones field refuse its second record. A phone's country and calling code are no longer compared on their own, and the default country fills only a number saved with neither.
+
+  Taken too:
+  - the activity order applies to the History and Transition tabs;
+  - three rows marked ✔ that state a difference are now ≈, and the counts were redone;
+  - the order is remembered with the app's own helpers;
+  - menu items are keyed by position;
+  - clearer labels.
+- Checks: 219 Rust tests pass (new: a module under way holds its items from the automations, and a completed one doesn't). Clippy, tsc and the localhost check are clean.
+
+## Manual steps
+- None. Nothing is installed; update from Settings → About → Check for updates when you want.
+
+---
+
 # Last Build — The Projects agent on Plane's model, Today · release 0.11.12
 _2026-11-03_
 

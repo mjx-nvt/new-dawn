@@ -91,6 +91,40 @@ _2026-11-02_
 
 ---
 
+## D-086 — The parity audit closes plan v4: every row checked, the differences written down, the isolated gaps fixed
+_2026-11-03_
+
+**Context** (plan v4 §8, 0.12.0): walk plan §3 (Twenty) and §4 (Plane) row by row against the running app and the originals' docs; fix what is missing or different; update the tables; write `docs/parity.md` as the living record. This closes the phase.
+
+**Decision — the record**: `docs/parity.md` holds each of the 99 rows with:
+- the mark the build earns: ✔ the same, ≈ ours with a difference, ✗ not built, ◌ later;
+- where it's built (a decision, a file);
+- the exact difference.
+
+Plan §3–§4's marks follow it (45 changed). The count:
+- 26 the same;
+- 3 the same with a part later or not built;
+- 60 ours with a stated difference;
+- 8 not built;
+- 2 for later.
+
+The not-built rows are the plan's own choices (one owner, no cloud, no paid tiers, no MCP yet), except two gaps: Twenty's Time in stage and Plane's Create via a URL.
+
+**Decision — fix what is isolated, write down the rest**: the gaps the audit found that are isolated were fixed in this release, as UI changes or one SQL rule with its test:
+- a Phones field's default country fills a new number;
+- the iFrame widget on record pages;
+- Run workflow on a table's selection;
+- automations leave alone items in a module still under way (D-075 said Plane does);
+- Remove from module on a work item;
+- activity newest first;
+- search in a project's archives.
+
+What reaches deeper is listed under "Known differences worth a later look": the record engine's write path, or new surfaces (exporting a selection, the Plane API's comments, Intake filters, Analytics tabs, the assistant reading Projects). A whole-value unique check for fields made of parts was tried and set aside, because it made the engine's database worker panic in its test.
+
+**Means for future work**: `docs/parity.md` is updated by every release that changes a row. The next plan starts from its known differences.
+
+---
+
 ## D-085 — The Projects agent on Plane's model: work items, states and comments as the dossier's proposals; Today reads the work
 _2026-11-02_
 

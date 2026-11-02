@@ -787,7 +787,8 @@ async fn check(pool: &SqlitePool, object: &ObjectDef, cols: &[(String, Bind)], i
             }
         }
         if field.is_unique {
-            for c in columns(field).into_iter().filter(|c| c.kind == ColumnKind::Text && !c.json) {
+            // A phone is its number: the country and the calling code aren't compared on their own.
+            for c in columns(field).into_iter().filter(|c| c.kind == ColumnKind::Text && !c.json && !matches!(c.key, Some("primaryPhoneCountryCode" | "primaryPhoneCallingCode"))) {
                 if let Some(Bind::Text(v)) = get_bind(cols, &c.name) {
                     if v.is_empty() {
                         continue;

@@ -1,6 +1,10 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { remember, remembered } from "../../live/lines";
 import { MeetingProposals } from "../Proposals";
+
+/** Where the activity's order is remembered on this Mac. */
+const ACTIVITY_ORDER_KEY = "newdawn.pmActivityOrder";
 import { usePmLabels, usePmProjects } from "../../../kernel/bridge/pm";
 import {
   itemFiles,
@@ -206,6 +210,13 @@ function Ghosts({ text, className }: { text: string; className?: string }) {
 /** An item's comments and activity (Intake's detail shows them too, D-081). */
 export function Activity({ slug, item, tab, onTab, readOnly: closed = false }: { slug: string; item: PmItem; tab: Tab; onTab: (t: Tab) => void; readOnly?: boolean }) {
   const who = useWho(slug);
+  // Plane's order: oldest first, or newest first (remembered on this Mac).
+  const [newest, setNewest] = useState(() => remembered(ACTIVITY_ORDER_KEY, ["oldest", "newest"] as const) === "newest");
+  const order = (on: boolean) => {
+    setNewest(on);
+    remember(ACTIVITY_ORDER_KEY, on ? "newest" : "oldest");
+  };
+  const ordered = <T,>(list: T[]) => (newest ? [...list].reverse() : list);
   const acts = usePmActivity(slug, item.id).data ?? [];
   const comments = usePmComments(slug, item.id).data ?? [];
   const top = comments.filter((c) => !c.parent_id);
@@ -220,32 +231,36 @@ export function Activity({ slug, item, tab, onTab, readOnly: closed = false }: {
   const nonComment = acts.filter((a) => a.kind !== "commented");
   return (
     <section className={styles.activity} aria-label="Activity">
-      <div className="segmented" role="tablist" aria-label="Activity">
-        {TABS.map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={t === tab} onClick={() => onTab(t)}>
-            {TAB_LABEL[t]}
-          </button>
-        ))}
+      <div className={styles.inline}>
+        <div className="segmented" role="tablist" aria-label="Activity">
+          {TABS.map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={t === tab} onClick={() => onTab(t)}>
+              {TAB_LABEL[t]}
+            </button>
+          ))}
+        </div>
+        <select className="input" aria-label="Activity order" value={newest ? "newest" : "oldest"} onChange={(e) => order(e.target.value === "newest")}>
+          <option value="oldest">Oldest first</option>
+          <option value="newest">Newest first</option>
+        </select>
       </div>
       {tab === "all" && (
         <div className={styles.feed}>
-          {[...nonComment.map((a) => ({ at: a.created_at, node: <ul className={styles.acts}>{line(a)}</ul>, key: a.id })), ...top.map((c) => ({ at: c.created_at, node: thread(c), key: c.id }))]
-            .sort((x, y) => x.at.localeCompare(y.at))
-            .map((e) => (
+          {ordered([...nonComment.map((a) => ({ at: a.created_at, node: <ul className={styles.acts}>{line(a)}</ul>, key: a.id })), ...top.map((c) => ({ at: c.created_at, node: thread(c), key: c.id }))].sort((x, y) => x.at.localeCompare(y.at))).map((e) => (
               <div key={e.key}>{e.node}</div>
             ))}
         </div>
       )}
-      {tab === "activity" && <ul className={styles.acts}>{nonComment.map(line)}</ul>}
+      {tab === "activity" && <ul className={styles.acts}>{ordered(nonComment).map(line)}</ul>}
       {tab === "comments" && (
         <div className={styles.feed}>
-          {top.map(thread)}
+          {ordered(top).map(thread)}
           {!top.length && <Ghosts text={readOnly ? "No comments" : "No comments yet — write the first below"} />}
         </div>
       )}
       {tab === "history" && (
         <ul className={styles.acts}>
-          {nonComment.map((a) => (
+          {ordered(nonComment).map((a) => (
             <li key={a.id} className={styles.history}>
               <span>
                 <strong>{who(a.actor)}</strong> · {a.kind === "updated" ? a.field : a.kind} · <span className="fieldHint">{formatDateTime(a.created_at)}</span>
@@ -261,7 +276,7 @@ export function Activity({ slug, item, tab, onTab, readOnly: closed = false }: {
       )}
       {tab === "transition" && (
         <ul className={styles.acts}>
-          {transitions(item.created_at, item.state_name, acts).map((t, i) => (
+          {ordered(transitions(item.created_at, item.state_name, acts)).map((t, i) => (
             <li key={`${t.from}-${i}`} className={styles.act}>
               <span>
                 {t.state} — {duration(t.ms)}
@@ -422,6 +437,8 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
               onSelect: () => archive.mutate({ id: item.id, archived: !ro }),
             },
             ...(item.cycle_id && !ro ? [{ label: `Remove from ${item.cycle_name ?? "its cycle"}`, separator: true, onSelect: () => save({ cycle_id: "" }) }] : []),
+            // Plane's Remove from module, one a module it's in (the set without that one).
+            ...(ro ? [] : item.modules).map((m, i) => ({ label: `Remove from ${m.name}`, separator: i === 0 && !item.cycle_id, onSelect: () => save({ modules: item.modules.filter((x) => x.id !== m.id).map((x) => x.id) }) })),
             { label: "Delete…", danger: true, onSelect: () => setConfirmDelete(true) },
           ]}
         />

@@ -294,6 +294,9 @@
   margin-bottom: var(--space-3);
   font-size: var(--t-sm);
   font-weight: 500;
+  /* Above the table's sticky header: its Run workflow menu opens over the rows. */
+  position: relative;
+  z-index: 2;
 }
 
 @media (prefers-reduced-motion: no-preference) {

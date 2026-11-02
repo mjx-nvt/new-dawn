@@ -24,20 +24,22 @@ _This plan is written to be built unattended. Each release in §7–8 is a **spe
 
 ## 3. Twenty — inventory and what New Dawn does with each
 
+*Marks verified against the built app in the 0.12.0 audit (2026-11-03): ✔ the same, ≈ ours with a difference, ✗ not built, ◌ later. Each ≈ row's exact difference is in [docs/parity.md](parity.md).*
+
 Taken from the repository (`packages/twenty-server/src/modules`: attachment, blocklist, calendar, call-recording, company, connected-account, dashboard, emailing, messaging, note, opportunity, person, task, timeline, workflow, workspace-member; `engine/metadata-modules`: object, field, relation, view (field · filter · filter group · group · sort), page layout (tab · widget), role and permissions, agent · skill · MCP server, command menu item, navigation menu item, logic function, webhook, validation rule, search field, index; `twenty-front/src/modules`: object-record, views, command-menu, spreadsheet-import, record-export, advanced-text-editor, dashboards, workflow, ai, favorites/navigation, settings) and from the 119-page user guide.
 
 ### 3.1 Data model
 
 | Twenty | New Dawn | Mark |
 |---|---|---|
-| Standard objects: People, Companies, Opportunities, Notes, Tasks | the same five, with every standard field (§5.2) | ✔ |
-| System objects: Attachments, Favorites, Timeline activities, Views, Workspace members, Workflows (+ versions, runs, automated triggers), Dashboards (+ page layouts, tabs, widgets), API keys, Webhooks, Note/Task targets, Agent chat threads | the same | ✔ |
-| Connected accounts, Message channels / threads / participants, Calendar channels / events / participants, Blocklist, Call recordings | **messages** = emails read from Apple Mail; **calendar events** = New Dawn meetings; **call recordings** = the meeting's recording; blocklist = addresses never auto-created | ≈ (§5.6) |
-| Custom objects (label, plural, icon, description, activate / deactivate, label identifier, image identifier) | the same, as real SQLite tables created at run time (§5.2) | ✔ |
-| Custom fields, 20+ types: Text, Long text, Number, Boolean, Date, Date & time, Select, Multi-select, Currency, Links, Emails, Phones, Address, Rating, Relation, Array, JSON, Domain, Full name, Rich text, Actor, UUID, Position | the same types, same sub-fields (emails: primary + additional; phones: country code; links: primary + secondary with labels; address: street, city, state, country, postcode; currency: amount + code) | ✔ |
-| Select / multi-select options with colours and a default; number decimals; currency and country defaults | the same | ✔ |
-| Relations: one-to-many / many-to-one, a field that targets several objects (Note → Person, Company, Opportunity), many-to-many through a junction object with the "relation to a junction object" toggle | the same | ✔ |
-| Deactivate a field or object (kept), delete, unique fields, required fields (validation rules) | the same | ✔ |
+| Standard objects: People, Companies, Opportunities, Notes, Tasks | the same five, with every standard field (§5.2) | ≈ |
+| System objects: Attachments, Favorites, Timeline activities, Views, Workspace members, Workflows (+ versions, runs, automated triggers), Dashboards (+ page layouts, tabs, widgets), API keys, Webhooks, Note/Task targets, Agent chat threads | the same | ≈ |
+| Connected accounts, Message channels / threads / participants, Calendar channels / events / participants, Blocklist, Call recordings | **messages** = emails read from Apple Mail; **calendar events** = New Dawn meetings; **call recordings** = the meeting's recording; blocklist = addresses never auto-created | ≈ |
+| Custom objects (label, plural, icon, description, activate / deactivate, label identifier, image identifier) | the same, as real SQLite tables created at run time (§5.2) | ≈ |
+| Custom fields, 20+ types: Text, Long text, Number, Boolean, Date, Date & time, Select, Multi-select, Currency, Links, Emails, Phones, Address, Rating, Relation, Array, JSON, Domain, Full name, Rich text, Actor, UUID, Position | the same types, same sub-fields (emails: primary + additional; phones: country code; links: primary + secondary with labels; address: street, city, state, country, postcode; currency: amount + code) | ≈ |
+| Select / multi-select options with colours and a default; number decimals; currency and country defaults | the same | ≈ |
+| Relations: one-to-many / many-to-one, a field that targets several objects (Note → Person, Company, Opportunity), many-to-many through a junction object with the "relation to a junction object" toggle | the same | ≈ |
+| Deactivate a field or object (kept), delete, unique fields, required fields (validation rules) | the same | ≈ |
 | Soft delete, "Deleted records", restore, permanent delete | the same (`deleted_at`) | ✔ |
 | Full-text search across all objects (`/`) | FTS5 over the label identifier and text fields | ✔ |
 
@@ -46,37 +48,37 @@ Taken from the repository (`packages/twenty-server/src/modules`: attachment, blo
 | Twenty | New Dawn | Mark |
 |---|---|---|
 | Table view: columns from fields, show / hide / reorder / resize, inline cell editing, group by a select field with aggregates per group, aggregate row (count, sum, average, min, max, percent empty…) | the same | ✔ |
-| Kanban view: by a select field, column aggregate (count · sum · average · min · max of a numeric field), card fields, drag and drop, compact mode, create in a column | the same (native drag and drop) | ✔ |
+| Kanban view: by a select field, column aggregate (count · sum · average · min · max of a numeric field), card fields, drag and drop, compact mode, create in a column | the same (native drag and drop) | ≈ |
 | Calendar view: by a date field, month / week, drag to move | the same | ✔ |
-| Filters: operators per type (text: contains / doesn't contain / empty / not empty; number & currency & rating: is / is not / ≥ / ≤ / empty / not empty; date: is / relative / past / future / today / before / after or equal / empty; select, relation: is / is not / empty; multi-select: contains…; boolean: is; actor, array, JSON, files: contains / empty); several values match any; related-record fields and composite sub-fields (a company's name, an address's city); standard filters AND; **Advanced filter** with OR and rule groups, shown as a chip | the same | ✔ |
+| Filters: operators per type (text: contains / doesn't contain / empty / not empty; number & currency & rating: is / is not / ≥ / ≤ / empty / not empty; date: is / relative / past / future / today / before / after or equal / empty; select, relation: is / is not / empty; multi-select: contains…; boolean: is; actor, array, JSON, files: contains / empty); several values match any; related-record fields and composite sub-fields (a company's name, an address's city); standard filters AND; **Advanced filter** with OR and rule groups, shown as a chip | the same | ≈ |
 | Sorts: ascending / descending, several sorts, from a column header | the same | ✔ |
-| Update view · Create view · Save as new view · Reset; default "All X" views; view name, icon, order by drag, favorites, delete | the same | ✔ |
+| Update view · Create view · Save as new view · Reset; default "All X" views; view name, icon, order by drag, favorites, delete | the same | ≈ |
 | Visibility: Workspace / Unlisted | kept as a flag (one owner) | ≈ |
 | Open a record in the side panel or the full page; compact view | the same | ✔ |
-| Multi-select rows → bulk delete, export, run a manual workflow | the same | ✔ |
-| "Time in stage" (from the timeline), "expected amount" (kanban sum) | the same | ✔ |
+| Multi-select rows → bulk delete, export, run a manual workflow | the same | ≈ |
+| "Time in stage" (from the timeline), "expected amount" (kanban sum) | the same | ✗ / ✔ |
 
 ### 3.3 Record pages and activities
 
 | Twenty | New Dawn | Mark |
 |---|---|---|
-| Record page = tabs of widgets on a grid; per object; add / remove / rename / reorder tabs, default tab; add / drag / resize widgets; widgets: Fields (chosen fields, grouped), Related records (table or kanban, "Allow editing"), Timeline, Tasks, Notes, Files, Charts, Rich text, Emails, Calendar, iFrame | the same; Emails and Calendar fed by Apple Mail and meetings; iFrame only for `localhost` pages | ✔ / ≈ |
-| Header: name, icon / avatar, favorite, actions (delete, manual workflows), previous / next record | the same | ✔ |
-| Side panel (quick view, Open to the full page) | the same | ✔ |
+| Record page = tabs of widgets on a grid; per object; add / remove / rename / reorder tabs, default tab; add / drag / resize widgets; widgets: Fields (chosen fields, grouped), Related records (table or kanban, "Allow editing"), Timeline, Tasks, Notes, Files, Charts, Rich text, Emails, Calendar, iFrame | the same; Emails and Calendar fed by Apple Mail and meetings; iFrame only for `localhost` pages | ≈ |
+| Header: name, icon / avatar, favorite, actions (delete, manual workflows), previous / next record | the same | ≈ |
+| Side panel (quick view, Open to the full page) | the same | ≈ |
 | Layout editor from ⌘K "Edit record page layout" or Settings → Data model → object → Layout | the same | ✔ |
-| Notes: title, rich body (block editor), attached to several records (targets), attachments | the same (TipTap editor, §5.4) | ✔ |
-| Tasks: title, body, due date, status TODO · IN PROGRESS · DONE, assignee, targets; a Tasks page with its views (by status kanban) | the same; assignee = you; New Dawn's own Tasks list (0.7.3) becomes a view of this object, keeping Add to Tasks and the meeting agents' proposals | ✔ / ≈ |
-| Timeline per record: field changes, notes and tasks created, emails, calendar events, with the actor | the same, plus meetings attended and emails read | ✔ |
+| Notes: title, rich body (block editor), attached to several records (targets), attachments | the same (TipTap editor, §5.4) | ≈ |
+| Tasks: title, body, due date, status TODO · IN PROGRESS · DONE, assignee, targets; a Tasks page with its views (by status kanban) | the same; assignee = you; New Dawn's own Tasks list (0.7.3) becomes a view of this object, keeping Add to Tasks and the meeting agents' proposals | ≈ |
+| Timeline per record: field changes, notes and tasks created, emails, calendar events, with the actor | the same, plus meetings attended and emails read | ≈ |
 | Mentions of records in rich text; attachments on any record (Files) | the same | ✔ |
 
 ### 3.4 Navigation, command menu, import and export
 
 | Twenty | New Dawn | Mark |
 |---|---|---|
-| Sidebar: workspace switcher, search `/`, Settings, Favorites (folders), object shortcuts (reorder, folders, hide), Workflows, collapse | the same, inside New Dawn's sidebar under a **CRM** group (the rail, labels and ⌃⌘S stay) | ✔ |
+| Sidebar: workspace switcher, search `/`, Settings, Favorites (folders), object shortcuts (reorder, folders, hide), Workflows, collapse | the same, inside New Dawn's sidebar under a **CRM** group (the rail, labels and ⌃⌘S stay) | ≈ |
 | Command menu ⌘K: search all objects, create records, go to objects and views, import / export, deleted records, run manual workflows, keyboard shortcuts, edit record page layout | the same; one ⌘K for the whole app (Plane's Power K lives in it too) | ✔ |
-| Keyboard shortcuts (the documented set) | the same keys where macOS allows | ✔ |
-| Spreadsheet import: CSV / XLSX / XLS (10 000 rows a file), column → field mapping, uniqueness (update existing by id or a unique field), relations by name, validation and error fixing | the same (XLSX through a Rust crate; if that add is refused, CSV first) | ✔ |
+| Keyboard shortcuts (the documented set) | the same keys where macOS allows | ≈ |
+| Spreadsheet import: CSV / XLSX / XLS (10 000 rows a file), column → field mapping, uniqueness (update existing by id or a unique field), relations by name, validation and error fixing | the same (XLSX through a Rust crate; if that add is refused, CSV first) | ≈ |
 | Export a view to CSV; import by API | the same; API = the local REST API (§3.8) | ✔ |
 
 ### 3.5 Calendar and emails
@@ -93,11 +95,11 @@ Taken from the repository (`packages/twenty-server/src/modules`: attachment, blo
 |---|---|---|
 | Triggers: record created / updated / deleted / upserted (with field conditions), manual (one record, several, global), schedule (cron), webhook | the same; schedules run while New Dawn is open and catch up at launch; the webhook trigger is a `localhost` endpoint of the local API | ✔ / ≈ |
 | Steps: create · update · find · delete · upsert record, branches (if / else), iterator, delay, form (input mid-workflow), AI agent, send email, HTTP request, code (JavaScript) | the same; send email → Mail draft; HTTP → localhost only; code → JavaScript run in a sandboxed Web Worker of the window (the app must be open); AI → the local model | ✔ / ≈ |
-| Versions (draft → active → deactivated), runs with per-step input / output and errors, test run, variables between steps | the same | ✔ |
+| Versions (draft → active → deactivated), runs with per-step input / output and errors, test run, variables between steps | the same | ≈ |
 | Workflow credits | cloud billing | ✗ |
 | AI chatbot (ask questions over the CRM, find records), AI agents (name, instructions, model, tools: find / create / update records), agents as workflow steps, agent chat threads on records | the same, on Qwen through `kernel/ai/` (tool calls through Ollama); models = the installed local ones | ✔ / ≈ |
-| AI permissions and roles; MCP server for outside tools | one owner (no roles); an MCP server over the local API is optional, late | ✗ / ≈ |
-| Dashboards: widgets on a grid (bar, line, pie, aggregate with ratio / prefix / suffix, table with "Allow editing", rich text, iFrame; gauge on their roadmap), data source object + filters + aggregate + group by (select, date buckets, relations), duplicate widget, workspace-level | the same (charts as inline SVG); iFrame localhost-only | ✔ |
+| AI permissions and roles; MCP server for outside tools | one owner (no roles); an MCP server over the local API is optional, late | ✗ / ◌ |
+| Dashboards: widgets on a grid (bar, line, pie, aggregate with ratio / prefix / suffix, table with "Allow editing", rich text, iFrame; gauge on their roadmap), data source object + filters + aggregate + group by (select, date buckets, relations), duplicate widget, workspace-level | the same (charts as inline SVG); iFrame localhost-only | ≈ |
 
 ### 3.7 Settings
 
@@ -118,6 +120,8 @@ Taken from the repository (`packages/twenty-server/src/modules`: attachment, blo
 
 ## 4. Plane (community edition) — inventory and what New Dawn does with each
 
+*Marks verified against the built app in the 0.12.0 audit (2026-11-03): ✔ the same, ≈ ours with a difference, ✗ not built, ◌ later. Each ≈ row's exact difference is in [docs/parity.md](parity.md).*
+
 Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue (+ activity, comment, reaction, relation, link, attachment, subscriber, vote, mention, sequence), state, label, estimate, cycle, module, view, page, intake, draft, favorite, sticky, recent_visit, notification, analytic, exporter, importer, api token, webhook, deploy board, asset, session, social connection; `app/views`: the same areas plus search, timezone, external; `apps/`: web, space (published boards), admin (instance), api, live, proxy), the docs index, and the pricing matrix (Free = what the repository ships).
 
 ### 4.1 Workspace and shell
@@ -128,9 +132,9 @@ Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue
 | **Home**: greeting with weekday / date / time, widgets Quick links, Recents (All / Work items / Pages / Projects), Your stickies; Manage widgets (on / off, reorder) | the same, as the Projects module's first page | ✔ |
 | **Your work**: summary (created / assigned / subscribed counts), workload by state group (Backlog · Not started · Working on · Completed · Cancelled), by priority, "work items by state" pie, recent activity; tabs Assigned / Created / Subscribed | the same | ✔ |
 | **Inbox** (notifications): every tracked event on work items you're assigned to, created or subscribed to, mentions, due-date reminders; read / unread, snooze, archive; preferences per kind | the same, in-app only (no email, no push); the actors are you, the agents and automations | ✔ / ≈ |
-| Drafts page, Archives (work items · cycles · modules), Favorites, Recents, Stickies (colours, formatting), Quick links | the same | ✔ |
-| **Power K** (⌘K): search the workspace, actions, navigation | inside New Dawn's ⌘K | ✔ |
-| Keyboard shortcuts (the documented set: `N` `I` create, `G` `R` archives, …) | the same | ✔ |
+| Drafts page, Archives (work items · cycles · modules), Favorites, Recents, Stickies (colours, formatting), Quick links | the same | ≈ |
+| **Power K** (⌘K): search the workspace, actions, navigation | inside New Dawn's ⌘K | ≈ |
+| Keyboard shortcuts (the documented set: `N` `I` create, `G` `R` archives, …) | the same | ≈ |
 | Customize navigation (show / hide sidebar items) | the same | ✔ |
 | Profile settings: theme, time zone, notification preferences, activity, API tokens | the same, theme = system | ✔ / ≈ |
 | Members, invitations, roles, guests, SSO, billing, audit logs, governance, instance admin ("God mode"), mobile apps, live collaboration | one owner, one Mac | ✗ |
@@ -141,16 +145,16 @@ Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue
 
 | Plane | New Dawn | Mark |
 |---|---|---|
-| Create: name (unique), identifier (≤ 10 letters / numbers, unique, from the name), description, cover image, logo / emoji, network (Public / Private), lead, features step | the same (network kept as a label) | ✔ |
-| Projects list: cards and list, search / filter / sort, favorites, archived; join / leave | the same minus join / leave | ✔ / ✗ |
+| Create: name (unique), identifier (≤ 10 letters / numbers, unique, from the name), description, cover image, logo / emoji, network (Public / Private), lead, features step | the same (network kept as a label) | ≈ |
+| Projects list: cards and list, search / filter / sort, favorites, archived; join / leave | the same minus join / leave | ≈ / ✗ |
 | Settings → General: cover, logo, name, description, identifier, network, time zone, Archive, Delete | the same | ✔ |
 | Settings → Members: members, roles, lead, default assignee, subscribers | lead, default assignee and default subscribers from you + people; no roles | ≈ |
 | Settings → Features: Cycles, Modules, Views, Pages, Intake (on / off) | the same | ✔ |
 | Settings → States: add, rename, reorder, colour, description, the default, five fixed groups (Backlog, Unstarted, Started, Completed, Cancelled) each with ≥ 1 state | the same | ✔ |
 | Settings → Labels: name, colour, label groups (parent) | the same | ✔ |
 | Settings → Estimates: Points (Linear / Fibonacci / Squares / Custom) or Categories (T-shirt…), ≤ 6 values, one active system, archive older | the same | ✔ |
-| Settings → Automations: auto-archive closed items after N months, auto-close inactive items after N months into a chosen cancelled state, due-date reminders | the same | ✔ |
-| Settings → Imports (CSV), Exports | the same | ✔ |
+| Settings → Automations: auto-archive closed items after N months, auto-close inactive items after N months into a chosen cancelled state, due-date reminders | the same | ≈ |
+| Settings → Imports (CSV), Exports | the same | ≈ |
 | Time tracking / worklogs, Milestones, Releases, Project updates, Work item types and custom properties, Templates, Workflows and approvals, Recurring work items, Project states, Initiatives, Epics, Teamspaces, Customers, Project overview | paid tiers — not in the repository | ◌ |
 | New Dawn's project dossier (0.9.0: phase, next milestone, risks, decisions, the Projects agent's proposals) | kept as the project's **Overview** tab — ours, not Plane's | ≈ |
 
@@ -160,13 +164,13 @@ Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue
 |---|---|---|
 | Properties: ID (`PLN-42`), title (≤ 255), description (rich editor, version history), state, priority (urgent · high · medium · low · none), assignees, labels, start / due dates, estimate, cycle, modules, parent, sub-work items (progress), created / updated / completed by and at | the same; assignees = you and the people of the workspace | ✔ / ≈ |
 | Create modal: project, title, description, every property, Create more, Save as draft prompt; quick add at the end of a list / group / column / calendar day (inherits the group's value); `N` `I` | the same | ✔ |
-| Peek view: side peek (default) · modal · full screen; full page; header: subscribe, copy link, copy as prompt, make a copy, open in new tab, archive, delete, remove from cycle / module; votes | the same (new tab = a new window) | ✔ |
-| Sub-work items (create new or add existing, progress bar, filters), relations (Blocked by, Blocking, Relates to, Duplicate of), links (URL + title), attachments (5 MB default), comments (rich text, images, mentions, reactions, edit with "edited", delete, one level of replies), reactions on the description, subscribers | the same | ✔ |
-| Activity: All · Activity · Comments · History (before / after) · Transition (time in each state); filters and sort | the same (Updates · Worklogs · Development are paid) | ✔ / ◌ |
-| Archive (completed / cancelled only; read-only, searchable), restore, delete (with sub-items and attachments), make a copy (same or another project), copy branch name | the same | ✔ |
-| Drafts: prompt on closing a modal with text, Draft a work item, edit, copy, move to project, delete | the same | ✔ |
+| Peek view: side peek (default) · modal · full screen; full page; header: subscribe, copy link, copy as prompt, make a copy, open in new tab, archive, delete, remove from cycle / module; votes | the same (new tab = a new window) | ≈ |
+| Sub-work items (create new or add existing, progress bar, filters), relations (Blocked by, Blocking, Relates to, Duplicate of), links (URL + title), attachments (5 MB default), comments (rich text, images, mentions, reactions, edit with "edited", delete, one level of replies), reactions on the description, subscribers | the same | ≈ |
+| Activity: All · Activity · Comments · History (before / after) · Transition (time in each state); filters and sort | the same (Updates · Worklogs · Development are paid) | ≈ / ◌ |
+| Archive (completed / cancelled only; read-only, searchable), restore, delete (with sub-items and attachments), make a copy (same or another project), copy branch name | the same | ≈ |
+| Drafts: prompt on closing a modal with text, Draft a work item, edit, copy, move to project, delete | the same | ≈ |
 | Bulk operations (List and Table): select, change state / priority / assignees / dates / labels / cycle / estimate / modules, copy, subscribe, archive, delete, with validation | the same (Plane sells it; it is in our scope) | ✔ |
-| Create work items via URL | a `newdawn://` link that opens the create modal pre-filled | ≈ |
+| Create work items via URL | a `newdawn://` link that opens the create modal pre-filled | ✗ |
 | Work item types, custom properties, templates, approvals, customer requests, timeline dependencies, "Implements" relations, intake forms / email | paid tiers | ◌ |
 
 ### 4.4 Layouts, display options, filters, views
@@ -176,9 +180,9 @@ Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue
 | Layouts: List (groups, manual order by drag, parent / child shown), Board (groups + sub-groups, drag between columns), Calendar (by due date, drag to move), Table / spreadsheet (columns, inline edit, keyboard navigation, bulk), Timeline / Gantt (bars by start and due, drag to change) | the same (Gantt dependencies and critical path are paid) | ✔ / ◌ |
 | Display properties: ID, Assignee, Start / Due date, Labels, Priority, State, Sub-work item count, Attachment count, Link, Estimate, Modules, Cycle (Type, Dependencies, Releases, Milestones, Customers are paid); Table also Created on / by, Updated on | the same | ✔ |
 | Group by: State, State groups, Priority, Cycle, Module, Labels, Assignees, Created by, None; Sub-group by the same; Order by: Manual, Last created, Last updated, Start date, Due date, Priority; display filters: show sub-work items, show empty groups | the same | ✔ |
-| Filters: Title, State, State group, Assignees, Priority, Mentions, Label, Cycle, Module, Created by, Start / Due / Created / Updated date (is, before, after, between, "or on", not, empty), any-of / not-any-of; Clear all | the same, with every date operator (Plane sells some) | ✔ |
+| Filters: Title, State, State group, Assignees, Priority, Mentions, Label, Cycle, Module, Created by, Start / Due / Created / Updated date (is, before, after, between, "or on", not, empty), any-of / not-any-of; Clear all | the same, with every date operator (Plane sells some) | ≈ |
 | Views: project views (any layout) and workspace views (built-in All · Assigned to me · Created by me · Subscribed, plus custom; spreadsheet); save, update, duplicate ("Copy of"), delete, favorite; public / private, lock | the same; private and lock as flags | ✔ / ≈ |
-| Per-user display settings remembered per project and view | the same | ✔ |
+| Per-user display settings remembered per project and view | the same | ≈ |
 
 ### 4.5 Cycles, modules, pages, intake, analytics, data
 
@@ -186,11 +190,11 @@ Taken from the repository (`apps/api/plane/db/models`: workspace, project, issue
 |---|---|---|
 | Cycles: title, description, both dates or none (draft), no overlap, states Draft · Upcoming · Active · Completed, tabs Active / Upcoming / Completed, search and date filters, add or create items, one cycle per item, transfer unfinished work (once), details panel with burn-down and breakdowns by assignee / state / label, favorites, archive completed, delete (items stay), `N` `C` | the same; start / complete early included (Plane sells it); auto-schedule and parallel cycles are paid | ✔ / ◌ |
 | Modules: title (unique), description, date range, state (Backlog · Planned · In Progress · Paused · Completed · Cancelled), lead, members, layouts List · Gallery · Timeline, search / sort / filters, items in several modules, progress with "Needs attention", links, favorites, archive, delete | the same | ✔ |
-| Pages (project pages): editor blocks — text, headings 1–6, quote, callout, divider, numbered / bulleted / to-do lists, table, image, nested page, code with language picker, Mermaid, emoji, text and background colours, `/` menu, `@` mentions of work items; outline; lock; archive; favorites; public / private; full screen; version history; export | the same (Mermaid if its library add is allowed, else a code block); wiki, collections, nested-page sharing, columns, embeds, publishing, collaboration are paid or need the web | ✔ / ◌ |
-| Intake (in-app): items in the Triage state with priority, assignees, labels, due date; Open / Closed tabs; Accept (edit, choose the state), Decline, Snooze until a date, Mark as duplicate, Delete; filters and sort; up / down through pending; description, activity, comments | the same (forms and email intake are paid) | ✔ / ◌ |
-| Analytics: Overview (projects, work items, active cycles, intake), Work items (by state, Created vs Resolved, Customized insights by priority / assignee / state / labels / cycles) | the same; Projects, Cycles, Modules and Intake tabs are paid — a light version of each is ours | ✔ / ◌ |
-| Exports: work items as CSV / XLSX / JSON with the current filters, export history | the same | ✔ |
-| CSV importer: Plane's columns (Name, Description, Priority, Start Date, Due Date, State Name, Labels, Assignees, Subscribers, Comments, Links, Cycle Name, Estimate, Identifier, Parent), header matching, value formats, matching rules, migrations table and JSON summary | the same | ✔ |
+| Pages (project pages): editor blocks — text, headings 1–6, quote, callout, divider, numbered / bulleted / to-do lists, table, image, nested page, code with language picker, Mermaid, emoji, text and background colours, `/` menu, `@` mentions of work items; outline; lock; archive; favorites; public / private; full screen; version history; export | the same (Mermaid if its library add is allowed, else a code block); wiki, collections, nested-page sharing, columns, embeds, publishing, collaboration are paid or need the web | ≈ / ◌ |
+| Intake (in-app): items in the Triage state with priority, assignees, labels, due date; Open / Closed tabs; Accept (edit, choose the state), Decline, Snooze until a date, Mark as duplicate, Delete; filters and sort; up / down through pending; description, activity, comments | the same (forms and email intake are paid) | ≈ / ◌ |
+| Analytics: Overview (projects, work items, active cycles, intake), Work items (by state, Created vs Resolved, Customized insights by priority / assignee / state / labels / cycles) | the same; Projects, Cycles, Modules and Intake tabs are paid — a light version of each is ours | ≈ / ◌ |
+| Exports: work items as CSV / XLSX / JSON with the current filters, export history | the same | ≈ |
+| CSV importer: Plane's columns (Name, Description, Priority, Start Date, Due Date, State Name, Labels, Assignees, Subscribers, Comments, Links, Cycle Name, Estimate, Identifier, Parent), header matching, value formats, matching rules, migrations table and JSON summary | the same | ≈ |
 | Webhooks, API tokens, REST API (`/api/v1/workspaces/{slug}/projects/…`, `X-API-Key`), MCP server | the local API with Plane's paths; webhooks to localhost; MCP optional | ≈ |
 | Plane AI (Pi chat, agents, skills, memory) | New Dawn's own agents on the local model (§5.7) | ≈ |
 

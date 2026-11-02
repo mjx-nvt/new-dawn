@@ -120,7 +120,7 @@ export default function LayoutEditor({ ctx, layout, onDone, kind = "record", onS
     } else save.mutate(input, { onSuccess: onDone });
   };
   const person = object.meta.name_singular === "person";
-  const available = kind === "dashboard" ? WIDGET_TYPES.filter((t) => DASHBOARD_TYPES.includes(t.type)) : WIDGET_TYPES.filter((t) => !t.since && !["TABLE", "IFRAME"].includes(t.type) && (person || !["COMMITMENTS", "MEETINGS"].includes(t.type)));
+  const available = kind === "dashboard" ? WIDGET_TYPES.filter((t) => DASHBOARD_TYPES.includes(t.type)) : WIDGET_TYPES.filter((t) => !t.since && t.type !== "TABLE" && (person || !["COMMITMENTS", "MEETINGS"].includes(t.type)));
   const later = kind === "dashboard" ? [] : WIDGET_TYPES.filter((t) => t.since);
   const pickedWidget = tab.widgets.find((w) => w.id === picked);
   const mutationError = save.error ?? reset.error ?? (trouble ? new Error(trouble) : null);

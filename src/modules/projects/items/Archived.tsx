@@ -1,4 +1,5 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useArchivePmItem, useDeletePmItem, usePmItems } from "../../../kernel/bridge/pmItems";
 import { formatDateTime } from "../../../kernel/format/format";
 import DangerButton from "../../../kernel/shell/DangerButton";
@@ -17,12 +18,19 @@ export default function Archived({ slug, projectId }: { slug: string; projectId:
   const restore = useArchivePmItem(slug);
   const remove = useDeletePmItem(slug);
   const set = (patch: Record<string, string | undefined>) => void navigate({ to: "/projects/$projectId", params: { projectId }, search: { ...search, ...patch }, replace: true });
-  const list = items.data ?? [];
+  // Found by key or title (Plane's archives search).
+  const [find, setFind] = useState("");
+  const words = find.trim().toLowerCase();
+  const all = items.data ?? [];
+  const list = words ? all.filter((i) => i.key.toLowerCase().includes(words) || i.name.toLowerCase().includes(words)) : all;
   return (
     <section className="section" aria-label="Archives">
       <h2 className="sectionTitle">Archived work items</h2>
       <p className="sectionSubtitle">Completed or cancelled work items set aside — read-only, still here to read, restore or delete.</p>
       {(items.error ?? restore.error ?? remove.error) && <p className="formError">{(items.error ?? restore.error ?? remove.error)?.message}</p>}
+      <div className={styles.toolbar}>
+        <input className={`input ${styles.search}`} type="search" aria-label="Search the archived work items" placeholder="Search by key or title" value={find} onChange={(e) => setFind(e.target.value)} />
+      </div>
       <div className={styles.group}>
         {list.map((i) => (
           <div key={i.id} className={styles.row}>
@@ -47,7 +55,7 @@ export default function Archived({ slug, projectId }: { slug: string; projectId:
         {!list.length &&
           [0, 1].map((n) => (
             <div key={n} className={`${styles.row} ghostCard`}>
-              {n === 0 && <span className="ghostText">{items.isError ? "Couldn't be read" : items.data ? "Nothing archived" : "Reading…"}</span>}
+              {n === 0 && <span className="ghostText">{items.isError ? "Couldn't be read" : !items.data ? "Reading…" : all.length ? "No archived work item matches" : "Nothing archived"}</span>}
             </div>
           ))}
       </div>

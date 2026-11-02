@@ -19,7 +19,9 @@ import {
   type RecordJson,
 } from "../../kernel/bridge/records";
 import { useAggregates, useGroupCounts } from "../../kernel/bridge/views";
+import { useManualWorkflows, useRunWorkflow } from "../../kernel/bridge/workflows";
 import DangerButton from "../../kernel/shell/DangerButton";
+import MenuButton from "../../kernel/shell/MenuButton";
 import { formatNumber } from "../../kernel/format/format";
 import { CellEditor, CellView, chipClass, editsInPlace, readOnly } from "./cells";
 import styles from "./Crm.module.css";
@@ -82,6 +84,9 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
   const remove = useDeleteRecord(slug, name);
   const restore = useRestoreRecord(slug, name);
   const destroy = useDestroyRecord(slug, name);
+  // The workflows a selection can start (D-068): Single ones run once a record, Bulk ones once.
+  const manual = useManualWorkflows(slug, name, !deleted).data ?? [];
+  const run = useRunWorkflow(slug);
   const [editing, setEditing] = useState<{ id: string; field: string } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [live, setLive] = useState<{ id: string; size: number } | null>(null);
@@ -90,7 +95,7 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
   const [footerMenu, setFooterMenu] = useState<string | null>(null);
   const openHead = useDismiss<HTMLTableCellElement>(menu !== null, () => setMenu(null));
   const openFoot = useDismiss<HTMLTableCellElement>(footerMenu !== null, () => setFooterMenu(null));
-  const error = update.error ?? create.error ?? remove.error ?? restore.error ?? destroy.error;
+  const error = update.error ?? create.error ?? remove.error ?? restore.error ?? destroy.error ?? run.error;
   const ops = columns.filter((c) => c.aggregate).map((c) => ({ field: c.field.name, sub: null, op: c.aggregate as string }));
   const totals = useAggregates(slug, name, query, ops);
 
@@ -145,9 +150,16 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
               </DangerButton>
             </>
           ) : (
-            <button type="button" className="btn btnDanger btnCompact" onClick={() => act((id) => remove.mutate(id))}>
-              Delete
-            </button>
+            <>
+              {manual.length > 0 && (
+                <MenuButton label="Run workflow on the selected records" className="btn btnSecondary btnCompact" items={manual.map((w) => ({ label: `Run ${w.name}`, disabled: run.isPending, onSelect: () => run.mutate({ workflowId: w.workflow_id, recordIds: selected }, { onSuccess: () => setSelected([]) }) }))}>
+                  Run workflow
+                </MenuButton>
+              )}
+              <button type="button" className="btn btnDanger btnCompact" onClick={() => act((id) => remove.mutate(id))}>
+                Delete
+              </button>
+            </>
           )}
           <button type="button" className="btn btnGhost btnCompact" onClick={() => setSelected([])}>
             Clear

@@ -61,8 +61,8 @@ export default function MenuButton({
       </button>
       {open && (
         <div ref={list} className="glass menu" role="menu">
-          {items.map((item) => (
-            <div key={item.label} role="none">
+          {items.map((item, i) => (
+            <div key={`${i}-${item.label}`} role="none">
               {item.separator && <div className="menuSeparator" role="separator" />}
               <button
                 type="button"

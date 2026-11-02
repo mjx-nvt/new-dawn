@@ -199,8 +199,16 @@ export function CellEditor({ slug, field, record, onSave, onCancel }: EditorProp
       return <PartsEditor parts={[["primaryLinkUrl", "URL"], ["primaryLinkLabel", "Label"]]} initial={asRecord(value)} onSave={onSave} onCancel={onCancel} />;
     case "EMAILS":
       return <PartsEditor parts={[["primaryEmail", "Email"]]} initial={asRecord(value)} onSave={onSave} onCancel={onCancel} />;
-    case "PHONES":
-      return <PartsEditor parts={[["primaryPhoneCallingCode", "+84"], ["primaryPhoneNumber", "Number"]]} initial={asRecord(value)} onSave={onSave} onCancel={onCancel} />;
+    case "PHONES": {
+      // A number saved with neither a calling code nor a country takes the field's default
+      // country (Data model's setting); a blank number stays blank.
+      const withCountry = (v: unknown) => {
+        const p = asRecord(v);
+        const fill = field.options.country && str(p.primaryPhoneNumber) && !str(p.primaryPhoneCallingCode) && !str(p.primaryPhoneCountryCode);
+        onSave(fill ? { ...p, primaryPhoneCountryCode: field.options.country } : p);
+      };
+      return <PartsEditor parts={[["primaryPhoneCallingCode", "+84"], ["primaryPhoneNumber", "Number"]]} initial={asRecord(value)} onSave={withCountry} onCancel={onCancel} />;
+    }
     case "ADDRESS":
       return (
         <PartsEditor
