@@ -256,6 +256,16 @@ export const commands = {
 	setPmPrefs: (prefs: PmPrefs) => typedError<PmPrefs, AppError>(__TAURI_INVOKE("set_pm_prefs", { prefs })),
 	getPmDisplay: (slug: string, projectId: string) => typedError<PmDisplay, AppError>(__TAURI_INVOKE("get_pm_display", { slug, projectId })),
 	setPmDisplay: (slug: string, projectId: string, display: PmDisplay) => typedError<PmDisplay, AppError>(__TAURI_INVOKE("set_pm_display", { slug, projectId, display })),
+	/**  Work items as the filters say — a project's, or the workspace's open projects' (none). */
+	queryPmItems: (slug: string, projectId: string | null, rules: PmRule[]) => typedError<PmItem_Serialize[], AppError>(__TAURI_INVOKE("query_pm_items", { slug, projectId, rules })),
+	/**  A project's views, or the workspace's (none). */
+	listPmViews: (slug: string, projectId: string | null) => typedError<PmView_Serialize[], AppError>(__TAURI_INVOKE("list_pm_views", { slug, projectId })),
+	createPmView: (slug: string, input: PmViewInput_Deserialize) => typedError<PmView_Serialize, AppError>(__TAURI_INVOKE("create_pm_view", { slug, input })),
+	updatePmView: (slug: string, id: string, patch: PmViewPatch_Deserialize) => typedError<PmView_Serialize, AppError>(__TAURI_INVOKE("update_pm_view", { slug, id, patch })),
+	duplicatePmView: (slug: string, id: string) => typedError<PmView_Serialize, AppError>(__TAURI_INVOKE("duplicate_pm_view", { slug, id })),
+	deletePmView: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_view", { slug, id })),
+	/**  Into the sidebar's Favorites, or out. */
+	favoritePmView: (slug: string, id: string, on: boolean) => typedError<PmView_Serialize, AppError>(__TAURI_INVOKE("favorite_pm_view", { slug, id, on })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -3538,6 +3548,12 @@ export type PmRelationKind = "relates_to" | "duplicate" | "blocked_by" |
 /**  Stored as the other item's Blocked by. */
 "blocking";
 
+export type PmRule = {
+	field: string,
+	op: string,
+	values: string[],
+};
+
 export type PmState = {
 	id: string,
 	project_id: string,
@@ -3565,6 +3581,87 @@ export type PmVersion_Serialize = {
 	description: Json | null,
 	description_text: string,
 	created_by: string,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmView = PmView_Serialize | PmView_Deserialize;
+
+export type PmViewInput = PmViewInput_Serialize | PmViewInput_Deserialize;
+
+export type PmViewInput_Deserialize = {
+	project_id?: string | null,
+	name: string,
+	description: string,
+	rules: PmRule[],
+	display: PmDisplay,
+	is_private: boolean,
+};
+
+export type PmViewInput_Serialize = {
+	project_id: string | null,
+	name: string,
+	description: string,
+	rules: PmRule[],
+	display: PmDisplay,
+	is_private: boolean,
+};
+
+/**  The edits; a field left out stays. A locked view takes only its unlocking. */
+export type PmViewPatch = PmViewPatch_Serialize | PmViewPatch_Deserialize;
+
+/**  The edits; a field left out stays. A locked view takes only its unlocking. */
+export type PmViewPatch_Deserialize = {
+	name?: string | null,
+	description?: string | null,
+	rules?: PmRule[] | null,
+	display?: PmDisplay | null,
+	is_private?: boolean | null,
+	is_locked?: boolean | null,
+	sort_order?: number | null,
+};
+
+/**  The edits; a field left out stays. A locked view takes only its unlocking. */
+export type PmViewPatch_Serialize = {
+	name: string | null,
+	description: string | null,
+	rules: PmRule[] | null,
+	display: PmDisplay | null,
+	is_private: boolean | null,
+	is_locked: boolean | null,
+	sort_order: number | null,
+};
+
+export type PmView_Deserialize = {
+	id: string,
+	/**  None: a workspace view, across the projects. */
+	project_id?: string | null,
+	name: string,
+	description: string,
+	rules: PmRule[],
+	display: PmDisplay,
+	is_private: boolean,
+	is_locked: boolean,
+	/**  In the sidebar's Favorites. */
+	favorite: boolean,
+	sort_order: number | null,
+	created_at: string,
+	updated_at: string,
+};
+
+export type PmView_Serialize = {
+	id: string,
+	/**  None: a workspace view, across the projects. */
+	project_id: string | null,
+	name: string,
+	description: string,
+	rules: PmRule[],
+	display: PmDisplay,
+	is_private: boolean,
+	is_locked: boolean,
+	/**  In the sidebar's Favorites. */
+	favorite: boolean,
+	sort_order: number | null,
 	created_at: string,
 	updated_at: string,
 };

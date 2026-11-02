@@ -91,6 +91,23 @@ _2026-11-02_
 
 ---
 
+## D-077 — Plane's filters and views: rules turned into SQL, views as rows a project or the workspace, pinned like records
+_2026-11-02_
+
+**Context** (plan v4 §4.4, 0.11.4): Plane's filters — Title, State, State group, Assignees, Priority, Mentions, Labels, Created by, Start, Due, Created and Updated date with their operators (any of, none of; is, before, after, between, "or on", not, empty) — and its views: a project's (any layout) and the workspace's (All, Assigned to me, Created by me, Subscribed, then its own, as a spreadsheet), saved from the current layout, filters and display; updated, duplicated ("Copy of"), deleted, favorited; private and locked.
+
+**Decision — a rule a field, turned into SQL in Rust**: filters are rules `{field, op, values}` — the title (contains), the state, its group, the priority and who made it (any of / none of), assignees, labels, subscribers and the people a comment mentions (any of / none of, "none" for no assignee or no label), the start, due, created and updated days (is, is not, before, after, on or before, on or after, between, empty, not empty). The rules all hold; a rule's values, any one; a rule without values is no rule. Days are YYYY-MM-DD or words — today, tomorrow, yesterday, this, next or last week (from the owner's first day of the week, D-072), this, next or last month — resolved on this Mac's day. `filters.rs` builds the SQL with every value bound, the fields and operators from fixed lists; one query (`items::query`) serves a project's tab and the workspace's views (every open project's items, none archived).
+
+**Decision — views are rows** (0036 `pm_view`): a project's (its project) or the workspace's (none); the rules as one JSON array (nested), the layout and display as `pm_display`'s columns (with the calendar's span and the timeline's zoom; a view doesn't keep folded board columns); private and locked as flags — one owner, so they're labels, not rights; a locked view takes only its unlocking. A person deleted for good leaves its rules (a trigger), merged people become the kept one, once. The sidebar's Favorites hold a view like a record (`favorite.pm_view_id`) and open it — the workspace's views page, or its project's Work items.
+
+**Decision — an open view is a working copy**: opening a project's view puts its filters and display on the Work items tab; changing them changes that copy (the filters in the address, the display in the page) and the bar says so — Save view writes it back (not when locked), Save as a new view makes another, Close view returns to the tab's own remembered display (D-076), which a view never changes. Without a view the tab's filters live in the address, and Save as a view keeps them with the layout and display as they stand.
+
+**Where the owner sees it**: a filter bar under the Work items toolbar (Filters adds a rule; each rule a chip saying what it keeps, "Due date is this week", opened to change it; Clear all) and Save as a view; a project's **Views** tab (★ for Favorites, the layout, the filter count, Private, Locked; ⋯ Rename, Lock, Make it private, Duplicate; Delete; New view); Projects → **Views** for the workspace's — the four built in and the saved ones on the left, the spreadsheet of every open project's work items on the right with the filter bar, Save view and Save as a new view.
+
+**Means for future work**: cycles and modules add their fields to the rules (0.11.5, 0.11.6); the Projects agent (0.11.12) can read through the same query; Plane's API (0.11.11) takes the same rules.
+
+---
+
 ## D-076 — Plane's layouts: five views of one list, a drop is one change, the display remembered per project
 _2026-11-02_
 

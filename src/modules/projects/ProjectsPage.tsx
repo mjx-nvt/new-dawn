@@ -44,6 +44,9 @@ export default function ProjectsPage() {
           <h1 className="pageTitle">{search.archived ? "Archived projects" : "Projects"}</h1>
         </div>
         <span className={styles.actions}>
+          <Link to="/projects/views" className="btn btnGhost">
+            Views
+          </Link>
           <Link to="/projects/drafts" className="btn btnGhost">
             Drafts
           </Link>

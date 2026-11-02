@@ -12,6 +12,8 @@ use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
 use crate::modules::pm::display::{self, PmDisplay};
 use crate::modules::pm::drafts::{self, PmDraft};
+use crate::modules::pm::filters::PmRule;
+use crate::modules::pm::views::{self, PmView, PmViewInput, PmViewPatch};
 use crate::modules::pm::inbox::{self, InboxCounts, InboxQuery, Notice};
 use crate::modules::pm::items::{self, ItemFile, ItemInput, ItemPatch, PmActivity, PmItem, PmVersion};
 use crate::modules::pm::relations::{self, PmItemRef, PmAttachment, PmLink, PmRelation, PmRelationKind};
@@ -465,4 +467,51 @@ pub async fn get_pm_display(hub: State<'_, WorkspaceHub>, slug: String, project_
 #[specta::specta]
 pub async fn set_pm_display(hub: State<'_, WorkspaceHub>, slug: String, project_id: String, display: PmDisplay) -> Result<PmDisplay, AppError> {
     Ok(display::set(&hub.pool(&slug)?, &project_id, display).await?)
+}
+
+// ── 0.11.4 (D-077): filters and views ──
+
+/// Work items as the filters say — a project's, or the workspace's open projects' (none).
+#[tauri::command]
+#[specta::specta]
+pub async fn query_pm_items(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>, rules: Vec<PmRule>) -> Result<Vec<PmItem>, AppError> {
+    Ok(items::query_now(&hub, &slug, project_id.as_deref().filter(|p| !p.is_empty()), &rules).await?)
+}
+
+/// A project's views, or the workspace's (none).
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_views(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>) -> Result<Vec<PmView>, AppError> {
+    Ok(views::list(&hub.pool(&slug)?, project_id.as_deref().filter(|p| !p.is_empty())).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_pm_view(hub: State<'_, WorkspaceHub>, slug: String, input: PmViewInput) -> Result<PmView, AppError> {
+    Ok(views::create(&hub.pool(&slug)?, input).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: String, patch: PmViewPatch) -> Result<PmView, AppError> {
+    Ok(views::update(&hub.pool(&slug)?, &id, patch).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn duplicate_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmView, AppError> {
+    Ok(views::duplicate(&hub.pool(&slug)?, &id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    Ok(views::delete(&hub.pool(&slug)?, &id).await?)
+}
+
+/// Into the sidebar's Favorites, or out.
+#[tauri::command]
+#[specta::specta]
+pub async fn favorite_pm_view(hub: State<'_, WorkspaceHub>, slug: String, id: String, on: bool) -> Result<PmView, AppError> {
+    Ok(views::favorite(&hub.pool(&slug)?, &id, on).await?)
 }

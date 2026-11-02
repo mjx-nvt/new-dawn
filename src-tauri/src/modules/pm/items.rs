@@ -213,6 +213,28 @@ macro_rules! select {
     };
 }
 
+/// Work items as filters say (D-077) — a project's, or every open project's for a workspace view
+/// — not archived, in their order. `today` and `start` place the filters' day words.
+pub async fn query(pool: &SqlitePool, project_id: Option<&str>, rules: &[super::filters::PmRule], today: chrono::NaiveDate, start: crate::kernel::formats::WeekStart) -> Result<Vec<PmItem>> {
+    let (filter, binds) = super::filters::sql(rules, today, start)?;
+    let scope = if project_id.is_some() { "i.project_id = ?" } else { "m.archived_at IS NULL" };
+    let sql = format!("{} WHERE {scope} AND i.archived_at IS NULL{filter} ORDER BY i.sort_order, i.sequence", select!(""));
+    let mut q = sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(sql));
+    if let Some(p) = project_id {
+        q = q.bind(p.to_owned());
+    }
+    for b in binds {
+        q = q.bind(b);
+    }
+    Ok(q.fetch_all(pool).await?.into_iter().map(PmItem::from).collect())
+}
+
+/// `query` on this Mac's day, the owner's week start from the formats (D-072).
+pub async fn query_now(hub: &crate::kernel::hub::WorkspaceHub, slug: &str, project_id: Option<&str>, rules: &[super::filters::PmRule]) -> Result<Vec<PmItem>> {
+    let start = crate::kernel::formats::get(hub).await.map(|f| f.week_start).unwrap_or_default();
+    query(&hub.pool(slug)?, project_id, rules, chrono::Local::now().date_naive(), start).await
+}
+
 /// A project's work items — the archived ones, or the others — in their order.
 pub async fn list(pool: &SqlitePool, project_id: &str, archived: bool) -> Result<Vec<PmItem>> {
     let rows: Vec<Row> = if archived {

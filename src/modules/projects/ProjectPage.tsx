@@ -8,6 +8,7 @@ import MenuButton from "../../kernel/shell/MenuButton";
 import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
 import Archived from "./items/Archived";
+import Views from "./items/Views";
 import WorkItems from "./items/WorkItems";
 import ProjectSettings from "./ProjectSettings";
 import styles from "./Projects.module.css";
@@ -18,11 +19,10 @@ const route = getRouteApi("/shell/projects/$projectId");
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
 
 /** The parts of a project Plane has that later releases fill (cycles 0.11.5, modules 0.11.6,
- *  views 0.11.4, pages 0.11.7, intake 0.11.8): their structure now. */
+ *  pages 0.11.7, intake 0.11.8): their structure now. */
 const PLANE_TABS: Record<string, { title: string; hint: string; columns: string[]; none: string }> = {
   cycles: { title: "Cycles", hint: "Short, repeating periods of work, each with its items and progress.", columns: ["Cycle", "Dates", "Progress", "Lead"], none: "No cycles yet" },
   modules: { title: "Modules", hint: "Larger pieces of work, each grouping its items.", columns: ["Module", "Status", "Dates", "Lead"], none: "No modules yet" },
-  views: { title: "Views", hint: "Saved filters, orders and layouts of the work items.", columns: ["View", "Filters", "Layout"], none: "No views yet" },
   pages: { title: "Pages", hint: "Documents kept beside the work.", columns: ["Page", "Updated", "Owner"], none: "No pages yet" },
   intake: { title: "Intake", hint: "Requests to triage before they become work items.", columns: ["Request", "Status", "Received"], none: "No requests yet" },
 };
@@ -140,6 +140,7 @@ export default function ProjectPage() {
       {tab === "settings" && pm && slug && <ProjectSettings slug={slug} project={pm} section={section} />}
       {tab === "items" && pm && slug && <WorkItems slug={slug} project={pm} />}
       {tab === "archives" && pm && slug && <Archived slug={slug} projectId={pm.id} />}
+      {tab === "views" && pm && slug && <Views slug={slug} project={pm} />}
       {PLANE_TABS[tab] && <PlaneTab {...PLANE_TABS[tab]} />}
       {tab === "overview" && (
       <>

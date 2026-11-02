@@ -141,6 +141,15 @@ pub async fn favorites(pool: &SqlitePool) -> Result<Favorites> {
         let id: String = row.try_get("id")?;
         let folder_id: Option<String> = row.try_get("folder_id")?;
         let position: f64 = row.try_get("position")?;
+        // A Projects view (D-077): its object is "pm-views", its record the project (none: the
+        // workspace's).
+        let pm_view: Option<String> = row.try_get("pm_view_id")?;
+        if let Some(pm_view) = pm_view {
+            let view: Option<(String, Option<String>)> = sqlx::query_as("SELECT name, project_id FROM pm_view WHERE id = ?").bind(&pm_view).fetch_optional(pool).await?;
+            let Some((name, project_id)) = view else { continue };
+            items.push(Favorite { id, folder_id, position, object: "pm-views".into(), object_label: "Views".into(), record_id: project_id, view_id: Some(pm_view), label: name });
+            continue;
+        }
         let view_id: Option<String> = row.try_get("view_id")?;
         if let Some(view_id) = view_id {
             let view: Option<(String, String)> = sqlx::query_as("SELECT v.name, o.id FROM view v JOIN object_meta o ON o.id = v.object_id WHERE v.id = ?").bind(&view_id).fetch_optional(pool).await?;

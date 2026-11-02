@@ -12,15 +12,17 @@ const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyC
 /** Plane's spreadsheet (D-076): a row an item, a column a property the display shows (Created on
  *  and by, Updated on too); each cell edited where it is. The arrow keys move between cells,
  *  Enter goes into one and Escape comes back out; a checkbox a row for the bulk bar. */
-export default function Table({ slug, project, has, who, onPeek, groups, selected, onPick }: LayoutProps & { groups: Group[]; selected: string[]; onPick: (ids: string[], on: boolean) => void }) {
+export default function Table({ slug, project, has, who, onPeek, groups, selected, onPick }: Omit<LayoutProps, "project"> & { project?: LayoutProps["project"]; groups: Group[]; selected?: string[]; onPick?: (ids: string[], on: boolean) => void }) {
   const update = useUpdatePmItem(slug);
   const table = useRef<HTMLTableElement>(null);
-  const ro = !!project.archived_at;
+  // Across projects (a workspace view): no project to be archived, and no bulk bar.
+  const ro = !!project?.archived_at;
+  const picking = !!onPick && !!selected;
   const cols = COLUMNS.filter(has);
   // The table lists the items in the groups' order (the grouping orders, the table doesn't head).
   const rows: PmItem[] = groups.flatMap((g) => g.items).filter((i, n, all) => all.findIndex((x) => x.id === i.id) === n);
   const save = (i: PmItem, patch: ItemPatch) => update.mutate({ id: i.id, patch });
-  const all = rows.length > 0 && rows.every((i) => selected.includes(i.id));
+  const all = picking && rows.length > 0 && rows.every((i) => selected?.includes(i.id));
 
   const focusCell = (row: number, col: number) => table.current?.querySelector<HTMLElement>(`td[data-row="${row}"][data-col="${col}"]`)?.focus();
   const onKey = (e: ReactKeyboardEvent<HTMLTableElement>) => {
@@ -89,9 +91,11 @@ export default function Table({ slug, project, has, who, onPeek, groups, selecte
       <table ref={table} className={styles.table} onKeyDown={onKey} aria-label="Work items">
         <thead>
           <tr>
-            <th scope="col">
-              <input type="checkbox" aria-label="Select every work item" checked={all} disabled={!rows.length || ro} onChange={(e) => onPick(rows.map((i) => i.id), e.target.checked)} />
-            </th>
+            {picking && (
+              <th scope="col">
+                <input type="checkbox" aria-label="Select every work item" checked={all} disabled={!rows.length || ro} onChange={(e) => onPick?.(rows.map((i) => i.id), e.target.checked)} />
+              </th>
+            )}
             <th scope="col">ID</th>
             <th scope="col">Title</th>
             {cols.map((c) => (
@@ -107,11 +111,13 @@ export default function Table({ slug, project, has, who, onPeek, groups, selecte
             const at = () => c++;
             return (
               <tr key={i.id}>
-                <td data-row={r} data-col={at()} tabIndex={r === 0 ? 0 : -1}>
-                  <input type="checkbox" aria-label={`Select ${i.key}`} checked={selected.includes(i.id)} disabled={ro} onChange={(e) => onPick([i.id], e.target.checked)} />
-                </td>
+                {picking && (
+                  <td data-row={r} data-col={at()} tabIndex={r === 0 ? 0 : -1}>
+                    <input type="checkbox" aria-label={`Select ${i.key}`} checked={!!selected?.includes(i.id)} disabled={ro} onChange={(e) => onPick?.([i.id], e.target.checked)} />
+                  </td>
+                )}
                 {/* The key opens the item: always shown here, whatever the display says. */}
-                <td data-row={r} data-col={at()} tabIndex={-1}>
+                <td data-row={r} data-col={at()} tabIndex={!picking && r === 0 ? 0 : -1}>
                   <button type="button" className={styles.keyButton} onClick={() => onPeek(i.id)}>
                     {i.key}
                   </button>
@@ -139,7 +145,7 @@ export default function Table({ slug, project, has, who, onPeek, groups, selecte
           {!rows.length &&
             [0, 1].map((n) => (
               <tr key={n} className="ghostCard">
-                <td colSpan={cols.length + 3}>{n === 0 && <span className="ghostText">No work items to show</span>}</td>
+                <td colSpan={cols.length + (picking ? 3 : 2)}>{n === 0 && <span className="ghostText">No work items match</span>}</td>
               </tr>
             ))}
         </tbody>

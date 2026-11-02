@@ -330,6 +330,20 @@ pub async fn merge(pool: &SqlitePool, keep: &str, other: &str) -> Result<Person>
         .bind(&o.id)
         .execute(&mut *tx)
         .await?;
+    // Views' filters name people by id inside their people rules (D-077): the merged one becomes
+    // the kept one, once.
+    sqlx::query(
+        "UPDATE pm_view SET rules_json = (SELECT json_group_array(json(CASE \
+             WHEN json_extract(r.value, '$.field') IN ('assignees', 'created_by', 'subscribers', 'mentions') \
+             THEN json_set(r.value, '$.values', json((SELECT json_group_array(DISTINCT CASE WHEN v.value = ?2 THEN ?1 ELSE v.value END) FROM json_each(r.value, '$.values') AS v))) \
+             ELSE r.value END)) FROM json_each(pm_view.rules_json) AS r) \
+         WHERE EXISTS (SELECT 1 FROM json_each(pm_view.rules_json) AS r, json_each(r.value, '$.values') AS v \
+                       WHERE json_extract(r.value, '$.field') IN ('assignees', 'created_by', 'subscribers', 'mentions') AND v.value = ?2)",
+    )
+    .bind(&k.id)
+    .bind(&o.id)
+    .execute(&mut *tx)
+    .await?;
     // A board grouped by assignees keeps the kept person's column folded (D-076).
     sqlx::query(
         "UPDATE pm_display SET collapsed_json = (SELECT json_group_array(DISTINCT CASE WHEN c.value = ?2 THEN ?1 ELSE c.value END) \

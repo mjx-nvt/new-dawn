@@ -95,8 +95,9 @@ pub async fn get(pool: &SqlitePool, project_id: &str) -> Result<PmDisplay> {
         .unwrap_or_default())
 }
 
-pub async fn set(pool: &SqlitePool, project_id: &str, display: PmDisplay) -> Result<PmDisplay> {
-    super::get(pool, project_id).await?;
+/// A display checked: known layout, grouping, order, span, zoom and properties; a sub-group that
+/// repeats the grouping (or state with state group) is none. Views keep displays too (D-077).
+pub fn check(display: PmDisplay) -> Result<PmDisplay> {
     let one_of = |what: &str, value: &str, known: &[&str]| if known.contains(&value) { Ok(()) } else { Err(invalid(format!("Unknown {what} \"{value}\""))) };
     one_of("layout", &display.layout, &LAYOUTS)?;
     one_of("grouping", &display.group, &GROUPS)?;
@@ -110,12 +111,17 @@ pub async fn set(pool: &SqlitePool, project_id: &str, display: PmDisplay) -> Res
     if display.collapsed.len() > 100 {
         return Err(invalid("Too many folded columns"));
     }
-    // A sub-group that repeats the grouping (or state with state group) is none.
     let mut display = display;
     let pair = |a: &str, b: &str| a == b || (["state", "group"].contains(&a) && ["state", "group"].contains(&b));
     if pair(&display.sub_group, &display.group) {
         display.sub_group = "none".into();
     }
+    Ok(display)
+}
+
+pub async fn set(pool: &SqlitePool, project_id: &str, display: PmDisplay) -> Result<PmDisplay> {
+    super::get(pool, project_id).await?;
+    let display = check(display)?;
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO pm_display (project_id, layout, group_by, sub_group_by, order_by, properties_json, sub_items, empty_groups, calendar, zoom, collapsed_json) \
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (project_id) DO UPDATE SET layout = excluded.layout, group_by = excluded.group_by, \

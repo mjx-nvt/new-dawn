@@ -12,7 +12,11 @@ export function useFavorites(slug: string | undefined) {
 
 function useRefreshFavorites(slug: string | undefined) {
   const queryClient = useQueryClient();
-  return () => void queryClient.invalidateQueries({ queryKey: ["favorites", slug ?? ""] });
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ["favorites", slug ?? ""] });
+    // A Projects view's ★ reads the favorites too (D-077).
+    void queryClient.invalidateQueries({ queryKey: ["pm-views", slug ?? ""] });
+  };
 }
 
 export function useAddFavorite(slug: string | undefined) {

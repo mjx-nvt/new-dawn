@@ -9,10 +9,12 @@ pub mod bulk;
 pub mod comments;
 pub mod display;
 pub mod drafts;
+pub mod filters;
 pub mod inbox;
 pub mod items;
 pub mod relations;
 pub mod settings;
+pub mod views;
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};

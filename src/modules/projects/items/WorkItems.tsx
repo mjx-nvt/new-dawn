@@ -1,7 +1,8 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { usePmLabels, usePmStates, type PmProject } from "../../../kernel/bridge/pm";
-import { usePmDisplay, usePmItems, useSetPmDisplay, useUpdatePmItem, type ItemInput, type ItemPatch, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
+import { usePmDisplay, useSetPmDisplay, useUpdatePmItem, type ItemInput, type ItemPatch, type PmDisplay, type PmItem } from "../../../kernel/bridge/pmItems";
+import { readRules, usePmQuery, usePmViews, useViewMutations, type PmRule } from "../../../kernel/bridge/pmViews";
 import { usePeople } from "../../../kernel/bridge/people";
 import { inField } from "../../../kernel/shell/useShortcuts";
 import { whoName } from "../pm";
@@ -9,11 +10,13 @@ import Board from "./Board";
 import BulkBar from "./BulkBar";
 import Calendar from "./Calendar";
 import CreateItem from "./CreateItem";
+import FilterBar from "./FilterBar";
 import ItemPeek, { type PeekMode } from "./ItemPeek";
 import { DEFAULT_DISPLAY, GROUP_BY, LAYOUTS, ORDER_BY, PROPERTIES, PROPERTY_LABEL, grouped, moveTo, ordered, type Group, type GroupBy, type Layout, type OrderBy, type Property } from "./items";
 import { Dot, ItemProps, QuickAdd } from "./Props";
 import Table from "./Table";
 import Timeline from "./Timeline";
+import ViewSheet from "./ViewSheet";
 import styles from "./Items.module.css";
 
 const route = getRouteApi("/shell/projects/$projectId");
@@ -26,33 +29,52 @@ const route = getRouteApi("/shell/projects/$projectId");
 export default function WorkItems({ slug, project }: { slug: string; project: PmProject }) {
   const search = route.useSearch();
   const navigate = useNavigate();
-  const items = usePmItems(slug, project.id);
+  // A view open (D-077): its filters and display are the working ones until Save view; the
+  // filters the URL holds (`f`) are changes to them, or the tab's own without a view.
+  const viewsQuery = usePmViews(slug, project.id);
+  const view = search.view ? viewsQuery.data?.find((v) => v.id === search.view) : undefined;
+  const viewMuts = useViewMutations(slug);
+  const rules: PmRule[] = readRules(search.f) ?? view?.rules ?? [];
+  // Not before an open view is read: its filters, not every item.
+  const items = usePmQuery(slug, project.id, rules, !search.view || viewsQuery.isFetched);
+  const [saving, setSaving] = useState(false);
   const states = usePmStates(slug, project.id).data ?? [];
   const labels = usePmLabels(slug, project.id).data ?? [];
   const people = usePeople(slug).data ?? [];
   const update = useUpdatePmItem(slug);
   const stored = usePmDisplay(slug, project.id);
   const keep = useSetPmDisplay(slug, project.id);
-  const display: PmDisplay = stored.data ?? DEFAULT_DISPLAY;
-  // Nothing drawn or changed until the items and the kept display are read (no flash of the
-  // defaults, no defaults written over the kept display).
-  const ready = !!items.data && (!!stored.data || stored.isError);
+  // The open view's working copy, tied to that view as saved (a new view, or the view saved again,
+  // starts from what it keeps).
+  const [working, setWorking] = useState<{ key: string; d: PmDisplay } | null>(null);
+  const viewKey = view ? `${view.id}:${view.updated_at}` : "";
+  const display: PmDisplay = view ? (working?.key === viewKey ? working.d : view.display) : (stored.data ?? DEFAULT_DISPLAY);
+  // Nothing drawn or changed until the items, the kept display and the open view are read (no
+  // flash of the defaults, no defaults written over the kept display).
+  const ready = !!items.data && (!!stored.data || stored.isError) && (!search.view || viewsQuery.isFetched);
+  const same = (a: PmDisplay, b: PmDisplay) =>
+    a.layout === b.layout && a.group === b.group && a.sub_group === b.sub_group && a.order === b.order && a.sub_items === b.sub_items && a.empty_groups === b.empty_groups && a.calendar === b.calendar && a.zoom === b.zoom && JSON.stringify(a.properties) === JSON.stringify(b.properties);
+  const changed = !!view && (!same(display, view.display) || JSON.stringify(rules) !== JSON.stringify(view.rules));
   const [creating, setCreating] = useState<Partial<ItemInput> | null>(null);
   // The row dragged and the group it left (an item can sit in several: labels, assignees).
   const [dragging, setDragging] = useState<{ id: string; from: string } | null>(null);
   // Bulk changes (D-075): the selected items, in the order picked.
   const [selected, setSelected] = useState<string[]>([]);
   const pick = (ids: string[], on: boolean) => setSelected((now) => (on ? [...now, ...ids.filter((id) => !now.includes(id))] : now.filter((id) => !ids.includes(id))));
-  const layout: Layout = LAYOUTS.find((l) => l.key === (search.layout ?? display.layout))?.key ?? "list";
-  const group: GroupBy = GROUP_BY.find((g) => g.key === (search.group ?? display.group))?.key ?? "state";
+  // With a view open the URL's layout choices don't apply: the view's working display does.
+  const url = view ? {} : search;
+  const layout: Layout = LAYOUTS.find((l) => l.key === (url.layout ?? display.layout))?.key ?? "list";
+  const group: GroupBy = GROUP_BY.find((g) => g.key === (url.group ?? display.group))?.key ?? "state";
   const clash = (a: GroupBy, b: GroupBy) => a === b || (["state", "group"].includes(a) && ["state", "group"].includes(b));
-  const wantedSub: GroupBy = GROUP_BY.find((g) => g.key === (search.sub ?? display.sub_group))?.key ?? "none";
+  const wantedSub: GroupBy = GROUP_BY.find((g) => g.key === (url.sub ?? display.sub_group))?.key ?? "none";
   // A sub-group that repeats the grouping (or state with state group) is none.
   const sub: GroupBy = wantedSub !== "none" && clash(wantedSub, group) ? "none" : wantedSub;
-  const order: OrderBy = ORDER_BY.find((o) => o.key === (search.order ?? display.order))?.key ?? "manual";
+  const order: OrderBy = ORDER_BY.find((o) => o.key === (url.order ?? display.order))?.key ?? "manual";
   const set = (patch: Record<string, string | undefined>) => void navigate({ to: "/projects/$projectId", params: { projectId: project.id }, search: { ...search, ...patch }, replace: true });
-  /** Kept with the project (and taken out of the URL, which now says the same). */
-  const remember = (patch: Partial<PmDisplay>) => keep.mutate({ ...display, ...patch });
+  /** Kept with the project (and taken out of the URL, which now says the same) — or, with a view
+   *  open, into its working display until Save view. */
+  const remember = (patch: Partial<PmDisplay>) => (view ? setWorking({ key: viewKey, d: { ...display, ...patch } }) : keep.mutate({ ...display, ...patch }));
+  const filter = (next: PmRule[]) => set({ f: next.length ? JSON.stringify(next) : view ? "[]" : undefined });
   const choose = (key: "layout" | "group" | "sub" | "order", value: string) => {
     set({ [key]: undefined });
     if (key === "layout") setSelected([]);
@@ -182,11 +204,44 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           New work item
         </button>
       </div>
-      {(items.error ?? update.error ?? keep.error) && (
+      {view && (
+        <div className={styles.viewBar}>
+          <span className="chip chipPrimary">View</span>
+          <strong>{view.name}</strong>
+          {view.is_locked && <span className="chip">Locked</span>}
+          {changed && <span className="fieldHint">Changed — not saved</span>}
+          <span className={styles.spacer} />
+          <button
+            type="button"
+            className="btn btnSecondary btnCompact"
+            title={view.is_locked ? "Locked — unlock it under Views to change it" : undefined}
+            disabled={!changed || view.is_locked || ro || viewMuts.update.isPending}
+            onClick={() => viewMuts.update.mutate({ id: view.id, patch: { rules, display } }, { onSuccess: () => set({ f: undefined }) })}
+          >
+            Save view
+          </button>
+          <button type="button" className="btn btnGhost btnCompact" disabled={ro} onClick={() => setSaving(true)}>
+            Save as a new view
+          </button>
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => set({ view: undefined, f: undefined })}>
+            Close view
+          </button>
+        </div>
+      )}
+      <div className={styles.inline}>
+        <FilterBar slug={slug} projectId={project.id} rules={rules} onChange={filter} />
+        {!view && (
+          <button type="button" className="btn btnGhost btnCompact" disabled={!ready || ro} onClick={() => setSaving(true)}>
+            Save as a view
+          </button>
+        )}
+      </div>
+      {(items.error ?? update.error ?? keep.error ?? viewMuts.update.error) && (
         <p className="formError" role="alert">
-          {(items.error ?? update.error ?? keep.error)?.message}
+          {(items.error ?? update.error ?? keep.error ?? viewMuts.update.error)?.message}
         </p>
       )}
+      {search.view && viewsQuery.isFetched && !view && <p className="formError">That view is gone — showing the work items as they are.</p>}
       {!ready &&
         [0, 1].map((n) => (
           <div key={n} className={`${styles.row} ghostCard`}>
@@ -259,6 +314,19 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
         ))}
       {chosen.length > 0 && (layout === "list" || layout === "table") && <BulkBar slug={slug} project={project} ids={chosen} onClear={() => setSelected([])} />}
       {creating && <CreateItem slug={slug} projectId={project.id} preset={creating} onClose={() => setCreating(null)} />}
+      {saving && (
+        <ViewSheet
+          slug={slug}
+          projectId={project.id}
+          rules={rules}
+          display={{ ...display, layout, group, sub_group: sub, order }}
+          onClose={() => setSaving(false)}
+          onSaved={(v) => {
+            setSaving(false);
+            set({ view: v.id, f: undefined, layout: undefined, group: undefined, sub: undefined, order: undefined });
+          }}
+        />
+      )}
       {search.peek && (
         <ItemPeek
           slug={slug}

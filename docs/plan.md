@@ -244,7 +244,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0033 | `pm_item` (numbered per project: `pm_project.last_sequence`), `pm_item_assignee`, `pm_item_label`, `pm_item_subscriber`, `pm_comment`, `pm_reaction`, `pm_activity`, `pm_item_version`, `pm_mention`, `pm_draft` | 0.11.1 |
 | 0034 | `pm_relation`, `pm_link`, `pm_attachment`, `pm_vote`, `notification` (preferences are an app setting, D-075) | 0.11.2 |
 | 0035 | `pm_display` (a project's layout and display options, one owner; D-076) | 0.11.3 |
-| 0036 | `issue_view`, `workspace_view` | 0.11.4 |
+| 0036 | `pm_view` (a project's or the workspace's; rules as JSON), `favorite.pm_view_id` (D-077) | 0.11.4 |
 | 0037 | `cycle`, `cycle_issue` | 0.11.5 |
 | 0038 | `module`, `module_issue`, `module_link`, `module_member` | 0.11.6 |
 | 0039 | `page`, `page_label`, `page_version` | 0.11.7 |
@@ -389,7 +389,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.4 — Filters and views (2 sittings)
 - **Same as:** §4.4 (filters, views).
-- **Data:** 0036 (`issue_view`, `workspace_view`).
+- **Data:** 0036 (`pm_view`, `favorite.pm_view_id`).
 - **Screens and flows:** the filter bar with every field and operator; Views page per project (create from the current layout + filters + display options, update, duplicate, delete, favorite, private / lock flags); workspace Views (All · Assigned to me · Created by me · Subscribed, custom; spreadsheet) across projects.
 - **Done when:** "Assigned to me, due this week, not Done" is a favorited workspace view that opens from the sidebar.
 

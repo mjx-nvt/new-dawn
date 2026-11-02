@@ -68,6 +68,20 @@ export default function CrmNav({ slug, iconsOnly }: { slug: string | undefined; 
 
 function FavoriteLink({ favorite: p }: { favorite: Favorite }) {
   const mark = <span className={nav.mark}>{(p.label || "?").slice(0, 1).toUpperCase()}</span>;
+  // A Projects view (D-077): the workspace's views page, or its project's Work items.
+  if (p.object === "pm-views" && p.view_id) {
+    return p.record_id ? (
+      <Link to="/projects/$projectId" params={{ projectId: p.record_id }} search={{ tab: "items", view: p.view_id }} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={`${p.label} · Views`}>
+        {mark}
+        <span className={styles.label}>{p.label}</span>
+      </Link>
+    ) : (
+      <Link to="/projects/views" search={{ view: p.view_id }} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={`${p.label} · Views`}>
+        {mark}
+        <span className={styles.label}>{p.label}</span>
+      </Link>
+    );
+  }
   return p.view_id ? (
     <Link to="/crm" search={{ tab: p.object, view: p.view_id }} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={`${p.label} · ${p.object_label}`}>
       {mark}
