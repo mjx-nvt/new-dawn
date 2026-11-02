@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { selectOptions, useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
+import { useOllamaStatus } from "../../kernel/bridge/summary";
 import { CONDITION_OPS, STEP_TYPES, type Branch, type Condition, type Step, type Trigger } from "../../kernel/bridge/workflows";
 import { kindOf, needsValue, OPS, subsOf } from "../crm/views/useViewState";
 import OnOff from "../workspace-settings/OnOff";
+import { runCode, type CodeOutcome } from "./codeWorker";
 import s from "./Workflows.module.css";
 
 /** A value the owner can put in a setting: `{{path}}`, grouped for the picker. */
@@ -70,11 +73,15 @@ export function Row({ label, htmlFor, children }: { label: string; htmlFor?: str
 }
 
 /** A text setting with the variables picker beside it: picking one appends its `{{path}}`. */
-export function TemplateInput({ id, value, onChange, variables, placeholder }: { id?: string; value: string; onChange: (v: string) => void; variables: Variable[]; placeholder?: string }) {
+export function TemplateInput({ id, value, onChange, variables, placeholder, rows }: { id?: string; value: string; onChange: (v: string) => void; variables: Variable[]; placeholder?: string; rows?: number }) {
   const groups = [...new Set(variables.map((v) => v.group))];
   return (
     <div className={s.template}>
-      <input id={id} className="input" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      {rows ? (
+        <textarea id={id} className="input" rows={rows} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      ) : (
+        <input id={id} className="input" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      )}
       <select className="input" aria-label="Insert a variable" title="Insert a variable" value="" onChange={(e) => e.target.value && onChange(`${value}{{${e.target.value}}}`)}>
         <option value="">{"{x}"}</option>
         {groups.map((g) => (
@@ -710,7 +717,186 @@ export function StepSettings({ slug, step, variables, onChange }: { slug: string
           </Row>
         </>
       )}
+      {kind === "AI_AGENT" && <AiSettings step={step} set={set} variables={variables} />}
+      {kind === "SEND_EMAIL" && (
+        <>
+          <Row label="To" htmlFor="wf-mail-to">
+            <TemplateInput id="wf-mail-to" value={str(st.to)} placeholder="{{trigger.record.emails.primaryEmail}}" variables={variables} onChange={(to) => set({ to })} />
+          </Row>
+          <Row label="Cc" htmlFor="wf-mail-cc">
+            <TemplateInput id="wf-mail-cc" value={str(st.cc)} variables={variables} onChange={(cc) => set({ cc })} />
+          </Row>
+          <Row label="Subject" htmlFor="wf-mail-subject">
+            <TemplateInput id="wf-mail-subject" value={str(st.subject)} variables={variables} onChange={(subject) => set({ subject })} />
+          </Row>
+          <Row label="Body" htmlFor="wf-mail-body">
+            <TemplateInput id="wf-mail-body" rows={6} value={str(st.body)} variables={variables} onChange={(body) => set({ body })} />
+            <p className="fieldHint">The run makes the draft; its page opens it in Mail, where you press Send.</p>
+          </Row>
+        </>
+      )}
+      {kind === "HTTP_REQUEST" && <HttpSettings step={step} set={set} variables={variables} />}
+      {kind === "CODE" && <CodeSettings step={step} set={set} variables={variables} />}
     </div>
+  );
+}
+
+type Patch = (patch: Record<string, unknown>) => void;
+
+/** The AI step: a prompt with variables on the local model; outputs make it answer in JSON. */
+function AiSettings({ step, set, variables }: { step: Step; set: Patch; variables: Variable[] }) {
+  const ollama = useOllamaStatus();
+  const st = step.settings;
+  const outputs = Array.isArray(st.outputs) ? (st.outputs as { name: string; type: string }[]) : [];
+  const edit = (i: number, patch: Partial<{ name: string; type: string }>) => set({ outputs: outputs.map((o, j) => (j === i ? { ...o, ...patch } : o)) });
+  return (
+    <>
+      <Row label="Prompt" htmlFor="wf-ai-prompt">
+        <TemplateInput id="wf-ai-prompt" rows={6} value={str(st.prompt)} placeholder="Two lines on {{trigger.record.name}} for the weekly review" variables={variables} onChange={(prompt) => set({ prompt })} />
+      </Row>
+      <Row label="Model" htmlFor="wf-ai-model">
+        <select id="wf-ai-model" className="input" value={str(st.model)} onChange={(e) => set({ model: e.target.value })}>
+          <option value="">App default{ollama.data?.model ? ` (${ollama.data.model})` : ""}</option>
+          {(ollama.data?.installed ?? []).map((m) => (
+            <option key={m.name} value={m.name}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        {ollama.data && !ollama.data.running && <p className="fieldHint">Ollama isn't running: a run stops at this step until it is, then Retry.</p>}
+      </Row>
+      <Row label="Outputs">
+        <div className={s.blocks}>
+          {outputs.map((o, i) => (
+            <div key={i} className={s.inline}>
+              <input className="input" aria-label="Output name" value={o.name} placeholder="name" onChange={(e) => edit(i, { name: e.target.value.replace(/[^\w]/g, "") })} />
+              <select className="input fit" aria-label="Output type" value={o.type} onChange={(e) => edit(i, { type: e.target.value })}>
+                <option value="text">Text</option>
+                <option value="number">Number</option>
+                <option value="boolean">True / false</option>
+              </select>
+              <button type="button" className="btn btnGhost btnCompact" aria-label="Remove output" onClick={() => set({ outputs: outputs.filter((_, j) => j !== i) })}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => set({ outputs: [...outputs, { name: `value${outputs.length + 1}`, type: "text" }] })}>
+            + Add an output
+          </button>
+          <p className="fieldHint">
+            The answer is {"{{" + step.id + ".text}}"}; with outputs the model answers in JSON and each is {"{{" + step.id + ".<name>}}"} (an output can't be called text or model).
+          </p>
+        </div>
+      </Row>
+    </>
+  );
+}
+
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+/** The HTTP step: an address on this Mac, a method, headers and a body with variables. */
+function HttpSettings({ step, set, variables }: { step: Step; set: Patch; variables: Variable[] }) {
+  const st = step.settings;
+  const method = str(st.method) || "GET";
+  const headers = Array.isArray(st.headers) ? (st.headers as { key: string; value: string }[]) : [];
+  const edit = (i: number, patch: Partial<{ key: string; value: string }>) => set({ headers: headers.map((h, j) => (j === i ? { ...h, ...patch } : h)) });
+  return (
+    <>
+      <Row label="Method" htmlFor="wf-http-method">
+        <select id="wf-http-method" className="input" value={method} onChange={(e) => set({ method: e.target.value })}>
+          {METHODS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </Row>
+      <Row label="URL" htmlFor="wf-http-url">
+        <TemplateInput id="wf-http-url" value={str(st.url)} placeholder="http://localhost:3000/hook" variables={variables} onChange={(url) => set({ url })} />
+        <p className="fieldHint">This Mac only (localhost) — any other address is refused. 30 s, 10 MB.</p>
+      </Row>
+      <Row label="Headers">
+        <div className={s.blocks}>
+          {headers.map((h, i) => (
+            <div key={i} className={s.inline}>
+              <input className="input" aria-label="Header name" value={h.key} placeholder="Authorization" onChange={(e) => edit(i, { key: e.target.value })} />
+              <TemplateInput value={h.value} variables={variables} onChange={(value) => edit(i, { value })} />
+              <button type="button" className="btn btnGhost btnCompact" aria-label="Remove header" onClick={() => set({ headers: headers.filter((_, j) => j !== i) })}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => set({ headers: [...headers, { key: "", value: "" }] })}>
+            + Add a header
+          </button>
+        </div>
+      </Row>
+      {method !== "GET" && (
+        <Row label="Body" htmlFor="wf-http-body">
+          <TemplateInput id="wf-http-body" rows={5} value={str(st.body)} placeholder='{"name": "{{trigger.record.name}}"}' variables={variables} onChange={(body) => set({ body })} />
+        </Row>
+      )}
+      <p className="fieldHint">
+        The answer: {"{{" + step.id + ".status}}"} and {"{{" + step.id + ".body}}"} (its JSON, or its text). An answer that isn't 2xx stops the run.
+      </p>
+    </>
+  );
+}
+
+export const DEFAULT_CODE = `export const main = async (params) => {
+  const { name } = params;
+  return { greeting: \`Hello, \${name}\` };
+};
+`;
+
+/** The code step: JavaScript run in the window (a Web Worker), its inputs with variables; Test
+ *  runs it with the inputs as typed. */
+function CodeSettings({ step, set, variables }: { step: Step; set: Patch; variables: Variable[] }) {
+  const st = step.settings;
+  const inputs = st.inputs && typeof st.inputs === "object" && !Array.isArray(st.inputs) ? (st.inputs as Record<string, unknown>) : {};
+  const entries = Object.entries(inputs);
+  const [tried, setTried] = useState<CodeOutcome | null>(null);
+  const [trying, setTrying] = useState(false);
+  const rename = (i: number, name: string) => set({ inputs: Object.fromEntries(entries.map(([k, v], j) => (j === i ? [name, v] : [k, v]))) });
+  const test = async () => {
+    setTrying(true);
+    setTried(await runCode(str(st.code), inputs));
+    setTrying(false);
+  };
+  return (
+    <>
+      <Row label="Inputs">
+        <div className={s.blocks}>
+          {entries.map(([name, value], i) => (
+            <div key={i} className={s.inline}>
+              <input className="input narrow" aria-label="Input name" value={name} onChange={(e) => rename(i, e.target.value.replace(/[^\w]/g, ""))} />
+              <TemplateInput value={str(value)} variables={variables} onChange={(v) => set({ inputs: { ...inputs, [name]: v } })} />
+              <button type="button" className="btn btnGhost btnCompact" aria-label={`Remove ${name}`} onClick={() => set({ inputs: Object.fromEntries(entries.filter((_, j) => j !== i)) })}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" className="btn btnGhost btnCompact" onClick={() => set({ inputs: { ...inputs, [`input${entries.length + 1}`]: "" } })}>
+            + Add an input
+          </button>
+        </div>
+      </Row>
+      <Row label="Code" htmlFor="wf-code">
+        <textarea id="wf-code" className={`input ${s.code}`} rows={12} spellCheck={false} value={str(st.code)} onChange={(e) => set({ code: e.target.value })} />
+        <p className="fieldHint">JavaScript: main gets the inputs and returns an object — {"{{" + step.id + ".<key>}}"} after. It runs in New Dawn's window, without the network, 10 s at most.</p>
+      </Row>
+      <div className={s.inline}>
+        <button type="button" className="btn btnSecondary btnCompact" disabled={trying} onClick={() => void test()}>
+          Test
+        </button>
+        <span className="fieldHint">With the inputs as typed</span>
+      </div>
+      {tried && (
+        <pre className={s.json} role="status">
+          {tried.ok ? JSON.stringify(tried.output, null, 2) : tried.error}
+        </pre>
+      )}
+    </>
   );
 }
 
@@ -739,6 +925,14 @@ export function summarize(step: Step): string {
       return str(st.until) ? `Until ${str(st.until)}` : `${typeof st.amount === "number" ? st.amount : 0} ${(str(st.unit) || "MINUTES").toLowerCase()}`;
     case "FORM":
       return str(st.title) || `${formFields(step).length} field(s)`;
+    case "AI_AGENT":
+      return str(st.prompt).slice(0, 80) || "Write the prompt";
+    case "SEND_EMAIL":
+      return str(st.to) ? `To ${str(st.to)}` : "Pick the address";
+    case "HTTP_REQUEST":
+      return str(st.url) ? `${str(st.method) || "GET"} ${str(st.url)}` : "Pick the address";
+    case "CODE":
+      return `${Object.keys(st.inputs && typeof st.inputs === "object" ? (st.inputs as object) : {}).length} input(s)`;
     default:
       return "";
   }

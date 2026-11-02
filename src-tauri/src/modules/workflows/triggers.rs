@@ -79,7 +79,16 @@ pub async fn tick(pool: &SqlitePool, launched: DateTime<Utc>) -> Result<u32> {
     for (id, workflow_id, version_id, settings) in due {
         let t: Trigger = serde_json::from_str::<Value>(&settings).ok().map(|v| Trigger { kind: "SCHEDULE".into(), every: v.get("every").and_then(Value::as_u64).unwrap_or(0) as u32, unit: v.get("unit").and_then(Value::as_str).unwrap_or("").to_owned(), cron: v.get("cron").and_then(Value::as_str).unwrap_or("").to_owned(), ..Default::default() }).unwrap_or_default();
         let next = super::next_time(&t, Local::now()).map(|d| d.with_timezone(&Utc).to_rfc3339_opts(SecondsFormat::Secs, true));
-        sqlx::query("UPDATE workflow_automated_trigger SET next_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").bind(next).bind(&id).execute(pool).await?;
+        // The slot is taken by moving its time on: a tick that overlaps this one finds it gone.
+        let taken = sqlx::query("UPDATE workflow_automated_trigger SET next_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND (next_at IS NULL OR next_at <= ?)")
+            .bind(next)
+            .bind(&id)
+            .bind(now.to_rfc3339_opts(SecondsFormat::Secs, true))
+            .execute(pool)
+            .await?;
+        if taken.rows_affected() == 0 {
+            continue;
+        }
         match run::start(pool, &workflow_id, &version_id, json!({ "scheduled_at": now.to_rfc3339_opts(SecondsFormat::Secs, true) })).await {
             Ok(run_id) => {
                 if let Err(e) = run::execute(pool, &run_id).await {
@@ -96,13 +105,18 @@ pub async fn tick(pool: &SqlitePool, launched: DateTime<Utc>) -> Result<u32> {
 
 /// The listener on the engine's record events, and the minute's tick over every workspace.
 pub fn spawn(app: &AppHandle) {
+    super::set_app(app);
     let launched = Utc::now();
     if let Some(mut events) = events::subscribe() {
         tauri::async_runtime::spawn(async move {
+            // Each event's runs go on their own task: a slow step (an AI turn behind a meeting's
+            // summary, an HTTP call) never holds the next event up.
             while let Some(event) = events.recv().await {
-                if let Err(e) = on_record(&event.pool, &event).await {
-                    tracing::warn!("record trigger: {e:#}");
-                }
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = on_record(&event.pool, &event).await {
+                        tracing::warn!("record trigger: {e:#}");
+                    }
+                });
             }
         });
     }
@@ -114,9 +128,12 @@ pub fn spawn(app: &AppHandle) {
             if let Ok(workspaces) = hub.list().await {
                 for ws in workspaces {
                     if let Ok(pool) = hub.pool(&ws.slug) {
-                        if let Err(e) = tick(&pool, launched).await {
-                            tracing::warn!("workflow tick for {}: {e:#}", ws.slug);
-                        }
+                        // On its own task, like the events: one slow run never holds the minute.
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = tick(&pool, launched).await {
+                                tracing::warn!("workflow tick for {}: {e:#}", ws.slug);
+                            }
+                        });
                     }
                 }
             }

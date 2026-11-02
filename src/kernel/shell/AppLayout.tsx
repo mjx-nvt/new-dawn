@@ -7,9 +7,11 @@ import { useMenuAction, useWorkspacesSync } from "../bridge/events";
 import { useTranscriptionSync } from "../bridge/meetings";
 import { useRecorderStatus, useRecorderSync } from "../bridge/recorder";
 import { useSummarySync } from "../bridge/summary";
+import { useCurrentWorkspace } from "../bridge/workspaces";
 import RecorderBanner from "../../modules/recorder/RecorderBanner";
 import StartRecordingDialog from "../../modules/recorder/StartRecordingDialog";
 import { useStopAndOpen } from "../../modules/recorder/useStopAndOpen";
+import { useCodeRunner } from "../../modules/workflows/useCodeRunner";
 import styles from "./AppLayout.module.css";
 import CommandMenu from "./CommandMenu";
 import ContentRoot from "./ContentRoot";
@@ -89,6 +91,9 @@ export default function AppLayout() {
   useRecorderSync();
   useSummarySync();
   useWorkspaceShortcuts();
+  // The workflows' code steps run in this window (D-069).
+  const { data: workspace } = useCurrentWorkspace();
+  useCodeRunner(workspace?.slug);
   useMenuAction((action) => {
     switch (action) {
       case "toggle_sidebar":

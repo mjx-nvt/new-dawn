@@ -8,6 +8,7 @@ pub mod run;
 pub mod triggers;
 
 use std::collections::HashSet;
+use std::sync::OnceLock;
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local};
@@ -15,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use specta::Type;
 use sqlx::SqlitePool;
+use tauri::AppHandle;
 
 use crate::error::AppError;
 use crate::kernel::records::types::Json;
@@ -23,7 +25,34 @@ use crate::kernel::records::{self, query, Actor};
 pub const TRIGGER_TYPES: [&str; 4] = ["RECORD", "MANUAL", "SCHEDULE", "WEBHOOK"];
 /// What a workflow never watches nor writes: workflows and their runs (no loops, no fake runs).
 pub const OWN_OBJECTS: [&str; 2] = ["workflow", "workflowRun"];
-pub const STEP_TYPES: [&str; 10] = ["CREATE_RECORD", "UPDATE_RECORD", "DELETE_RECORD", "SEARCH_RECORDS", "UPSERT_RECORD", "FILTER", "IF_ELSE", "ITERATOR", "DELAY", "FORM"];
+pub const STEP_TYPES: [&str; 14] = [
+    "CREATE_RECORD",
+    "UPDATE_RECORD",
+    "DELETE_RECORD",
+    "SEARCH_RECORDS",
+    "UPSERT_RECORD",
+    "FILTER",
+    "IF_ELSE",
+    "ITERATOR",
+    "DELAY",
+    "FORM",
+    "AI_AGENT",
+    "SEND_EMAIL",
+    "HTTP_REQUEST",
+    "CODE",
+];
+
+/// The app, for the steps that need more than a workspace's pool (the AI step's turn with the
+/// local model, D-069); set once when the triggers start.
+static APP: OnceLock<AppHandle> = OnceLock::new();
+
+pub fn set_app(app: &AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+pub fn app() -> Option<&'static AppHandle> {
+    APP.get()
+}
 
 fn invalid(message: impl Into<String>) -> anyhow::Error {
     anyhow!(AppError::invalid(message))
@@ -173,6 +202,16 @@ pub fn validate(def: &Definition) -> Result<()> {
             }
             if !STEP_TYPES.contains(&s.kind.as_str()) {
                 return Err(invalid(format!("No step named {}", s.kind)));
+            }
+            // An AI step's outputs can't take the names its answer already has.
+            if s.kind == "AI_AGENT" && s.settings.get("outputs").and_then(Value::as_array).is_some_and(|o| o.iter().any(|x| matches!(x.get("name").and_then(Value::as_str), Some("text" | "model")))) {
+                return Err(invalid(format!("{}: an output can't be called text or model", if s.name.is_empty() { &s.id } else { &s.name })));
+            }
+            // An HTTP step's address, when it's written out, is checked before the run (rule 3).
+            if s.kind == "HTTP_REQUEST" {
+                if let Some(url) = s.settings.get("url").and_then(Value::as_str).filter(|u| !u.trim().is_empty() && !u.contains("{{")) {
+                    run::local_url(url)?;
+                }
             }
             if s.settings.get("object").and_then(Value::as_str).is_some_and(|o| OWN_OBJECTS.contains(&o)) {
                 return Err(invalid(format!("{}: a step doesn't write workflows or their runs", if s.name.is_empty() { &s.id } else { &s.name })));

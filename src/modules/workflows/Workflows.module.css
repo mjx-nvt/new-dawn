@@ -148,7 +148,7 @@
   font-weight: 500;
   color: var(--ink-2);
 }
-.row select.input { width: 100%; }
+.row select:global(.input) { width: 100%; }
 .stack {
   display: flex;
   flex-direction: column;
@@ -159,10 +159,10 @@
   gap: var(--space-2);
   align-items: center;
 }
-.inline > .input,
+.inline > :global(.input),
 .inline > .template { flex: 1; min-width: 0; }
-.inline > select.input.fit { flex: none; width: auto; }
-.inline > .input.narrow { flex: 0 0 96px; }
+.inline > select:global(.input.fit) { flex: none; width: auto; }
+.inline > :global(.input.narrow) { flex: 0 0 96px; }
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -214,9 +214,20 @@
   display: flex;
   gap: var(--space-1);
 }
-.template > input { flex: 1; min-width: 0; }
-/* A native select is as wide as its longest option: the picker keeps to its "{x}". */
-.template > select.input { flex: 0 0 64px; width: 64px; }
+.template { align-items: flex-start; }
+.template > input,
+.template > textarea { flex: 1; min-width: 0; }
+/* The code step's editor: code is content, so the mono token (tokens.css). */
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+  tab-size: 2;
+}
+/* A native select is as wide as its longest option, and a flex item won't shrink below its
+   content unless told to: the picker keeps to its "{x}". (`.input` is the global control class,
+   so `:global` — a module's own class names are made local.) */
+.template > select:global(.input) { flex: 0 0 64px; width: 64px; min-width: 0; max-width: 64px; }
 
 /* Lists on the side: versions, runs. */
 .list {

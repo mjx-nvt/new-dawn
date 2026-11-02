@@ -20,6 +20,8 @@ use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
 const BASE: &str = "http://localhost:11434";
+/// Ollama's port: what reaches the model goes through the gateway, never around it (rule 2).
+pub const PORT: u16 = 11434;
 /// The text model until the user picks another in Settings → Models (D-027).
 pub const DEFAULT_MODEL: &str = "qwen3.5:9b";
 /// App setting holding the picked model.

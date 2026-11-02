@@ -340,6 +340,10 @@ export const commands = {
 	cancelWorkflowRun: (slug: string, runId: string) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("cancel_workflow_run", { slug, runId })),
 	/**  The manual workflows for ⌘K (none) or a record's page (its object). */
 	listManualWorkflows: (slug: string, object: string | null) => typedError<ManualWorkflow[], AppError>(__TAURI_INVOKE("list_manual_workflows", { slug, object })),
+	/**  The code steps waiting for the window to run them (D-069). */
+	pendingWorkflowCode: (slug: string) => typedError<PendingCode[], AppError>(__TAURI_INVOKE("pending_workflow_code", { slug })),
+	/**  What the window's run of a code step gave: its output, or the error. */
+	answerWorkflowCode: (slug: string, runId: string, stepId: string, attempt: string, output: Json | null, error: string | null) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("answer_workflow_code", { slug, runId, stepId, attempt, output, error })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -2458,6 +2462,17 @@ export type Participant_Serialize = {
 	handle: string,
 	name: string,
 	record: RecordRef | null,
+};
+
+/**  A code step the window is to run (D-069): the run, the step, the code and its inputs. */
+export type PendingCode = {
+	run_id: string,
+	step_id: string,
+	/**  This wait's token: the answer carries it back, so it counts once. */
+	attempt: string,
+	workflow_name: string,
+	code: string,
+	input: Json,
 };
 
 export type PermissionState = "granted" | "denied" | "not_determined" | "restricted";

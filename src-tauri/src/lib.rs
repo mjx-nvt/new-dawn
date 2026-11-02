@@ -321,6 +321,8 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::workflows::retry_workflow_run,
             commands::workflows::cancel_workflow_run,
             commands::workflows::list_manual_workflows,
+            commands::workflows::pending_workflow_code,
+            commands::workflows::answer_workflow_code,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,

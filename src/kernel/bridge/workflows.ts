@@ -1,8 +1,9 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { commands, type ManualWorkflow, type RunDetail, type Version } from "../../bindings";
+import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { commands, type ManualWorkflow, type PendingCode, type RunDetail, type Version } from "../../bindings";
 import { unwrap } from "./unwrap";
 
-export type { ManualWorkflow, RunDetail, Version };
+export type { ManualWorkflow, PendingCode, RunDetail, Version };
 
 /** Workflows (D-068, 0.10.11): the document a version holds — one trigger, the steps in order
  *  (an If/else's branches and Else, an Iterator's inner steps nested) — and the runs. */
@@ -64,6 +65,10 @@ export const STEP_TYPES: { type: string; label: string; hint: string }[] = [
   { type: "ITERATOR", label: "Iterator", hint: "The inner steps once an item" },
   { type: "DELAY", label: "Delay", hint: "Wait for a while, or until a date" },
   { type: "FORM", label: "Form", hint: "Ask you, then go on with the answers" },
+  { type: "AI_AGENT", label: "AI agent", hint: "A prompt on the local model" },
+  { type: "SEND_EMAIL", label: "Send email", hint: "A Mail draft you send" },
+  { type: "HTTP_REQUEST", label: "HTTP request", hint: "Call an address on this Mac" },
+  { type: "CODE", label: "Code", hint: "JavaScript in New Dawn's window" },
 ];
 
 export const CONDITION_OPS: [string, string][] = [
@@ -140,6 +145,28 @@ function useRefreshWorkflow(slug: string | undefined, workflowId: string | undef
   };
 }
 
+/** The code steps waiting for this window to run them (D-069). */
+export function pendingWorkflowCode(slug: string): Promise<PendingCode[]> {
+  return unwrap(commands.pendingWorkflowCode(slug));
+}
+
+/** What the window's run of a code step gave: the run goes on with it, or fails with the error. */
+export function answerWorkflowCode(slug: string, pending: PendingCode, outcome: { ok: true; output: unknown } | { ok: false; error: string }): Promise<RunDetail> {
+  return unwrap(commands.answerWorkflowCode(slug, pending.run_id, pending.step_id, pending.attempt, outcome.ok ? (outcome.output ?? null) : null, outcome.ok ? null : outcome.error));
+}
+
+/** What a run may have changed — its page, records, tasks, Today — read again. */
+export function refreshAfterRun(queryClient: QueryClient, slug: string | undefined) {
+  for (const key of ["workflow-run", "records", "record", "linked", "timeline"]) void queryClient.invalidateQueries({ queryKey: [key, slug ?? ""] });
+  for (const key of ["tasks", "open-task-count", "today"]) void queryClient.invalidateQueries({ queryKey: [key] });
+}
+
+/** A draft an email step made, opened in Mail — the owner presses Send there (D-069). */
+export function openMailDraft(mailto: string): Promise<void> {
+  if (!mailto.startsWith("mailto:")) return Promise.reject(new Error("Not a mail draft"));
+  return openUrl(mailto);
+}
+
 /** A save that outlives the page (the builder saves what's left when it closes). */
 export function saveWorkflowDraftNow(slug: string, workflowId: string, definition: Definition): Promise<Version> {
   return unwrap(commands.saveWorkflowDraft(slug, workflowId, definition));
@@ -170,10 +197,7 @@ export function useRunWorkflow(slug: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ workflowId, recordIds, test }: { workflowId: string; recordIds: string[]; test?: boolean }) => unwrap(commands.runWorkflow(slug ?? "", workflowId, recordIds, test ?? false)),
-    onSuccess: () => {
-      for (const key of ["records", "record", "workflow-run", "linked", "timeline"]) void queryClient.invalidateQueries({ queryKey: [key, slug ?? ""] });
-      for (const key of ["tasks", "open-task-count", "today"]) void queryClient.invalidateQueries({ queryKey: [key] });
-    },
+    onSuccess: () => refreshAfterRun(queryClient, slug),
   });
 }
 
@@ -196,10 +220,7 @@ export function useRunAction(slug: string | undefined, runId: string | undefined
       if (action === "retry") return unwrap(commands.retryWorkflowRun(slug ?? "", runId ?? ""));
       return unwrap(commands.cancelWorkflowRun(slug ?? "", runId ?? ""));
     },
-    onSuccess: () => {
-      for (const key of ["workflow-run", "records", "record", "linked", "timeline"]) void queryClient.invalidateQueries({ queryKey: [key, slug ?? ""] });
-      for (const key of ["tasks", "open-task-count", "today"]) void queryClient.invalidateQueries({ queryKey: [key] });
-    },
+    onSuccess: () => refreshAfterRun(queryClient, slug),
   });
 }
 

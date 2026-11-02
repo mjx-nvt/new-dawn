@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { asRecord, recordId } from "../../kernel/bridge/records";
-import { definitionOf, stepLabel, useRunAction, useWorkflowRun, type Step } from "../../kernel/bridge/workflows";
+import { definitionOf, openMailDraft, stepLabel, useRunAction, useWorkflowRun, type Step } from "../../kernel/bridge/workflows";
 import type { WidgetContext } from "../crm/record/widgets";
 import { formatClock, formatWhen } from "../meetings/format";
 import { formFields, summarize, triggerSummary, triggerTitle } from "./StepSettings";
@@ -9,6 +9,13 @@ import s from "./Workflows.module.css";
 
 function flatten(steps: Step[]): Step[] {
   return steps.flatMap((st) => [st, ...(st.branches ?? []).flatMap((b) => flatten(b.steps)), ...flatten(st.else_steps ?? []), ...flatten(st.steps ?? [])]);
+}
+
+/** An email step's draft, from its output. */
+function mailDraft(output: unknown): { to: string; subject: string; mailto: string } | null {
+  if (!output || typeof output !== "object") return null;
+  const o = output as Record<string, unknown>;
+  return typeof o.mailto === "string" ? { to: String(o.to ?? ""), subject: String(o.subject ?? ""), mailto: o.mailto } : null;
 }
 
 function pretty(v: unknown): string {
@@ -39,6 +46,7 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
   const run = useWorkflowRun(slug, id);
   const act = useRunAction(slug, id);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [mailTrouble, setMailTrouble] = useState<string | null>(null);
   const r = run.data;
   if (!r) {
     return (
@@ -53,12 +61,16 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
   // The step that failed: the first one not done, in document order (a waiting form or delay
   // is the same step while the run waits).
   const current = all.find((st) => !r.done.includes(st.id));
-  const form = r.status === "WAITING" && r.waiting_for ? all.find((st) => st.id === r.waiting_for) : undefined;
+  // What a waiting run waits on: a form (it asks you here) or a code step (the window runs it).
+  const waited = r.status === "WAITING" && r.waiting_for ? all.find((st) => st.id === r.waiting_for) : undefined;
+  const form = waited?.type === "FORM" ? waited : undefined;
+  const code = waited?.type === "CODE" ? waited : undefined;
   const started = r.started_at ? new Date(r.started_at).getTime() : 0;
   const ended = r.ended_at ? new Date(r.ended_at).getTime() : 0;
   const stateOf = (st: Step): { cls: string; mark: string; text: string } => {
     if (r.done.includes(st.id)) return { cls: s.stepDone, mark: "✓", text: "Done" };
     if (form && form.id === st.id) return { cls: s.stepWaiting, mark: "?", text: "Waiting for you" };
+    if (code && code.id === st.id) return { cls: s.stepWaiting, mark: "…", text: "Waiting for New Dawn's window to run the code" };
     if (r.status === "WAITING" && current?.id === st.id)
       return {
         cls: s.stepWaiting,
@@ -74,6 +86,7 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
     <>
       {list.map((st) => {
         const state = stateOf(st);
+        const draft = st.type === "SEND_EMAIL" ? mailDraft(context[st.id]) : null;
         const output = context[st.id];
         return (
           <div key={st.id} className={s.step} style={depth ? { marginLeft: `calc(${depth} * var(--space-6))` } : undefined}>
@@ -87,6 +100,23 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
                 <span className={s.cardSummary}>{state.text || summarize(st)}</span>
               </div>
             </div>
+            {draft && (
+              <div className={s.bar}>
+                <span className="fieldHint">
+                  A draft to {draft.to} — {draft.subject || "no subject"}
+                </span>
+                <button
+                  type="button"
+                  className="btn btnSecondary btnCompact"
+                  onClick={() => {
+                    setMailTrouble(null);
+                    void openMailDraft(draft.mailto).catch((e: unknown) => setMailTrouble(`Mail didn't open the draft — ${e instanceof Error ? e.message : String(e)}`));
+                  }}
+                >
+                  Open in Mail
+                </button>
+              </div>
+            )}
             {output !== undefined && (
               <details className={s.output}>
                 <summary>Output</summary>
@@ -159,7 +189,12 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
           {r.error}
         </p>
       )}
-      {["FAILED", "NOT_STARTED", "WAITING"].includes(r.status) && (
+      {mailTrouble && (
+        <p className="formError" role="alert">
+          {mailTrouble}
+        </p>
+      )}
+      {["FAILED", "NOT_STARTED", "WAITING", "RUNNING"].includes(r.status) && (
         <div className={s.bar}>
           <span className={s.spacer} />
           {r.status === "FAILED" && (
@@ -167,10 +202,15 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
               Retry from the failed step
             </button>
           )}
-          {["NOT_STARTED", "WAITING"].includes(r.status) && (
-            <button type="button" className="btn btnDanger btnCompact" disabled={act.isPending} onClick={() => act.mutate({ action: "cancel" })}>
-              Cancel run
-            </button>
+          {/* A running run stops before its next step; the step under way finishes. */}
+          {r.status === "RUNNING" && r.error === "Cancelled" ? (
+            <span className="fieldHint">Cancelling — after the step under way</span>
+          ) : (
+            ["NOT_STARTED", "WAITING", "RUNNING"].includes(r.status) && (
+              <button type="button" className="btn btnDanger btnCompact" disabled={act.isPending} onClick={() => act.mutate({ action: "cancel" })}>
+                Cancel run
+              </button>
+            )
           )}
         </div>
       )}
@@ -228,11 +268,11 @@ export default function RunBody({ ctx }: { ctx: WidgetContext }) {
                 </div>
               );
             })}
-            {!fields.length && <p className="fieldHint">Nothing to fill in — Continue goes on.</p>}
+            {!fields.length && <p className="fieldHint">Nothing to fill in — Submit goes on.</p>}
           </div>
           <div className="sheetActions">
             <button type="submit" className="btn btnPrimary" disabled={act.isPending}>
-              Continue
+              Submit
             </button>
           </div>
         </form>

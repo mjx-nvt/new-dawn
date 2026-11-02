@@ -34,6 +34,25 @@ _2026-11-02_
 
 ---
 
+## D-069 — Workflows' outside steps: the local model, a Mail draft, this Mac's addresses, code in the window
+_2026-11-02_
+
+**Context** (plan v4 §3.6, 0.10.12): Twenty's AI Agent (an agent and a prompt; a structured output), Send Email and Draft Email (To, Subject, Body from a connected account), HTTP Request (URL, method, headers, body; 30 s, 10 MB) and Code (`export const main = async (params) => …`, its return the output, a Test button) — each adapted to a Mac with no cloud.
+
+**Decision — the AI step goes through the gateway**: the prompt, its variables resolved, on the local model (the app's, or one picked from Ollama's installed models) through `kernel/ai/ollama::session` in the foreground lane — the queue, Whisper's unload and `ai_log` (agent `workflow`) as for every AI job (rule 2). With outputs (a name and text / number / true or false), the model is asked for one JSON object with those keys and each becomes `{{step.<name>}}`; without, the answer is `{{step.text}}`. An answer that isn't the JSON asked for stops the run with the words it gave; a record or a list in the prompt goes in as JSON. One workflow AI step waits in the queue at a time, so parallel runs don't stack foreground jobs ahead of a meeting's summary. The module keeps the app's handle in a cell set when the triggers start (a run has only its workspace's pool otherwise). Named agents with tools join in 0.10.13.
+
+**Decision — email is a Mail draft, never sent by New Dawn**: the step composes To (an address, or several), Cc, Subject and Body from their templates into a `mailto:` link kept as the step's output; the run's page shows it with **Open in Mail**, and the owner presses Send in Mail. New Dawn never drives or launches Mail by itself (D-066), so a scheduled run at night leaves drafts waiting, not mail sent. A To with no address stops the run plainly.
+
+**Decision — HTTP to this Mac only**: GET, POST, PUT, PATCH, DELETE to `localhost`, `127.0.0.1` or `[::1]` over http(s); any other host is refused before a byte leaves ("Only this Mac's addresses (localhost) can be called: … is on the network") — at Activate when the address is written out, at the step when it comes from a variable. No proxy is used (a system or environment proxy would carry a "localhost" call off the Mac) and no redirect followed; Ollama's port is refused (the model is reached through the AI step and its queue, rule 2); 30 s; 10 MB, of which 1 MB is kept in the run; headers and a body with variables — a body written as JSON is resolved as JSON, so values are escaped and a lone `{{x}}` keeps its type; the answer's JSON (or text) and status are the output; an answer that isn't 2xx stops the run with its status and first words. Rule 3 holds: the address is the owner's, the check is the app's.
+
+**Decision — code runs in the window**: the step's JavaScript runs in a Web Worker made from it for one run — `export const main = async (params) => { … }` given the step's inputs (templates resolved), its return value (JSON) the output; the worker has no DOM, the window's policy allows it no connection but the app's own (`worker-src blob:` added, `connect-src` unchanged), fetch, XMLHttpRequest, WebSocket, EventSource and importScripts are removed before the code runs, and it is stopped after 10 s. The run waits for the window (`waiting_for` the step): the window asks for the waiting code steps of the current workspace every 5 s while it is visible and when it comes to the front, runs each, and answers; with the window closed the run waits, and its page says so. Each wait has an attempt token the answer carries back, and an answer goes into the run only once the run is claimed — a late or repeated answer is refused. Nested workers are cut off too; a code step whose attempt was started but never answered when the window comes back (it took the window down) is answered with an error instead of running again. An error stops the run with it; Retry asks the window again. The Test button runs the code with the inputs as typed.
+
+**Decision — slow steps don't hold the others**: each record event's runs and each workspace's minute go on their own task, so an AI step waiting behind a meeting's summary or an HTTP call never holds the next event, schedule or delay up; a schedule's slot is taken by moving its time on, so overlapping minutes start it once. A running run can be cancelled: it stops before its next step (the step under way finishes).
+
+**Means for future work**: 0.10.13's agents become a choice in the AI step; 0.10.14's local API makes HTTP steps between workflows and the webhook trigger's address; the code step stays JavaScript without TypeScript's types (no compiler is bundled).
+
+---
+
 ## D-066 — Emails and calendar from local sources: Apple Mail answers for a record's addresses, meetings are the calendar
 _2026-11-02_
 

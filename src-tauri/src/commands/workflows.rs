@@ -6,7 +6,7 @@ use tauri::State;
 use crate::error::AppError;
 use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::records::types::Json;
-use crate::modules::workflows::run::{self, RunDetail};
+use crate::modules::workflows::run::{self, PendingCode, RunDetail};
 use crate::modules::workflows::{self, ManualWorkflow, Version};
 
 #[tauri::command]
@@ -81,6 +81,24 @@ pub async fn retry_workflow_run(hub: State<'_, WorkspaceHub>, slug: String, run_
 #[specta::specta]
 pub async fn cancel_workflow_run(hub: State<'_, WorkspaceHub>, slug: String, run_id: String) -> Result<RunDetail, AppError> {
     Ok(run::cancel(&hub.pool(&slug)?, &run_id).await?)
+}
+
+/// The code steps waiting for the window to run them (D-069).
+#[tauri::command]
+#[specta::specta]
+pub async fn pending_workflow_code(hub: State<'_, WorkspaceHub>, slug: String) -> Result<Vec<PendingCode>, AppError> {
+    Ok(run::pending_code(&hub.pool(&slug)?).await?)
+}
+
+/// What the window's run of a code step gave: its output, or the error.
+#[tauri::command]
+#[specta::specta]
+pub async fn answer_workflow_code(hub: State<'_, WorkspaceHub>, slug: String, run_id: String, step_id: String, attempt: String, output: Option<Json>, error: Option<String>) -> Result<RunDetail, AppError> {
+    let outcome = match error {
+        Some(e) => Err(e),
+        None => Ok(output.map(|o| o.0).unwrap_or(serde_json::Value::Null)),
+    };
+    Ok(run::answer_code(&hub.pool(&slug)?, &run_id, &step_id, &attempt, outcome).await?)
 }
 
 /// The manual workflows for ⌘K (none) or a record's page (its object).

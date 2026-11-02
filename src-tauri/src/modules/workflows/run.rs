@@ -6,6 +6,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::AtomicBool;
 
 use anyhow::{anyhow, Context as _, Result};
 use chrono::{DateTime, Duration, Local, SecondsFormat, TimeZone, Utc};
@@ -16,11 +17,23 @@ use sqlx::SqlitePool;
 
 use super::{parse, Condition, Definition, Step};
 use crate::error::AppError;
+use crate::kernel::ai::ollama::{self, Message, Request};
+use crate::kernel::ai::queue::{Lane, Task};
 use crate::kernel::records::types::{FieldType, Json};
 use crate::kernel::records::{self, query, transfer, Actor, ObjectDef, Query};
 
 const SEARCH_LIMIT: u64 = 200;
+/// Twenty's limits for an HTTP request: 30 s, 10 MB.
+const HTTP_TIMEOUT_SECS: u64 = 30;
+const HTTP_MAX_BYTES: usize = 10 * 1024 * 1024;
+const AI_MAX_TOKENS: u32 = 2000;
+/// What an HTTP step keeps of an answer in the run's context (it travels with every step).
+const HTTP_KEEP_BYTES: usize = 1024 * 1024;
+/// One workflow AI step in the AI queue at a time: runs go on side by side, but they don't stack
+/// foreground jobs ahead of the next meeting's summary.
+static AI_TURN: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+const CANCELLED: &str = "Cancelled";
 
 fn invalid(message: impl Into<String>) -> anyhow::Error {
     anyhow!(AppError::invalid(message))
@@ -188,14 +201,19 @@ async fn claim(pool: &SqlitePool, run_id: &str, from: &[&str]) -> Result<()> {
 /// Starts a new run: RUNNING, then COMPLETED, FAILED (with the error), or WAITING (a delay's
 /// end, or a form).
 pub async fn execute(pool: &SqlitePool, run_id: &str) -> Result<RunDetail> {
-    execute_at(pool, run_id, Utc::now(), &["NOT_STARTED"]).await
+    execute_at(pool, run_id, Utc::now(), &["NOT_STARTED"], None).await
 }
 
-/// Carries a run on from where it is, at a given time (the scheduler's tick; tests).
-async fn execute_at(pool: &SqlitePool, run_id: &str, now: DateTime<Utc>, from: &[&str]) -> Result<RunDetail> {
+/// Carries a run on from where it is, at a given time (the scheduler's tick; tests). An answer
+/// (a form's, a code step's) goes into the context only once the run is claimed, so a second
+/// answer never lands on a run that has moved on.
+async fn execute_at(pool: &SqlitePool, run_id: &str, now: DateTime<Utc>, from: &[&str], answer: Option<(&str, Value)>) -> Result<RunDetail> {
     claim(pool, run_id, from).await?;
     let outcome = match load(pool, run_id, now).await {
         Ok(mut state) => {
+            if let Some((step_id, value)) = answer {
+                state.context.insert(step_id.to_owned(), value);
+            }
             let steps = state.definition.steps.clone();
             walk(pool, &mut state, &steps).await
         }
@@ -215,6 +233,10 @@ fn walk<'a>(pool: &'a SqlitePool, state: &'a mut State, steps: &'a [Step]) -> Pi
         for step in steps {
             if state.done.contains(&step.id) {
                 continue;
+            }
+            let (asked,): (String,) = sqlx::query_as("SELECT error FROM workflow_run WHERE id = ?").bind(&state.id).fetch_one(pool).await?;
+            if asked == CANCELLED {
+                return Err(invalid(CANCELLED));
             }
             let flow = match step.kind.as_str() {
                 "IF_ELSE" => {
@@ -439,10 +461,229 @@ async fn run_step(pool: &SqlitePool, state: &mut State, step: &Step) -> Result<F
                 return Ok(Flow::Wait);
             }
         }
+        "AI_AGENT" => ai_step(pool, state, s, &ctx, &label).await?,
+        "SEND_EMAIL" => email_step(s, &ctx, &label)?,
+        "HTTP_REQUEST" => http_step(s, &ctx, &label).await?,
+        "CODE" => match state.context.get(&step.id).cloned() {
+            Some(v) if v.get("result").is_some() => v["result"].clone(),
+            Some(v) if v.get("error").is_some() => {
+                // Failed in the window: cleared, so a retry runs the code again.
+                state.context.remove(&step.id);
+                persist(pool, state).await?;
+                return Err(invalid(format!("{label}: {}", text_of(&v["error"]))));
+            }
+            _ => {
+                // The window runs the code (a Web Worker, D-069): the run waits for it, after a
+                // quit too, and its page says so.
+                // One attempt, one answer: a late or repeated answer is refused by its token.
+                let input = resolve_value(&s.get("inputs").cloned().unwrap_or(json!({})), &ctx);
+                state.context.insert(step.id.clone(), json!({ "input": input, "attempt": uuid::Uuid::now_v7().to_string() }));
+                persist(pool, state).await?;
+                set_status(pool, &state.id, "WAITING", "", false, None, &step.id).await?;
+                return Ok(Flow::Wait);
+            }
+        },
         other => return Err(invalid(format!("No step named {other}"))),
     };
     state.context.insert(step.id.clone(), output);
     Ok(Flow::Done)
+}
+
+/// The AI step (D-069): the prompt with its variables on the local model, through the AI
+/// gateway's queue like every other AI job; with outputs, one JSON object with those keys.
+async fn ai_step(pool: &SqlitePool, state: &State, s: &Value, ctx: &Value, label: &str) -> Result<Value> {
+    // A record or a list in the prompt goes in as JSON, so the model reads all of it.
+    let prompt = render_with(s.get("prompt").and_then(Value::as_str).unwrap_or(""), ctx, |v| if v.is_object() || v.is_array() { v.to_string() } else { text_of(v) });
+    if prompt.trim().is_empty() {
+        return Err(invalid(format!("{label}: the prompt is empty")));
+    }
+    let outputs: Vec<(String, String)> = s
+        .get("outputs")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|o| Some((o.get("name")?.as_str()?.trim().to_owned(), o.get("type").and_then(Value::as_str).unwrap_or("text").to_owned())))
+                .filter(|(n, _)| !n.is_empty() && n != "text" && n != "model")
+                .collect()
+        })
+        .unwrap_or_default();
+    let app = super::app().ok_or_else(|| invalid(format!("{label}: the AI step runs in the app")))?;
+    let model = s.get("model").and_then(Value::as_str).filter(|m| !m.is_empty()).map(str::to_owned);
+    let mut system = String::from("You are one step of a workflow in New Dawn, a CRM on this Mac. Do what the instruction says with the data it gives. Answer briefly, in the language of the instruction.");
+    if !outputs.is_empty() {
+        let keys: Vec<String> = outputs.iter().map(|(n, t)| format!("\"{n}\" ({})", if t == "number" { "a number" } else if t == "boolean" { "true or false" } else { "text" })).collect();
+        system.push_str(&format!(" Answer with one JSON object and nothing else, with exactly these keys: {}.", keys.join(", ")));
+    }
+    let task = Task::new(format!("Workflow · {}", state.workflow_name));
+    let _one = AI_TURN.acquire().await?;
+    let mut session = ollama::session(app, pool.clone(), None, model, Lane::Foreground, task).await?;
+    session.for_agent("workflow");
+    let answer = session
+        .complete(Request { messages: vec![Message { role: "system", content: system }, Message { role: "user", content: prompt }], think: false, max_tokens: AI_MAX_TOKENS }, &AtomicBool::new(false), |_| {})
+        .await?;
+    let model = session.model().to_owned();
+    drop(session);
+    let text = ollama::strip_think(&answer.content).trim().to_owned();
+    let mut out = json!({ "text": text, "model": model });
+    if !outputs.is_empty() {
+        let parsed = json_block(&text).ok_or_else(|| invalid(format!("{label}: the model's answer isn't the JSON asked for — {}", text.chars().take(200).collect::<String>())))?;
+        for (name, kind) in outputs {
+            let v = parsed.get(&name).cloned().unwrap_or(Value::Null);
+            let v = match (kind.as_str(), &v) {
+                ("number", Value::String(t)) => t.trim().parse::<f64>().ok().map_or(Value::Null, |n| json!(n)),
+                ("boolean", Value::String(t)) => json!(t.trim().eq_ignore_ascii_case("true")),
+                _ => v,
+            };
+            out[name] = v;
+        }
+    }
+    Ok(out)
+}
+
+/// The first JSON object in a model's answer (it may come with words, a fence or a stray brace
+/// around it).
+fn json_block(text: &str) -> Option<Map<String, Value>> {
+    text.match_indices('{').find_map(|(i, _)| serde_json::Deserializer::from_str(&text[i..]).into_iter::<Map<String, Value>>().next()?.ok())
+}
+
+/// Percent-encoding for a `mailto:` link: letters, digits, `-._~@` stay as they are.
+fn encode(text: &str) -> String {
+    let mut out = String::new();
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~' | b'@') {
+            out.push(char::from(b));
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// The email step (D-069): a draft for Mail, never sent by New Dawn — the run's page opens it in
+/// Mail, where the owner presses Send (D-066: New Dawn never drives Mail by itself).
+fn email_step(s: &Value, ctx: &Value, label: &str) -> Result<Value> {
+    let list = |key: &str| -> Vec<String> { resolve_text(s.get(key).unwrap_or(&Value::Null), ctx).split([',', ';']).map(str::trim).filter(|a| !a.is_empty()).map(str::to_owned).collect() };
+    let (to, cc) = (list("to"), list("cc"));
+    if to.is_empty() || to.iter().chain(&cc).any(|a| !a.contains('@') || a.contains(char::is_whitespace)) {
+        let typed = resolve_text(s.get("to").unwrap_or(&Value::Null), ctx);
+        return Err(invalid(format!("{label}: no email address in “{typed}”")));
+    }
+    let subject = resolve_text(s.get("subject").unwrap_or(&Value::Null), ctx);
+    let body = resolve_text(s.get("body").unwrap_or(&Value::Null), ctx);
+    let mut query = Vec::new();
+    if !cc.is_empty() {
+        query.push(format!("cc={}", cc.iter().map(|a| encode(a)).collect::<Vec<_>>().join(",")));
+    }
+    if !subject.is_empty() {
+        query.push(format!("subject={}", encode(&subject)));
+    }
+    if !body.is_empty() {
+        query.push(format!("body={}", encode(&body.replace("\r\n", "\n").replace('\n', "\r\n"))));
+    }
+    let address = to.iter().map(|a| encode(a)).collect::<Vec<_>>().join(",");
+    let mailto = if query.is_empty() { format!("mailto:{address}") } else { format!("mailto:{address}?{}", query.join("&")) };
+    Ok(json!({ "to": to.join(", "), "cc": cc.join(", "), "subject": subject, "body": body, "mailto": mailto }))
+}
+
+/// Only this Mac: http(s) to `localhost`, `127.0.0.1` or `::1` — anything else is refused before
+/// a byte leaves (rule 3).
+pub fn local_url(text: &str) -> Result<reqwest::Url> {
+    let url = reqwest::Url::parse(text.trim()).map_err(|_| invalid(format!("“{}” isn't a web address", text.trim())))?;
+    let host = url.host_str().unwrap_or("");
+    if !matches!(url.scheme(), "http" | "https") || !matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+        return Err(invalid(format!("Only this Mac's addresses (localhost) can be called: {} is on the network", if host.is_empty() { text.trim() } else { host })));
+    }
+    if url.port_or_known_default() == Some(ollama::PORT) {
+        return Err(invalid("The local model is reached through an AI step, not an address"));
+    }
+    Ok(url)
+}
+
+/// The HTTP step (D-069): GET POST PUT PATCH DELETE to a localhost address, headers and a body
+/// with variables; no redirects, 30 s, 10 MB. The answer's JSON (or text) is the output; an
+/// answer that isn't 2xx stops the run with it.
+async fn http_step(s: &Value, ctx: &Value, label: &str) -> Result<Value> {
+    let url = local_url(&resolve_text(s.get("url").unwrap_or(&Value::Null), ctx)).map_err(|e| invalid(format!("{label}: {e}")))?;
+    let method = s.get("method").and_then(Value::as_str).unwrap_or("GET").to_uppercase();
+    if !matches!(method.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
+        return Err(invalid(format!("{label}: no method named {method}")));
+    }
+    // No proxy: a system or environment proxy would carry a "localhost" call off this Mac.
+    let client = reqwest::Client::builder().no_proxy().redirect(reqwest::redirect::Policy::none()).timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS)).build()?;
+    let mut request = client.request(reqwest::Method::from_bytes(method.as_bytes())?, url);
+    let mut typed = false;
+    for h in s.get("headers").and_then(Value::as_array).into_iter().flatten() {
+        let key = h.get("key").and_then(Value::as_str).unwrap_or("").trim().to_owned();
+        if key.is_empty() {
+            continue;
+        }
+        typed |= key.eq_ignore_ascii_case("content-type");
+        request = request.header(key, resolve_text(h.get("value").unwrap_or(&Value::Null), ctx));
+    }
+    // A body written as JSON is resolved as JSON: values are escaped, and a lone "{{x}}" keeps
+    // its type (a record, a list, a number).
+    let raw = s.get("body").cloned().unwrap_or(Value::Null);
+    let written = raw.as_str().and_then(|t| serde_json::from_str::<Value>(t).ok()).filter(|v| v.is_object() || v.is_array());
+    let (body, kind) = match resolve_value(written.as_ref().unwrap_or(&raw), ctx) {
+        v @ (Value::Object(_) | Value::Array(_)) => (v.to_string(), "application/json"),
+        v => {
+            let t = text_of(&v);
+            let k = if serde_json::from_str::<Value>(&t).is_ok() { "application/json" } else { "text/plain; charset=utf-8" };
+            (t, k)
+        }
+    };
+    if !body.trim().is_empty() && method != "GET" {
+        if !typed {
+            request = request.header("content-type", kind);
+        }
+        request = request.body(body);
+    }
+    let mut response = request.send().await.map_err(|e| {
+        invalid(format!(
+            "{label}: {}",
+            if e.is_timeout() {
+                "no answer within 30 s".to_owned()
+            } else if e.is_builder() {
+                "a header doesn't read".to_owned()
+            } else {
+                format!("couldn't connect — {e}")
+            }
+        ))
+    })?;
+    let status = response.status();
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| invalid(format!("{label}: the answer broke off — {e}")))? {
+        bytes.extend_from_slice(&chunk);
+        if bytes.len() > HTTP_MAX_BYTES {
+            return Err(invalid(format!("{label}: the answer is larger than 10 MB")));
+        }
+    }
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    if !status.is_success() {
+        return Err(invalid(format!("{label}: the server answered {} — {}", status.as_u16(), text.chars().take(200).collect::<String>())));
+    }
+    if text.len() > HTTP_KEEP_BYTES {
+        let mut cut = HTTP_KEEP_BYTES;
+        while !text.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        return Ok(json!({ "status": status.as_u16(), "ok": true, "body": &text[..cut], "truncated": true }));
+    }
+    let body = serde_json::from_str::<Value>(&text).unwrap_or(Value::String(text));
+    Ok(json!({ "status": status.as_u16(), "ok": true, "body": body }))
+}
+
+fn find_step<'a>(steps: &'a [Step], id: &str) -> Option<&'a Step> {
+    for st in steps {
+        if st.id == id {
+            return Some(st);
+        }
+        let inner = st.branches.iter().find_map(|b| find_step(&b.steps, id)).or_else(|| find_step(&st.else_steps, id)).or_else(|| find_step(&st.steps, id));
+        if inner.is_some() {
+            return inner;
+        }
+    }
+    None
 }
 
 /// A new note or task attached to records (Twenty's targets): `[{ "object": "person", "id": "{{…}}" }]`.
@@ -574,6 +815,11 @@ fn text_of(v: &Value) -> String {
 
 /// `{{…}}` inside text replaced by their text.
 fn render(template: &str, ctx: &Value) -> String {
+    render_with(template, ctx, text_of)
+}
+
+/// `render` with the way a value shows chosen by the caller.
+fn render_with(template: &str, ctx: &Value, show: impl Fn(&Value) -> String) -> String {
     let mut out = String::new();
     let mut rest = template;
     while let Some(start) = rest.find("{{") {
@@ -581,7 +827,7 @@ fn render(template: &str, ctx: &Value) -> String {
         let after = &rest[start + 2..];
         match after.find("}}") {
             Some(end) => {
-                out.push_str(&text_of(&lookup(&after[..end], ctx)));
+                out.push_str(&show(&lookup(&after[..end], ctx)));
                 rest = &after[end + 2..];
             }
             None => {
@@ -663,33 +909,90 @@ pub fn holds(conditions: &[Condition], logic: &str, ctx: &Value) -> bool {
 
 // ---- the owner's hand -------------------------------------------------------------------
 
+/// The run's state when it waits on this step of this kind, else a plain refusal.
+async fn waiting_on(pool: &SqlitePool, run_id: &str, step_id: &str, kind: &str, what: &str) -> Result<State> {
+    let now = detail(pool, run_id).await?;
+    let state = load(pool, run_id, Utc::now()).await?;
+    if now.status != "WAITING" || now.waiting_for != step_id || find_step(&state.definition.steps, step_id).is_none_or(|s| s.kind != kind) {
+        return Err(invalid(format!("This run isn't waiting for that {what} any more")));
+    }
+    Ok(state)
+}
+
 /// A form's answers — only while the run waits on that form: the run goes on.
 pub async fn answer_form(pool: &SqlitePool, run_id: &str, step_id: &str, answers: Value) -> Result<RunDetail> {
-    let now = detail(pool, run_id).await?;
-    if now.status != "WAITING" || now.waiting_for != step_id {
-        return Err(invalid("This run isn't waiting for that form any more"));
+    waiting_on(pool, run_id, step_id, "FORM", "form").await?;
+    execute_at(pool, run_id, Utc::now(), &["WAITING"], Some((step_id, json!({ "answers": answers })))).await
+}
+
+/// A code step the window is to run (D-069): the run, the step, the code and its inputs.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct PendingCode {
+    pub run_id: String,
+    pub step_id: String,
+    /// This wait's token: the answer carries it back, so it counts once.
+    pub attempt: String,
+    pub workflow_name: String,
+    pub code: String,
+    pub input: Json,
+}
+
+/// The runs waiting for the window to run a code step.
+pub async fn pending_code(pool: &SqlitePool) -> Result<Vec<PendingCode>> {
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT r.id, r.waiting_for FROM workflow_run r JOIN workflow w ON w.id = r.workflow_id AND w.deleted_at IS NULL \
+         WHERE r.status = 'WAITING' AND r.waiting_for <> '' AND r.deleted_at IS NULL ORDER BY r.updated_at",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut out = Vec::new();
+    for (run_id, step_id) in rows {
+        let Ok(state) = load(pool, &run_id, Utc::now()).await else { continue };
+        let Some(step) = find_step(&state.definition.steps, &step_id).filter(|s| s.kind == "CODE") else { continue };
+        let code = step.settings.get("code").and_then(Value::as_str).unwrap_or("").to_owned();
+        let entry = state.context.get(&step_id).cloned().unwrap_or(Value::Null);
+        let attempt = entry.get("attempt").and_then(Value::as_str).unwrap_or("").to_owned();
+        let input = entry.get("input").cloned().unwrap_or(json!({}));
+        out.push(PendingCode { run_id, step_id, attempt, workflow_name: state.workflow_name, code, input: Json(input) });
     }
-    let mut state = load(pool, run_id, Utc::now()).await?;
-    state.context.insert(step_id.to_owned(), json!({ "answers": answers }));
-    persist(pool, &state).await?;
-    execute_at(pool, run_id, Utc::now(), &["WAITING"]).await
+    Ok(out)
+}
+
+/// What the window's run of a code step gave — its output, or the error: the run goes on (or
+/// fails with it).
+pub async fn answer_code(pool: &SqlitePool, run_id: &str, step_id: &str, attempt: &str, outcome: std::result::Result<Value, String>) -> Result<RunDetail> {
+    let state = waiting_on(pool, run_id, step_id, "CODE", "code").await?;
+    let waiting = state.context.get(step_id).cloned().unwrap_or(Value::Null);
+    if waiting.get("attempt").and_then(Value::as_str) != Some(attempt) {
+        return Err(invalid("This run isn't waiting for that code any more"));
+    }
+    let input = waiting.get("input").cloned().unwrap_or(Value::Null);
+    let entry = match outcome {
+        Ok(output) => json!({ "input": input, "attempt": attempt, "result": output }),
+        Err(error) => json!({ "input": input, "attempt": attempt, "error": error }),
+    };
+    execute_at(pool, run_id, Utc::now(), &["WAITING"], Some((step_id, entry))).await
 }
 
 /// A failed run tried again from the step that failed.
 pub async fn retry(pool: &SqlitePool, run_id: &str) -> Result<RunDetail> {
-    execute_at(pool, run_id, Utc::now(), &["FAILED"]).await
+    execute_at(pool, run_id, Utc::now(), &["FAILED"], None).await
 }
 
-/// A run that waits (or never started) is stopped; a running one finishes its step first.
+/// A run that waits (or never started) is stopped at once; a running one stops before its next
+/// step (the step under way finishes).
 pub async fn cancel(pool: &SqlitePool, run_id: &str) -> Result<RunDetail> {
-    let done = sqlx::query(sqlx::AssertSqlSafe(format!(
-        "UPDATE workflow_run SET status = 'FAILED', error = 'Cancelled', ended_at = {NOW}, wait_until = NULL, waiting_for = '', updated_at = {NOW} WHERE id = ? AND status IN ('WAITING', 'NOT_STARTED')"
+    let stopped = sqlx::query(sqlx::AssertSqlSafe(format!(
+        "UPDATE workflow_run SET status = 'FAILED', error = '{CANCELLED}', ended_at = {NOW}, wait_until = NULL, waiting_for = '', updated_at = {NOW} WHERE id = ? AND status IN ('WAITING', 'NOT_STARTED')"
     )))
     .bind(run_id)
     .execute(pool)
     .await?;
-    if done.rows_affected() == 0 {
-        return Err(invalid("Only a run that waits can be cancelled"));
+    if stopped.rows_affected() == 0 {
+        let asked = sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE workflow_run SET error = '{CANCELLED}', updated_at = {NOW} WHERE id = ? AND status = 'RUNNING'"))).bind(run_id).execute(pool).await?;
+        if asked.rows_affected() == 0 {
+            return Err(invalid("This run has finished"));
+        }
     }
     detail(pool, run_id).await
 }
@@ -705,7 +1008,7 @@ pub async fn resume_due(pool: &SqlitePool, now: DateTime<Utc>) -> Result<u32> {
     .await?;
     let mut n = 0;
     for (id,) in due {
-        if let Err(e) = execute_at(pool, &id, now, &["WAITING"]).await {
+        if let Err(e) = execute_at(pool, &id, now, &["WAITING"], None).await {
             tracing::warn!("resuming run {id}: {e:#}");
         }
         n += 1;
@@ -926,6 +1229,80 @@ mod tests {
             let run = detail(&pool, &run_id).await.unwrap();
             assert_eq!(run.status, "FAILED");
             assert!(run.error.contains("too long"), "{}", run.error);
+        });
+    }
+
+    /// The HTTP step calls this Mac only: a local server answers and its JSON is the output; an
+    /// address on the network is refused with a plain message before anything leaves; a 404
+    /// stops the run. The email step makes a Mail draft link; the code step waits for the window
+    /// and goes on with what it gave (or fails with its error, and a retry asks again).
+    #[test]
+    fn http_email_and_code_steps() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for (i, stream) in listener.incoming().take(2).enumerate() {
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let reply = if i == 0 { "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 17\r\nconnection: close\r\n\r\n{\"greeting\":\"hi\"}" } else { "HTTP/1.1 404 Not Found\r\ncontent-length: 4\r\nconnection: close\r\n\r\ngone" };
+                stream.write_all(reply.as_bytes()).unwrap();
+            }
+        });
+        let away = concat!("https", "://example.com/hook");
+        assert!(local_url(away).unwrap_err().to_string().contains("example.com is on the network"));
+        assert!(local_url(&format!("http://127.0.0.1:{port}/x")).is_ok());
+        assert!(local_url(concat!("http", "://localhost.example/x")).is_err());
+        assert!(local_url("http://localhost:11434/api/chat").unwrap_err().to_string().contains("AI step"), "the model only through the gateway");
+        assert_eq!(json_block("Sure } here: {\"a\": 1} — and {not json}").unwrap()["a"], 1, "a stray brace before the object");
+        let mailto = email_step(&json!({ "to": "{{who}}", "cc": "boss@majoris.co", "subject": "Welcome, {{name}}", "body": "Line one\nLine two" }), &json!({ "who": "minh@vifc.vn", "name": "Minh & co" }), "Email").unwrap()["mailto"].clone();
+        assert_eq!(mailto, "mailto:minh@vifc.vn?cc=boss@majoris.co&subject=Welcome%2C%20Minh%20%26%20co&body=Line%20one%0D%0ALine%20two");
+        assert!(email_step(&json!({ "to": "Minh Tran" }), &json!({}), "Email").unwrap_err().to_string().contains("no email address"));
+        tauri::async_runtime::block_on(async {
+            let pool = workspace("steps").await;
+            let id = workflow(
+                &pool,
+                "Calls",
+                json!({
+                    "trigger": { "type": "MANUAL", "availability": "GLOBAL" },
+                    "steps": [
+                        { "id": "call", "type": "HTTP_REQUEST", "settings": { "method": "POST", "url": format!("http://127.0.0.1:{port}/hook"), "body": "{\"a\": 1}" } },
+                        { "id": "calc", "type": "CODE", "settings": { "code": "export const main = async (p) => ({ shout: p.word.toUpperCase() });", "inputs": { "word": "{{call.body.greeting}}" } } },
+                        { "id": "make", "type": "CREATE_RECORD", "settings": { "object": "company", "fields": { "name": "{{calc.shout}}" } } },
+                        { "id": "again", "type": "HTTP_REQUEST", "settings": { "url": format!("http://127.0.0.1:{port}/missing") } }
+                    ]
+                }),
+            )
+            .await;
+            let run_id = workflows::start_manual(&pool, &id, &[], false).await.unwrap().remove(0);
+            let run = detail(&pool, &run_id).await.unwrap();
+            assert_eq!((run.status.as_str(), run.waiting_for.as_str()), ("WAITING", "calc"), "{}", run.error);
+            assert_eq!(run.context.0["call"]["body"]["greeting"], "hi");
+            let pending = pending_code(&pool).await.unwrap();
+            assert_eq!(pending.len(), 1);
+            assert_eq!(pending[0].input.0, json!({ "word": "hi" }));
+            let first = pending[0].attempt.clone();
+            assert!(answer_form(&pool, &run_id, "calc", json!({})).await.is_err(), "a code step isn't a form");
+            assert!(answer_code(&pool, &run_id, "calc", "another", Ok(json!({}))).await.is_err(), "an answer to another attempt");
+            let run = answer_code(&pool, &run_id, "calc", &first, Err("p.word is undefined".into())).await.unwrap();
+            assert_eq!(run.status, "FAILED");
+            assert!(run.error.contains("p.word is undefined"), "{}", run.error);
+            let run = retry(&pool, &run_id).await.unwrap();
+            assert_eq!((run.status.as_str(), run.waiting_for.as_str()), ("WAITING", "calc"), "a retry asks the window again");
+            let second = pending_code(&pool).await.unwrap().remove(0).attempt;
+            assert_ne!(second, first);
+            assert!(answer_code(&pool, &run_id, "calc", &first, Ok(json!({ "shout": "LATE" }))).await.is_err(), "the first attempt's late answer");
+            let run = answer_code(&pool, &run_id, "calc", &second, Ok(json!({ "shout": "HI" }))).await.unwrap();
+            assert_eq!(run.status, "FAILED", "the second call answers 404");
+            assert!(run.error.contains("404"), "{}", run.error);
+            assert_eq!(run.context.0["make"]["name"], "HI");
+            assert!(pending_code(&pool).await.unwrap().is_empty());
+            // A written-out address on the network is refused at Activate already.
+            let def = records::object(&pool, "workflow").await.unwrap();
+            let made = query::create(&pool, &def, &json!({ "name": "Away", "status": "DRAFT" }), &Actor::system("test")).await.unwrap();
+            let draft = workflows::save_draft(&pool, made["id"].as_str().unwrap(), &json!({ "trigger": { "type": "MANUAL", "availability": "GLOBAL" }, "steps": [{ "id": "x", "type": "HTTP_REQUEST", "settings": { "url": away } }] })).await.unwrap();
+            assert!(workflows::activate(&pool, &draft.id).await.unwrap_err().to_string().contains("is on the network"));
         });
     }
 

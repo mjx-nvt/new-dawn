@@ -19,7 +19,7 @@ import {
 import MenuButton from "../../kernel/shell/MenuButton";
 import type { WidgetContext } from "../crm/record/widgets";
 import { formatWhen } from "../meetings/format";
-import { formFields, partsOf, StepSettings, summarize, TriggerSettings, triggerSummary, triggerTitle, type Variable } from "./StepSettings";
+import { DEFAULT_CODE, formFields, partsOf, StepSettings, summarize, TriggerSettings, triggerSummary, triggerTitle, type Variable } from "./StepSettings";
 import s from "./Workflows.module.css";
 
 type Slot = "root" | "branch" | "else" | "steps";
@@ -111,6 +111,10 @@ function newStep(def: Definition, type: string): Step {
   if (type === "DELAY") return { ...base, settings: { amount: 1, unit: "HOURS" } };
   if (type === "SEARCH_RECORDS") return { ...base, settings: { limit: 200 } };
   if (type === "FORM") return { ...base, settings: { title: "", fields: [] } };
+  if (type === "AI_AGENT") return { ...base, settings: { prompt: "", model: "", outputs: [] } };
+  if (type === "SEND_EMAIL") return { ...base, settings: { to: "", cc: "", subject: "", body: "" } };
+  if (type === "HTTP_REQUEST") return { ...base, settings: { method: "GET", url: "", headers: [], body: "" } };
+  if (type === "CODE") return { ...base, settings: { code: DEFAULT_CODE, inputs: { name: "" } } };
   return base;
 }
 
@@ -229,6 +233,12 @@ export default function WorkflowBuilder({ ctx }: { ctx: WidgetContext }) {
     else if (st.type === "SEARCH_RECORDS") variables.push({ group, path: st.id, label: "The records" }, { group, path: `${st.id}.0.id`, label: "First record · id" });
     else if (st.type === "FORM") for (const f of formFields(st)) variables.push({ group, path: `${st.id}.answers.${f.name}`, label: f.label || f.name });
     else if (st.type === "IF_ELSE") variables.push({ group, path: `${st.id}.branch`, label: "Route taken" });
+    else if (st.type === "AI_AGENT") {
+      variables.push({ group, path: `${st.id}.text`, label: "The answer" });
+      for (const o of Array.isArray(st.settings.outputs) ? (st.settings.outputs as { name: string }[]) : []) if (o.name) variables.push({ group, path: `${st.id}.${o.name}`, label: o.name });
+    } else if (st.type === "SEND_EMAIL") variables.push({ group, path: `${st.id}.to`, label: "To" }, { group, path: `${st.id}.subject`, label: "Subject" }, { group, path: `${st.id}.mailto`, label: "The draft's link" });
+    else if (st.type === "HTTP_REQUEST") variables.push({ group, path: `${st.id}.status`, label: "Status" }, { group, path: `${st.id}.body`, label: "The answer" });
+    else if (st.type === "CODE") variables.push({ group, path: st.id, label: "The result" });
     else if (st.type === "ITERATOR" && path.iterators.includes(st)) variables.push({ group, path: `${st.id}.currentItem`, label: "Its current item" }, { group, path: `${st.id}.index`, label: "Its index" });
   }
   if (path.iterators.length)
