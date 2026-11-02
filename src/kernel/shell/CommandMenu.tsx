@@ -4,6 +4,7 @@ import { ALL_MODULES, useModules } from "../bridge/modules";
 import { useAllViews, useRecents } from "../bridge/navigation";
 import { labelInput, useCreateRecord, useObject, useObjects, useSearchRecords } from "../bridge/records";
 import { openSettings } from "../bridge/settings";
+import { useManualWorkflows, useRunWorkflow } from "../bridge/workflows";
 import { useCurrentWorkspace } from "../bridge/workspaces";
 import styles from "./CommandMenu.module.css";
 import { SHORTCUTS } from "./useShortcuts";
@@ -46,6 +47,13 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
   const modules = useModules(slug).data ?? ALL_MODULES;
   const createDef = useObject(slug, creating ?? undefined);
   const create = useCreateRecord(slug, creating ?? undefined);
+  // Manual workflows (D-068): the global ones run from here; on a record's page, those that
+  // take a record of its object run on it.
+  const globalWorkflows = useManualWorkflows(slug, null, open);
+  const pathObject = /^\/crm\/([^/]+)\/[^/]+$/.exec(location.pathname)?.[1];
+  const recordObject = (objects.data ?? []).find((o) => o.name_plural === pathObject);
+  const recordWorkflows = useManualWorkflows(slug, recordObject?.name_singular, open && !!recordObject);
+  const runWorkflow = useRunWorkflow(slug);
 
   useEffect(() => {
     if (open) {
@@ -75,7 +83,9 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
     // "Create a company…" ranks above the records when what's typed starts the object's name
     // (⌘K, "co", ↩, the name, ↩ — Twenty's two keystrokes to a new company); else after them.
     const creates: Entry[] = [];
-    if (modules.crm) for (const o of recordObjects) {
+    // A workflow run is made by its workflow, never by hand (D-068).
+    const makeable = recordObjects.filter((o) => o.name_singular !== "workflowRun");
+    if (modules.crm) for (const o of makeable) {
       const noun = o.label_singular.toLowerCase();
       const label = `Create ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}…`;
       if (fits(label) || fits(o.label_singular)) creates.push({ id: `create:${o.id}`, section: "Create", label, run: () => setCreating(o.name_singular) });
@@ -99,12 +109,29 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
       for (const o of recordObjects) if (fits(o.label_plural)) out.push({ id: `object:${o.id}`, section: "Go to", label: o.label_plural, hint: "CRM", run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural } })) });
       for (const v of views.data ?? []) if (needle && (fits(v.name) || fits(v.object_label))) out.push({ id: `view:${v.id}`, section: "Views", label: v.name, hint: v.object_label, run: go(() => void navigate({ to: "/crm", search: { tab: v.object, view: v.id } })) });
     }
+    // The menu stays open until a run has started, so a refusal shows here.
+    const runIt = (workflowId: string) => () =>
+      runWorkflow.mutate(
+        { workflowId, recordIds: [] },
+        {
+          onSuccess: (ids) => {
+            onClose();
+            if (ids[0]) void navigate({ to: "/crm/$object/$recordId", params: { object: "workflowRuns", recordId: ids[0] }, search: {} });
+          },
+          onError: (e: Error) => setTrouble(e.message),
+        },
+      );
+    for (const w of globalWorkflows.data ?? []) if (fits(`Run ${w.name}`) || fits("Run workflow")) out.push({ id: `run:${w.workflow_id}`, section: "Workflows", label: `Run ${w.name}`, run: runIt(w.workflow_id) });
+    for (const w of recordWorkflows.data ?? []) {
+      const label = `Run ${w.name} on this ${recordObject?.label_singular.toLowerCase() ?? "record"}`;
+      if (fits(label) || fits("Run workflow")) out.push({ id: `run-on:${w.workflow_id}`, section: "Workflows", label, run: go(() => window.dispatchEvent(new CustomEvent("newdawn:run-workflow", { detail: w.workflow_id }))) });
+    }
     if (path.startsWith("/crm/dashboards/") && fits("Duplicate dashboard")) out.push({ id: "action:duplicate-dashboard", section: "Actions", label: "Duplicate dashboard", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:duplicate-dashboard"))) });
     if (onRecord && fits("Edit record page layout")) out.push({ id: "action:layout", section: "Actions", label: "Edit record page layout", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:edit-layout"))) });
     if (crmTab && crmTab !== "commitments" && fits("Deleted records")) out.push({ id: "action:deleted", section: "Actions", label: "Deleted records", hint: crmTab, run: go(() => window.dispatchEvent(new CustomEvent("newdawn:show-deleted"))) });
     // Import / export (D-065): the sheet and the export are the CRM page's, reached by URL state.
     if (crmTab && crmTab !== "commitments" && fits("Export view")) out.push({ id: "action:export", section: "Actions", label: "Export view", hint: "CSV", run: go(() => void navigate({ to: "/crm", search: { tab: crmTab, export: true } })) });
-    if (modules.crm) for (const o of recordObjects) {
+    if (modules.crm) for (const o of makeable) {
       const label = `Import ${o.label_plural.toLowerCase()} from a file…`;
       if (fits(label) || fits("Import records")) out.push({ id: `import:${o.id}`, section: "Actions", label, run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural, import: true } })) });
     }

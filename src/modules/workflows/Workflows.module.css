@@ -1,0 +1,367 @@
+/* Workflows (D-068): the builder — the flow of cards on the left, the chosen card's settings
+   on the right — and a run's page. Majoris tokens on the app's shell; no colour of its own. */
+
+.builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: var(--space-6);
+  align-items: start;
+  margin-top: var(--space-5);
+}
+@container content (max-width: 900px) { .builder { grid-template-columns: 1fr; } }
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.bar .spacer { flex: 1; }
+
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* A card of the flow: the trigger or a step. */
+.card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.card:hover { background: var(--surface-2); }
+.cardOn { box-shadow: inset 0 0 0 1.5px var(--primary); }
+.cardText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cardKind {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-text);
+}
+.cardTitle {
+  font-size: var(--t-md);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardSummary {
+  font-size: var(--t-sm);
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cardTools {
+  display: flex;
+  gap: var(--space-1);
+  opacity: 0;
+}
+.card:hover .cardTools,
+.card:focus-within .cardTools,
+.cardOn .cardTools { opacity: 1; }
+
+/* Inner lists: an If/else's routes, an Iterator's steps. */
+.nested {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-left: var(--space-6);
+  padding-left: var(--space-4);
+  border-left: 0.5px solid var(--hair);
+}
+.routeLabel {
+  margin: var(--space-2) 0 0;
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.ghostStep {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+}
+
+/* The picker of step types. */
+.picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2);
+}
+.pickerItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.pickerItem:hover { background: var(--surface-2); }
+.pickerItem small {
+  font-size: var(--t-xs);
+  color: var(--ink-3);
+}
+
+/* The settings aside. */
+.side {
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* The inspector is narrow: a setting's label sits above its control. */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.row > label,
+.row > .rowLabel {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.row select.input { width: 100%; }
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.inline {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.inline > .input,
+.inline > .template { flex: 1; min-width: 0; }
+.inline > select.input.fit { flex: none; width: auto; }
+.inline > .input.narrow { flex: 0 0 96px; }
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.chipPick {
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-chip);
+  background: var(--surface);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: 500;
+}
+.chipPick[aria-pressed="true"] {
+  background: var(--primary-tint);
+  border-color: transparent;
+  color: var(--on-primary-tint);
+}
+/* A list of fields, conditions or rules: each one a small block, a little apart. */
+.blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.fieldName {
+  font-size: var(--t-xs);
+  font-weight: 500;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: start;
+}
+/* A text setting and its variables picker ({x}). */
+.template {
+  display: flex;
+  gap: var(--space-1);
+}
+.template > input { flex: 1; min-width: 0; }
+/* A native select is as wide as its longest option: the picker keeps to its "{x}". */
+.template > select.input { flex: 0 0 64px; width: 64px; }
+
+/* Lists on the side: versions, runs. */
+.list {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border-top: 0.5px solid var(--hair);
+  font-size: var(--t-sm);
+}
+.item:first-child { border-top: 0; }
+.itemText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.itemMeta { color: var(--ink-3); }
+.itemLink {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+}
+.itemLink:hover { text-decoration: underline; }
+
+/* Status chips, by the run's or version's status. */
+.statusOk { background: var(--status-positive-tint); color: var(--status-positive); }
+.statusWarn { background: var(--status-warning-tint); color: var(--status-warning); }
+.statusBad { background: var(--status-negative-tint); color: var(--status-negative); }
+
+/* A run's page. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4) var(--space-6);
+  margin-top: var(--space-5);
+}
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.factLabel {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.factValue {
+  font-size: var(--t-md);
+  font-weight: 500;
+}
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.step {
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.stepHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.stepState {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+.stepDone { background: var(--status-positive-tint); color: var(--status-positive); }
+.stepFailed { background: var(--status-negative-tint); color: var(--status-negative); }
+.stepWaiting { background: var(--status-warning-tint); color: var(--status-warning); }
+.json {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+}
+details.output > summary {
+  margin-top: var(--space-2);
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+  cursor: default;
+}
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  padding: var(--space-5);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.test {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 0.5px solid var(--hair);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.hits {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hit {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+.hit:hover { background: var(--surface-2); }
+.hit small { color: var(--ink-3); }

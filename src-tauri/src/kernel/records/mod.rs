@@ -5,6 +5,7 @@
 
 pub mod charts;
 pub mod ddl;
+pub mod events;
 pub mod files;
 pub mod layouts;
 pub mod linked;

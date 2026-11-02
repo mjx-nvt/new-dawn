@@ -324,6 +324,22 @@ export const commands = {
 	duplicateDashboard: (slug: string, id: string) => typedError<Json, AppError>(__TAURI_INVOKE("duplicate_dashboard", { slug, id })),
 	/**  The categories and series of a chart. */
 	chartData: (slug: string, config: ChartConfig_Deserialize) => typedError<ChartData_Serialize, AppError>(__TAURI_INVOKE("chart_data", { slug, config })),
+	listWorkflowVersions: (slug: string, workflowId: string) => typedError<Version[], AppError>(__TAURI_INVOKE("list_workflow_versions", { slug, workflowId })),
+	/**  The version the builder shows: the draft, else the live one (reading makes no version). */
+	workflowDraft: (slug: string, workflowId: string) => typedError<Version, AppError>(__TAURI_INVOKE("workflow_draft", { slug, workflowId })),
+	saveWorkflowDraft: (slug: string, workflowId: string, definition: Json) => typedError<Version, AppError>(__TAURI_INVOKE("save_workflow_draft", { slug, workflowId, definition })),
+	activateWorkflowVersion: (slug: string, versionId: string) => typedError<Version, AppError>(__TAURI_INVOKE("activate_workflow_version", { slug, versionId })),
+	deactivateWorkflowVersion: (slug: string, versionId: string) => typedError<Version, AppError>(__TAURI_INVOKE("deactivate_workflow_version", { slug, versionId })),
+	discardWorkflowDraft: (slug: string, versionId: string) => typedError<null, AppError>(__TAURI_INVOKE("discard_workflow_draft", { slug, versionId })),
+	useWorkflowVersionAsDraft: (slug: string, versionId: string) => typedError<Version, AppError>(__TAURI_INVOKE("use_workflow_version_as_draft", { slug, versionId })),
+	/**  By hand: the active version on these records (the draft when `test`). The run ids. */
+	runWorkflow: (slug: string, workflowId: string, recordIds: string[], test: boolean) => typedError<string[], AppError>(__TAURI_INVOKE("run_workflow", { slug, workflowId, recordIds, test })),
+	workflowRunDetail: (slug: string, runId: string) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("workflow_run_detail", { slug, runId })),
+	answerWorkflowForm: (slug: string, runId: string, stepId: string, answers: Json) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("answer_workflow_form", { slug, runId, stepId, answers })),
+	retryWorkflowRun: (slug: string, runId: string) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("retry_workflow_run", { slug, runId })),
+	cancelWorkflowRun: (slug: string, runId: string) => typedError<RunDetail_Serialize, AppError>(__TAURI_INVOKE("cancel_workflow_run", { slug, runId })),
+	/**  The manual workflows for ⌘K (none) or a record's page (its object). */
+	listManualWorkflows: (slug: string, object: string | null) => typedError<ManualWorkflow[], AppError>(__TAURI_INVOKE("list_manual_workflows", { slug, object })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -1824,6 +1840,16 @@ export type MailSettings = {
 /**  How Mail answered. */
 export type MailState = "ok" | "not_running" | "no_permission" | "failed";
 
+/**  A workflow the owner runs by hand, and from where. */
+export type ManualWorkflow = {
+	workflow_id: string,
+	name: string,
+	/**  GLOBAL · SINGLE · BULK */
+	availability: string,
+	/**  The object its records are (SINGLE · BULK), or empty. */
+	object: string,
+};
+
 export type MatchChoice = {
 	value: string,
 	label: string,
@@ -2912,6 +2938,49 @@ export type RowPreview_Serialize = {
 	errors: CellError_Serialize[],
 };
 
+/**  A run as its page shows it. */
+export type RunDetail = RunDetail_Serialize | RunDetail_Deserialize;
+
+/**  A run as its page shows it. */
+export type RunDetail_Deserialize = {
+	id: string,
+	name: string,
+	/**  NOT_STARTED · RUNNING · COMPLETED · FAILED · WAITING */
+	status: string,
+	workflow_id: string,
+	workflow_name: string,
+	started_at?: string | null,
+	ended_at?: string | null,
+	error: string,
+	/**  The FORM step waited for, or empty. */
+	waiting_for: string,
+	wait_until?: string | null,
+	trigger: Json,
+	context: Json,
+	done: string[],
+	definition: Json,
+};
+
+/**  A run as its page shows it. */
+export type RunDetail_Serialize = {
+	id: string,
+	name: string,
+	/**  NOT_STARTED · RUNNING · COMPLETED · FAILED · WAITING */
+	status: string,
+	workflow_id: string,
+	workflow_name: string,
+	started_at: string | null,
+	ended_at: string | null,
+	error: string,
+	/**  The FORM step waited for, or empty. */
+	waiting_for: string,
+	wait_until: string | null,
+	trigger: Json,
+	context: Json,
+	done: string[],
+	definition: Json,
+};
+
 /**  Everything "Update view" writes, in one go. */
 export type SaveInput = SaveInput_Serialize | SaveInput_Deserialize;
 
@@ -3610,6 +3679,18 @@ export type UpdateField =
 "milestone" | "phase" | "status" | "risk" | "decision" | "note";
 
 export type UpdateStatus = "proposed" | "applied" | "dismissed";
+
+/**  A version as the UI reads it. */
+export type Version = {
+	id: string,
+	workflow_id: string,
+	name: string,
+	/**  DRAFT · ACTIVE · DEACTIVATED · ARCHIVED */
+	status: string,
+	definition: Json,
+	created_at: string,
+	updated_at: string,
+};
 
 /**  A view with everything it saves. */
 export type ViewDef = ViewDef_Serialize | ViewDef_Deserialize;

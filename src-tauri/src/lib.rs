@@ -59,6 +59,7 @@ mod modules {
     pub mod feedback;
     pub mod inbox;
     pub mod mailbox;
+    pub mod workflows;
     pub mod lessons;
     pub mod meetings;
     pub mod memory;
@@ -89,6 +90,7 @@ mod commands {
     pub mod glass;
     pub mod inbox;
     pub mod mailbox;
+    pub mod workflows;
     pub mod layouts;
     pub mod meetings;
     pub mod minutes;
@@ -306,6 +308,19 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::dashboards::save_dashboard_layout,
             commands::dashboards::duplicate_dashboard,
             commands::dashboards::chart_data,
+            commands::workflows::list_workflow_versions,
+            commands::workflows::workflow_draft,
+            commands::workflows::save_workflow_draft,
+            commands::workflows::activate_workflow_version,
+            commands::workflows::deactivate_workflow_version,
+            commands::workflows::discard_workflow_draft,
+            commands::workflows::use_workflow_version_as_draft,
+            commands::workflows::run_workflow,
+            commands::workflows::workflow_run_detail,
+            commands::workflows::answer_workflow_form,
+            commands::workflows::retry_workflow_run,
+            commands::workflows::cancel_workflow_run,
+            commands::workflows::list_manual_workflows,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,
@@ -541,6 +556,7 @@ pub fn run() {
                         != recorder::session::RecorderPhase::Idle
                 });
             kernel::backup::spawn_scheduler(app.handle());
+            modules::workflows::triggers::spawn(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
             modules::lessons::spawn(app.handle());
             modules::memory::spawn(app.handle());

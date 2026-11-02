@@ -79,6 +79,11 @@ impl Actor {
     pub fn import(member_id: Option<String>, file_name: &str) -> Self {
         Self { source: "IMPORT".into(), name: file_name.into(), member_id }
     }
+
+    /// A workflow's own writes (D-068), named after the workflow.
+    pub fn workflow(name: &str) -> Self {
+        Self { source: "WORKFLOW".into(), name: name.into(), member_id: None }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -830,6 +835,7 @@ pub async fn create(pool: &SqlitePool, object: &ObjectDef, data: &Value, actor: 
     bind_all(sqlx::query(sql(sql_text)), &binds).execute(pool).await.context("creating the record")?;
     let record = get(pool, object, &id, true).await?;
     timeline::record(pool, object, &id, "created", json!({}), actor).await?;
+    super::events::emit(super::events::RecordEvent { pool: pool.clone(), object: object.meta.name_singular.clone(), event: "created".into(), id: id.clone(), before: None, after: Some(record.clone()), source: actor.source.clone() });
     search::index(pool, object, &record).await?;
     Ok(record)
 }
@@ -871,6 +877,7 @@ pub async fn update(pool: &SqlitePool, object: &ObjectDef, id: &str, data: &Valu
     }
     if !diff.is_empty() {
         timeline::record(pool, object, id, "updated", json!({ "diff": diff }), actor).await?;
+        super::events::emit(super::events::RecordEvent { pool: pool.clone(), object: object.meta.name_singular.clone(), event: "updated".into(), id: id.to_owned(), before: Some(before.clone()), after: Some(after.clone()), source: actor.source.clone() });
     }
     search::index(pool, object, &after).await?;
     Ok(after)
@@ -886,6 +893,9 @@ pub async fn delete(pool: &SqlitePool, object: &ObjectDef, id: &str, actor: &Act
         return Err(anyhow!(AppError::not_found("That record isn't there")));
     }
     timeline::record(pool, object, id, "deleted", json!({}), actor).await?;
+    if let Ok(gone) = get(pool, object, id, true).await {
+        super::events::emit(super::events::RecordEvent { pool: pool.clone(), object: object.meta.name_singular.clone(), event: "deleted".into(), id: id.to_owned(), before: Some(gone), after: None, source: actor.source.clone() });
+    }
     search::remove(pool, &object.meta.name_singular, id).await
 }
 

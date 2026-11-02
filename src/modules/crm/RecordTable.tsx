@@ -121,7 +121,8 @@ export default function RecordTable({ slug, object, columns, query, deleted, com
     window.addEventListener("pointerup", up);
   };
   const widthOf = (c: Column) => (live?.id === c.field.id ? live.size : c.size);
-  const rowsProps = { slug, object, columns, deleted, editing, setEditing, selected, setSelected, save, add, onOpen, locked };
+  // A workflow run is made and changed by its workflow only (D-068).
+  const rowsProps = { slug, object, columns, deleted, editing, setEditing, selected, setSelected, save, add, onOpen, locked: locked || object.meta.name_singular === "workflowRun" };
 
   return (
     <div className={styles.tableWrap}>

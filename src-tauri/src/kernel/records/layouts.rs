@@ -156,8 +156,9 @@ fn related_tabs(object: &ObjectDef, from: f64) -> Vec<TabInput> {
 /// records, Tasks, Notes, Files — and, on a person, New Dawn's Commitments and Meetings.
 pub fn defaults(object: &ObjectDef) -> Vec<TabInput> {
     let name = object.meta.name_singular.as_str();
-    // A dashboard's page is its own layout (D-067); its record page only names it.
-    if name == "dashboard" {
+    // A dashboard's page is its own layout (D-067), a workflow's the builder and a run's its steps
+    // (D-068); their record pages only name them.
+    if matches!(name, "dashboard" | "workflow" | "workflowRun") {
         return vec![tab("Overview", 0.0, true, vec![widget("FIELDS", "Fields", 0, 0, 12, 4, json!({ "fields": ["name"] }))])];
     }
     if matches!(name, "note" | "task") {

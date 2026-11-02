@@ -479,11 +479,11 @@ fn host_of(url: &str) -> String {
     no_scheme.strip_prefix("www.").unwrap_or(no_scheme).trim_end_matches('/').to_owned()
 }
 
-type Lookups = HashMap<(String, String, String), Option<String>>;
+pub type Lookups = HashMap<(String, String, String), Option<String>>;
 
 /// The id of the record whose `by` (its id, or one of its fields) reads `text` — remembered
 /// per run, so a company named on a hundred rows is looked up once.
-async fn find_by(pool: &SqlitePool, obj: &ObjectDef, by: &str, text: &str, cache: &mut Lookups) -> Result<Option<String>> {
+pub async fn find_by(pool: &SqlitePool, obj: &ObjectDef, by: &str, text: &str, cache: &mut Lookups) -> Result<Option<String>> {
     let key = (obj.meta.name_singular.clone(), by.to_owned(), text.trim().to_lowercase());
     if let Some(hit) = cache.get(&key) {
         return Ok(hit.clone());

@@ -56,7 +56,16 @@ fn collect(value: &Value, words: &mut Vec<String>) {
     }
 }
 
+/// Whether an object's records are found by search: not workflow runs (a schedule makes one a
+/// minute; the workflow's page lists them).
+fn indexed(object: &ObjectDef) -> bool {
+    object.meta.name_singular != "workflowRun"
+}
+
 pub async fn index(pool: &SqlitePool, object: &ObjectDef, record: &Value) -> Result<()> {
+    if !indexed(object) {
+        return Ok(());
+    }
     let Some(id) = record.get("id").and_then(Value::as_str) else { return Ok(()) };
     remove(pool, &object.meta.name_singular, id).await?;
     let text = text_of(object, record);
@@ -134,6 +143,9 @@ pub async fn find(pool: &SqlitePool, text: &str, limit: u32) -> Result<Vec<Hit>>
 /// Indexes the live records the index lacks and drops the rows of records gone or deleted —
 /// writers outside the engine (the people memory, Tasks) don't index. Run at every open.
 pub async fn sync(pool: &SqlitePool, object: &ObjectDef) -> Result<()> {
+    if !indexed(object) {
+        return Ok(());
+    }
     let missing: Vec<(String,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT id FROM {} WHERE deleted_at IS NULL AND id NOT IN (SELECT record_id FROM search_index WHERE object = ?)",
         object.meta.table_name

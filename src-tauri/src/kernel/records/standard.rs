@@ -322,6 +322,47 @@ pub fn standard_objects() -> Vec<ObjectDecl> {
         fields: dashboard,
     });
 
+    // Workflows (D-068, 0.10.11): a workflow is a record whose page is the builder; a run is a
+    // record whose page shows its steps. Their versions and triggers are the engine's own tables.
+    let mut workflow = vec![
+        required(f("name", "Name", FieldType::Text, "name", "IconSettingsAutomation")),
+        required(select("status", "Status", "status", "IconCircleDot", &[("DRAFT", "Draft", "gray"), ("ACTIVE", "Active", "green"), ("DEACTIVATED", "Deactivated", "orange")])),
+        sys(to_many("runs", "Runs", "workflowRun", "workflow", "IconHistory")),
+    ];
+    workflow.extend(common());
+    objects.push(ObjectDecl {
+        name_singular: "workflow",
+        name_plural: "workflows",
+        label_singular: "Workflow",
+        label_plural: "Workflows",
+        icon: "IconSettingsAutomation",
+        table: "workflow",
+        system: false,
+        label_identifier: "name",
+        image_identifier: None,
+        fields: workflow,
+    });
+    let mut run = vec![
+        required(f("name", "Name", FieldType::Text, "name", "IconHistory")),
+        required(select("status", "Status", "status", "IconCircleDot", &[("NOT_STARTED", "Not started", "gray"), ("RUNNING", "Running", "blue"), ("COMPLETED", "Completed", "green"), ("FAILED", "Failed", "red"), ("WAITING", "Waiting", "yellow")])),
+        to_one("workflow", "Workflow", "workflow", "workflow", "runs", "IconSettingsAutomation"),
+        f("startedAt", "Started at", FieldType::DateTime, "started_at", "IconCalendarEvent"),
+        f("endedAt", "Ended at", FieldType::DateTime, "ended_at", "IconCalendarEvent"),
+    ];
+    run.extend(common());
+    objects.push(ObjectDecl {
+        name_singular: "workflowRun",
+        name_plural: "workflowRuns",
+        label_singular: "Workflow run",
+        label_plural: "Workflow runs",
+        icon: "IconHistory",
+        table: "workflow_run",
+        system: false,
+        label_identifier: "name",
+        image_identifier: None,
+        fields: run,
+    });
+
     objects.push(ObjectDecl {
         name_singular: "attachment",
         name_plural: "attachments",

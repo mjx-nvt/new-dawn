@@ -405,7 +405,7 @@ mod tests {
 
             let items = navigation(&pool).await.unwrap();
             let names: Vec<&str> = items.iter().map(|i| i.object.as_str()).collect();
-            assert_eq!(names, ["people", "companies", "opportunities", "notes", "tasks"]);
+            assert_eq!(names, ["people", "companies", "opportunities", "notes", "tasks", "dashboards", "workflows", "workflowRuns"]);
             let mut edited: Vec<NavItemInput> = items.iter().map(|i| NavItemInput { object_id: i.object_id.clone(), position: i.position, is_hidden: i.object == "notes", folder: if i.object == "tasks" { "Work".into() } else { String::new() } }).collect();
             edited[0].position = 10.0;
             set_navigation(&pool, &edited).await.unwrap();

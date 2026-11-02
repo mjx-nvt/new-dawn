@@ -5,9 +5,12 @@ import { useDuplicateDashboard } from "../../../kernel/bridge/dashboards";
 import { noteVisit, useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { asRecord, recordLabel, useDeleteRecord, useDestroyRecord, useObject, useRecord, useRestoreRecord, useUpdateRecord } from "../../../kernel/bridge/records";
 import { useCurrentWorkspace } from "../../../kernel/bridge/workspaces";
+import { useManualWorkflows, useRunWorkflow } from "../../../kernel/bridge/workflows";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import MenuButton from "../../../kernel/shell/MenuButton";
 import { CellEditor } from "../cells";
+import RunBody from "../../workflows/RunPage";
+import WorkflowBuilder from "../../workflows/WorkflowBuilder";
 import DashboardBody from "./DashboardPage";
 import LayoutEditor from "./LayoutEditor";
 import styles from "./Record.module.css";
@@ -70,6 +73,29 @@ export default function RecordPage() {
     window.addEventListener("newdawn:duplicate-dashboard", copyDashboard);
     return () => window.removeEventListener("newdawn:duplicate-dashboard", copyDashboard);
   }, [isDashboard, copyDashboard]);
+  // A workflow's page is the builder, a run's page its steps (D-068); the ⋯ menu and ⌘K run
+  // the manual workflows that take a record of this object.
+  const isWorkflow = name === "workflow";
+  const isRun = name === "workflowRun";
+  const manual = useManualWorkflows(slug, name, !!name && !isWorkflow && !isRun);
+  const runWorkflow = useRunWorkflow(slug);
+  const startWorkflow = runWorkflow.mutate;
+  const runOnThis = useCallback(
+    (workflowId: string) =>
+      startWorkflow(
+        { workflowId, recordIds: [id] },
+        { onSuccess: (ids) => ids[0] && void navigate({ to: "/crm/$object/$recordId", params: { object: "workflowRuns", recordId: ids[0] }, search: {} }) },
+      ),
+    [startWorkflow, id, navigate],
+  );
+  useEffect(() => {
+    const on = (e: Event) => {
+      const workflowId = (e as CustomEvent<string>).detail;
+      if (typeof workflowId === "string" && workflowId) runOnThis(workflowId);
+    };
+    window.addEventListener("newdawn:run-workflow", on);
+    return () => window.removeEventListener("newdawn:run-workflow", on);
+  }, [runOnThis]);
   const label = def && data ? recordLabel(def, data) : "";
   const labelField = def?.fields.find((f) => f.id === def.meta.label_identifier_field_id);
   const tabs = layout.data?.tabs ?? [];
@@ -79,7 +105,7 @@ export default function RecordPage() {
   const go = (target: string | null | undefined) => {
     if (target) void navigate({ to: "/crm/$object/$recordId", params: { object: objectName, recordId: target }, search: tab ? { tab } : {} });
   };
-  const error = object.error ?? record.error ?? layout.error ?? update.error ?? remove.error ?? restore.error ?? destroy.error;
+  const error = object.error ?? record.error ?? layout.error ?? update.error ?? remove.error ?? restore.error ?? destroy.error ?? runWorkflow.error;
   const ctx = def && data && slug ? { slug, object: def, record: data } : null;
 
   return (
@@ -134,6 +160,7 @@ export default function RecordPage() {
             items={[
               { label: isDashboard ? "Edit dashboard" : "Edit page layout", onSelect: () => setEditingLayout(true), disabled: !ctx || (!isDashboard && !layout.data) },
               ...(isDashboard ? [{ label: "Duplicate dashboard", onSelect: copyDashboard, disabled: !ctx || duplicate.isPending }] : []),
+              ...(manual.data ?? []).map((w, i) => ({ label: `Run ${w.name}`, separator: i === 0, disabled: !ctx || deleted || runWorkflow.isPending, onSelect: () => runOnThis(w.workflow_id) })),
               deleted ? { label: "Restore", onSelect: () => restore.mutate(id), separator: true } : { label: "Delete", danger: true, separator: true, disabled: !ctx, onSelect: () => remove.mutate(id) },
             ]}
           />
@@ -157,6 +184,10 @@ export default function RecordPage() {
       )}
       {isDashboard && ctx ? (
         <DashboardBody ctx={ctx} editing={editingLayout} onEditDone={() => setEditingLayout(false)} />
+      ) : isWorkflow && ctx && !editingLayout ? (
+        <WorkflowBuilder key={id} ctx={ctx} />
+      ) : isRun && ctx && !editingLayout ? (
+        <RunBody key={id} ctx={ctx} />
       ) : editingLayout && ctx && layout.data ? (
         <LayoutEditor ctx={ctx} layout={layout.data} onDone={() => setEditingLayout(false)} />
       ) : (
