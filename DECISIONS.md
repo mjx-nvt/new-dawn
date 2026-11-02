@@ -91,6 +91,23 @@ _2026-11-02_
 
 ---
 
+## D-081 — Plane's intake: requests are numbered items in a Triage state, statuses read on the day, the Email reading agent files requests
+_2026-11-02_
+
+**Context** (plan v4 §4.5, 0.11.8): Plane's intake — requests in the Triage state with a priority, assignees, labels and a due date; Open and Closed tabs; Accept (edit it, choose the state), Decline, Snooze until a date, Mark as duplicate, Delete; filters, sort, up and down through what's pending; the description, activity and comments. Plane's forms and email intake are paid; New Dawn files an email's requests itself.
+
+**Decision — a request is a work item in Triage** (0040 `pm_intake_item`, one row an item): as Plane's, an intake item is a numbered work item of its project — description, priority, assignees, labels, due date, comments, activity — in the project's **Triage** state (made the first time Intake is used, under a free name; it never shows among the project's states to pick), with its intake row saying how it stands. Lists, filters, views, search, the bulk bar and due-date reminders skip Triage items; a Triage item can't be given a state, a cycle, a module or a parent — it is accepted first. So **VIFC-n** is its key from the start, and accepting it moves it into the chosen state (the project's default when none) with its activity row — a work item like any other from then on.
+
+**Decision — statuses read on the day**: pending, accepted, declined, snoozed (until a day after today) or duplicate (of a work item of the project, with a Duplicate of relation). A snooze isn't woken by a job: on its day and after, it reads pending — the list, the count and the actions all ask the day. Closed requests (accepted, declined, duplicate) take no action; one not accepted can be deleted with its comments and files.
+
+**Decision — the Email reading agent files requests** (D-056): when a project has Intake on, the agent's prompt lists it as taking requests and asks for `requests` — work the email asks of such a project, by its exact name, with a short title and a sentence quoted from the email (kept only when the email says it). Each becomes a request in that project, from "Email reading agent", its description the quoted sentence and the email's sender and subject; once a title an email. With no project taking requests, the prompt is as it was. A request stays when its email is forgotten (it is a numbered item).
+
+**Where the owner sees it**: a project's **Intake** tab ("Intake · 3" while three wait) — Open and Closed with their counts, a sort (newest, oldest, priority, due date) and a priority filter, the requests on the left (↑ ↓ or J K go through them), the chosen one on the right: its key and status, its title, the actions while it is open — a state and **Accept**, **Decline**, **Snooze until** a day, **Duplicate of…** a work item found by key or words —, its description, priority, assignees, labels, due date, comments and activity; Delete. **New request** (`N`) asks for a title, a description, a priority, assignees, labels and a due date.
+
+**Means for future work**: Home and Your work (0.11.9) count what waits; analytics (0.11.10) read intake; Plane's API (0.11.11) serves it; the Projects agent (0.11.12) can propose a request's state.
+
+---
+
 ## D-080 — Plane's pages: one editor with page blocks, versions as merged snapshots, a lock on the words, PDF through the print sheet
 _2026-11-02_
 

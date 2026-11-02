@@ -123,13 +123,13 @@ const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/$projectId",
   // The project's tab and, under Settings, its section (D-073).
-  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string; cycle?: string; ctab?: string; cfrom?: string; cto?: string; carch?: string; module?: string; mlayout?: string; msort?: string; mstatus?: string; mlead?: string; mmember?: string; mfav?: string; march?: string; mfrom?: string; mto?: string; page?: string; ptab?: string; psort?: string; pfav?: string; plabel?: string; pfull?: string } => {
+  validateSearch: (search: Record<string, unknown>): { tab?: string; section?: string; view?: string; f?: string; layout?: string; group?: string; sub?: string; order?: string; peek?: string; mode?: string; activity?: string; cycle?: string; ctab?: string; cfrom?: string; cto?: string; carch?: string; module?: string; mlayout?: string; msort?: string; mstatus?: string; mlead?: string; mmember?: string; mfav?: string; march?: string; mfrom?: string; mto?: string; page?: string; ptab?: string; psort?: string; pfav?: string; plabel?: string; pfull?: string; intake?: string; itab?: string; isort?: string; iprio?: string } => {
     const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
     // The tab, Settings' section, the work items' open view, filters, layout, group, sub-group,
     // order, peek and its activity tab, the Cycles tab's own tab and open cycle, the Modules
-    // tab's layout, sort, filters and open module, and the Pages tab's tab, sort, filters, open
-    // page and full screen (D-073 … D-080).
-    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity"), ...text("cycle"), ...text("ctab"), ...text("cfrom"), ...text("cto"), ...text("carch"), ...["module", "mlayout", "msort", "mstatus", "mlead", "mmember", "mfav", "march", "mfrom", "mto", "page", "ptab", "psort", "pfav", "plabel", "pfull"].reduce((all, k) => ({ ...all, ...text(k) }), {}) };
+    // tab's layout, sort, filters and open module, the Pages tab's tab, sort, filters, open page
+    // and full screen, and Intake's tab, sort, priority and chosen request (D-073 … D-081).
+    return { ...text("tab"), ...text("section"), ...text("view"), ...text("f"), ...text("layout"), ...text("group"), ...text("sub"), ...text("order"), ...text("peek"), ...text("mode"), ...text("activity"), ...text("cycle"), ...text("ctab"), ...text("cfrom"), ...text("cto"), ...text("carch"), ...["module", "mlayout", "msort", "mstatus", "mlead", "mmember", "mfav", "march", "mfrom", "mto", "page", "ptab", "psort", "pfav", "plabel", "pfull", "intake", "itab", "isort", "iprio"].reduce((all, k) => ({ ...all, ...text(k) }), {}) };
   },
   component: () => (
     <ModuleGate module="projects">

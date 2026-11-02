@@ -246,7 +246,8 @@ macro_rules! select {
 pub async fn query(pool: &SqlitePool, project_id: Option<&str>, rules: &[super::filters::PmRule], today: chrono::NaiveDate, start: crate::kernel::formats::WeekStart) -> Result<Vec<PmItem>> {
     let (filter, binds) = super::filters::sql(rules, today, start)?;
     let scope = if project_id.is_some() { "i.project_id = ?" } else { "m.archived_at IS NULL" };
-    let sql = format!("{} WHERE {scope} AND i.archived_at IS NULL{filter} ORDER BY i.sort_order, i.sequence", select!(""));
+    // Intake's requests aren't work yet (D-081).
+    let sql = format!("{} WHERE {scope} AND i.archived_at IS NULL AND s.state_group <> 'triage'{filter} ORDER BY i.sort_order, i.sequence", select!(""));
     let mut q = sqlx::query_as::<_, Row>(sqlx::AssertSqlSafe(sql));
     if let Some(p) = project_id {
         q = q.bind(p.to_owned());
@@ -268,7 +269,7 @@ pub async fn list(pool: &SqlitePool, project_id: &str, archived: bool) -> Result
     let rows: Vec<Row> = if archived {
         sqlx::query_as(select!("WHERE i.project_id = ? AND i.archived_at IS NOT NULL ORDER BY i.archived_at DESC")).bind(project_id).fetch_all(pool).await?
     } else {
-        sqlx::query_as(select!("WHERE i.project_id = ? AND i.archived_at IS NULL ORDER BY i.sort_order, i.sequence")).bind(project_id).fetch_all(pool).await?
+        sqlx::query_as(select!("WHERE i.project_id = ? AND i.archived_at IS NULL AND s.state_group <> 'triage' ORDER BY i.sort_order, i.sequence")).bind(project_id).fetch_all(pool).await?
     };
     Ok(rows.into_iter().map(PmItem::from).collect())
 }
@@ -424,9 +425,11 @@ async fn check_point(pool: &SqlitePool, project_id: &str, point: Option<&str>) -
 /// A parent in the same project, not archived, and not the item or one of its sub-items.
 async fn check_parent(pool: &SqlitePool, project_id: &str, parent: Option<&str>, me: Option<&str>) -> Result<Option<String>> {
     let Some(parent) = parent.filter(|p| !p.is_empty()) else { return Ok(None) };
-    let row: Option<(String, Option<String>)> = sqlx::query_as("SELECT project_id, archived_at FROM pm_item WHERE id = ?").bind(parent).fetch_optional(pool).await?;
+    let row: Option<(String, Option<String>, StateGroup)> = sqlx::query_as("SELECT i.project_id, i.archived_at, s.state_group FROM pm_item i JOIN pm_state s ON s.id = i.state_id WHERE i.id = ?").bind(parent).fetch_optional(pool).await?;
     match row {
-        Some((p, None)) if p == project_id => {}
+        // A request in Intake isn't work yet (D-081).
+        Some((_, _, StateGroup::Triage)) => return Err(invalid("A request can't be a parent — accept it first")),
+        Some((p, None, _)) if p == project_id => {}
         _ => return Err(invalid("A parent is a work item of the same project, not archived")),
     }
     if let Some(me) = me {
@@ -519,6 +522,15 @@ async fn version(tx: &mut Transaction<'_, Sqlite>, item: &str, json: Option<&str
 /// none is given; the project's default assignee when none; the maker, the assignees and the
 /// project's default subscribers subscribed.
 pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<PmItem> {
+    create_with(pool, input, actor, None).await
+}
+
+/// Where an intake item comes from (D-081): `in_app` or `email`, and the email's reading.
+pub(crate) type IntakeOrigin<'a> = (&'a str, Option<&'a str>);
+
+/// Makes an item — or, with `intake`, an intake item: in the project's Triage state (made the
+/// first time), with its intake row, in the same transaction; no cycle, no module.
+pub(crate) async fn create_with(pool: &SqlitePool, input: ItemInput, actor: &str, intake: Option<IntakeOrigin<'_>>) -> Result<PmItem> {
     let project = super::get(pool, &input.project_id).await?;
     if project.archived_at.is_some() {
         return Err(invalid("The project is archived — restore it to add work items"));
@@ -534,12 +546,24 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
         }
         None => None,
     };
+    if intake.is_some() && !project.features.intake {
+        return Err(invalid("Intake is off for this project — turn it on under its Settings"));
+    }
+    if intake.is_some() && (cycle.is_some() || !input.modules.is_empty() || input.parent_id.is_some()) {
+        return Err(invalid("A request waits in Intake — plan it once it's accepted"));
+    }
     let (description, text) = clean_description(input.description.as_deref())?;
-    let state_id = match input.state_id.as_deref().filter(|s| !s.is_empty()) {
-        Some(s) => s.to_owned(),
-        None => default_state(pool, &project.id).await?,
+    // An intake item's state is Triage (set in the transaction below).
+    let (state_id, group) = if intake.is_some() {
+        (String::new(), StateGroup::Triage)
+    } else {
+        let state_id = match input.state_id.as_deref().filter(|s| !s.is_empty()) {
+            Some(s) => s.to_owned(),
+            None => default_state(pool, &project.id).await?,
+        };
+        let (_, group) = check_state(pool, &project.id, &state_id).await?;
+        (state_id, group)
     };
-    let (_, group) = check_state(pool, &project.id, &state_id).await?;
     let mut assignees = check_people(pool, &input.assignees, &[]).await?;
     if assignees.is_empty() {
         assignees.extend(project.default_assignee.clone());
@@ -564,10 +588,13 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
 
     let item = id();
     let mut tx = pool.begin().await?;
+    // The number first: a write takes the lock before the Triage state is read (another writer
+    // between a read and a write would end the transaction).
     let (sequence,): (i64,) = sqlx::query_as(sqlx::AssertSqlSafe(format!("UPDATE pm_project SET last_sequence = last_sequence + 1, updated_at = {NOW} WHERE project_id = ? RETURNING last_sequence")))
         .bind(&project.id)
         .fetch_one(&mut *tx)
         .await?;
+    let state_id = if intake.is_some() { super::intake::ensure_triage(&mut tx, &project.id).await? } else { state_id };
     sqlx::query(sqlx::AssertSqlSafe(format!(
         "INSERT INTO pm_item (id, project_id, sequence, name, description_json, description_text, state_id, priority, start_date, target_date, estimate_point_id, parent_id, sort_order, completed_at, created_by, updated_by) \
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT coalesce(max(sort_order), 0) + 1000 FROM pm_item WHERE project_id = ?), {}, ?, ?)",
@@ -607,8 +634,31 @@ pub async fn create(pool: &SqlitePool, input: ItemInput, actor: &str) -> Result<
         super::cycles::set_cycle_in(&mut tx, &item, Some(cy), actor).await?;
     }
     super::modules::set_modules_in(&mut tx, &item, &modules, actor).await?;
+    if let Some((source, email)) = intake {
+        sqlx::query("INSERT INTO pm_intake_item (item_id, source, email_item_id) VALUES (?, ?, ?)").bind(&item).bind(source).bind(email).execute(&mut *tx).await?;
+    }
     tx.commit().await?;
     get(pool, &item).await
+}
+
+/// The state an accepted request goes to (D-081): the one chosen, or the project's default — with
+/// its name and group.
+pub(crate) async fn work_state(pool: &SqlitePool, project_id: &str, state_id: Option<&str>) -> Result<(String, String, StateGroup)> {
+    let state_id = match state_id.filter(|s| !s.is_empty()) {
+        Some(s) => s.to_owned(),
+        None => default_state(pool, project_id).await?,
+    };
+    let (name, group) = check_state(pool, project_id, &state_id).await?;
+    Ok((state_id, name, group))
+}
+
+/// An intake item accepted: out of Triage into its work state, with its activity row; entering a
+/// completed state sets when.
+pub(crate) async fn leave_triage(tx: &mut Transaction<'_, Sqlite>, item: &PmItem, (state_id, name, group): &(String, String, StateGroup), actor: &str) -> Result<()> {
+    let completed = if *group == StateGroup::Completed { NOW } else { "NULL" };
+    sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE pm_item SET state_id = ?, completed_at = {completed}, updated_by = ?, updated_at = {NOW} WHERE id = ?"))).bind(state_id).bind(actor).bind(&item.id).execute(&mut **tx).await?;
+    activity(tx, &item.id, "updated", "state", &item.state_name, name, (Some(&item.state_id), Some(state_id)), actor).await?;
+    Ok(())
 }
 
 /// One field changed: its name, its readable before and after, and the states' ids (a state's).
@@ -675,6 +725,16 @@ pub(crate) async fn plan(pool: &SqlitePool, id: &str, patch: ItemPatch) -> Resul
     let item = get(pool, id).await?;
     if item.archived_at.is_some() {
         return Err(invalid("An archived work item is read-only — restore it to change it"));
+    }
+    // A request waiting in Intake is planned once it's accepted; a closed one is read-only (D-081).
+    if item.state_group == StateGroup::Triage {
+        if patch.state_id.is_some() || patch.cycle_id.is_some() || patch.modules.is_some() || patch.parent_id.is_some() {
+            return Err(invalid("A request waits in Intake — accept it first"));
+        }
+        let (status,): (String,) = sqlx::query_as("SELECT status FROM pm_intake_item WHERE item_id = ?").bind(id).fetch_optional(pool).await?.unwrap_or(("pending".into(),));
+        if status == "declined" || status == "duplicate" {
+            return Err(invalid(format!("{} is a closed request — it's read-only", item.key)));
+        }
     }
     let mut changes: Vec<Change> = Vec::new();
     let name = match patch.name.as_deref() {

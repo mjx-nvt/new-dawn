@@ -38,7 +38,7 @@ import styles from "./Items.module.css";
 
 const EMOJI = ["👍", "👎", "😄", "🎉", "😕", "❤️", "🚀", "👀"];
 const TABS = ["all", "activity", "comments", "history", "transition"] as const;
-type Tab = (typeof TABS)[number];
+export type Tab = (typeof TABS)[number];
 const TAB_LABEL: Record<Tab, string> = { all: "All", activity: "Activity", comments: "Comments", history: "History", transition: "Transition" };
 /** An IME is still writing (Vietnamese): Enter confirms the composition, not the field. */
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
@@ -201,12 +201,13 @@ function Ghosts({ text, className }: { text: string; className?: string }) {
   );
 }
 
-function Activity({ slug, item, tab, onTab }: { slug: string; item: PmItem; tab: Tab; onTab: (t: Tab) => void }) {
+/** An item's comments and activity (Intake's detail shows them too, D-081). */
+export function Activity({ slug, item, tab, onTab, readOnly: closed = false }: { slug: string; item: PmItem; tab: Tab; onTab: (t: Tab) => void; readOnly?: boolean }) {
   const who = useWho(slug);
   const acts = usePmActivity(slug, item.id).data ?? [];
   const comments = usePmComments(slug, item.id).data ?? [];
   const top = comments.filter((c) => !c.parent_id);
-  const readOnly = !!item.archived_at;
+  const readOnly = closed || !!item.archived_at;
   const thread = (c: PmComment) => <Comment key={c.id} slug={slug} item={item} comment={c} replies={comments.filter((r) => r.parent_id === c.id)} readOnly={readOnly} />;
   const line = (a: PmActivity) => (
     <li key={a.id} className={styles.act}>
@@ -344,6 +345,18 @@ export default function ItemView({ slug, itemId, tab, onTab, onOpen, onGone }: {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   if (!item) return <p className={query.isError ? "formError" : "ghostText"}>{query.isError ? query.error.message : "Reading…"}</p>;
+  // A request waiting in Intake isn't work yet (D-081): it's handled there.
+  if (item.state_group === "triage")
+    return (
+      <article className={styles.view}>
+        <p className="fieldHint">
+          <span className={styles.key}>{item.key}</span> {item.name} is a request in Intake.{" "}
+          <Link to="/projects/$projectId" params={{ projectId: item.project_id }} search={{ tab: "intake", intake: item.id }}>
+            Open it in Intake
+          </Link>
+        </p>
+      </article>
+    );
   const ro = !!item.archived_at;
   const save = (patch: ItemPatch) => update.mutate({ id: item.id, patch });
   const error = update.error ?? archive.error ?? remove.error ?? copyItem.error ?? subscribe.error ?? restore.error ?? vote.error;

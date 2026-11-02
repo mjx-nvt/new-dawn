@@ -230,7 +230,7 @@ export const commands = {
 	addPmRelation: (slug: string, itemId: string, kind: PmRelationKind, otherId: string) => typedError<PmRelation, AppError>(__TAURI_INVOKE("add_pm_relation", { slug, itemId, kind, otherId })),
 	removePmRelation: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_pm_relation", { slug, id })),
 	/**  Work items to relate to, from every project of the workspace. */
-	searchPmItems: (slug: string, query: string, except: string | null) => typedError<PmItemRef[], AppError>(__TAURI_INVOKE("search_pm_items", { slug, query, except })),
+	searchPmItems: (slug: string, query: string, except: string | null, projectId: string | null) => typedError<PmItemRef[], AppError>(__TAURI_INVOKE("search_pm_items", { slug, query, except, projectId })),
 	listPmLinks: (slug: string, itemId: string) => typedError<PmLink[], AppError>(__TAURI_INVOKE("list_pm_links", { slug, itemId })),
 	addPmLink: (slug: string, itemId: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("add_pm_link", { slug, itemId, url, title })),
 	editPmLink: (slug: string, id: string, url: string, title: string) => typedError<PmLink, AppError>(__TAURI_INVOKE("edit_pm_link", { slug, id, url, title })),
@@ -312,6 +312,16 @@ export const commands = {
 	exportPmPageMarkdown: (slug: string, id: string, path: string) => typedError<null, AppError>(__TAURI_INVOKE("export_pm_page_markdown", { slug, id, path })),
 	/**  The Mac's print sheet for the window asking (Save as PDF is in it). */
 	printWindow: () => typedError<null, AppError>(__TAURI_INVOKE("print_window")),
+	listPmIntake: (slug: string, projectId: string) => typedError<PmIntakeItem_Serialize[], AppError>(__TAURI_INVOKE("list_pm_intake", { slug, projectId })),
+	/**  How many requests wait in a project's Intake today. */
+	pmIntakeCount: (slug: string, projectId: string) => typedError<number, AppError>(__TAURI_INVOKE("pm_intake_count", { slug, projectId })),
+	createPmIntake: (slug: string, input: IntakeInput_Deserialize) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("create_pm_intake", { slug, input })),
+	/**  Accepted into a state (the project's default when none). */
+	acceptPmIntake: (slug: string, id: string, stateId: string | null) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("accept_pm_intake", { slug, id, stateId })),
+	declinePmIntake: (slug: string, id: string) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("decline_pm_intake", { slug, id })),
+	snoozePmIntake: (slug: string, id: string, until: string) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("snooze_pm_intake", { slug, id, until })),
+	duplicatePmIntake: (slug: string, id: string, of: string) => typedError<PmIntakeItem_Serialize, AppError>(__TAURI_INVOKE("duplicate_pm_intake", { slug, id, of })),
+	deletePmIntake: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_pm_intake", { slug, id })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -2249,6 +2259,42 @@ export type InstalledModel = {
 	size_mb: number,
 };
 
+/**
+ *  A request: Plane's intake form — a title, a description (the editor's JSON text), a priority,
+ *  assignees, labels, a due date.
+ */
+export type IntakeInput = IntakeInput_Serialize | IntakeInput_Deserialize;
+
+/**
+ *  A request: Plane's intake form — a title, a description (the editor's JSON text), a priority,
+ *  assignees, labels, a due date.
+ */
+export type IntakeInput_Deserialize = {
+	project_id: string,
+	name: string,
+	description?: string | null,
+	priority?: Priority | null,
+	assignees: string[],
+	labels: string[],
+	target_date?: string | null,
+};
+
+/**
+ *  A request: Plane's intake form — a title, a description (the editor's JSON text), a priority,
+ *  assignees, labels, a due date.
+ */
+export type IntakeInput_Serialize = {
+	project_id: string,
+	name: string,
+	description: string | null,
+	priority: Priority | null,
+	assignees: string[],
+	labels: string[],
+	target_date: string | null,
+};
+
+export type IntakeStatus = "pending" | "accepted" | "declined" | "snoozed" | "duplicate";
+
 /**  A file kept with an item (a picture in its description or a comment). */
 export type ItemFile = {
 	path: string,
@@ -3608,6 +3654,36 @@ export type PmEstimate_Serialize = {
 	active: boolean,
 	archived_at: string | null,
 	created_at: string,
+};
+
+export type PmIntakeItem = PmIntakeItem_Serialize | PmIntakeItem_Deserialize;
+
+export type PmIntakeItem_Deserialize = {
+	item: PmItem_Deserialize,
+	/**  As it stands today: a snooze whose day has come reads pending. */
+	status: IntakeStatus,
+	snoozed_until?: string | null,
+	duplicate_of?: string | null,
+	duplicate_key?: string | null,
+	/**  "in_app" or "email". */
+	source: string,
+	/**  The email it was filed from (its subject and sender), when it was. */
+	email_subject?: string | null,
+	email_sender?: string | null,
+};
+
+export type PmIntakeItem_Serialize = {
+	item: PmItem_Serialize,
+	/**  As it stands today: a snooze whose day has come reads pending. */
+	status: IntakeStatus,
+	snoozed_until: string | null,
+	duplicate_of: string | null,
+	duplicate_key: string | null,
+	/**  "in_app" or "email". */
+	source: string,
+	/**  The email it was filed from (its subject and sender), when it was. */
+	email_subject: string | null,
+	email_sender: string | null,
 };
 
 export type PmItem = PmItem_Serialize | PmItem_Deserialize;

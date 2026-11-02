@@ -50,7 +50,7 @@ export function pageFiles(slug: string, pageId: string) {
 
 /** Work items as `@` mentions in a page: the key and title. */
 export async function searchItemMentions(slug: string, query: string): Promise<Hit[]> {
-  const refs = await unwrap(commands.searchPmItems(slug, query, null));
+  const refs = await unwrap(commands.searchPmItems(slug, query, null, null));
   return refs.slice(0, 8).map((r) => ({ object: "pm-item", object_plural: "pm-items", record_id: r.id, label: `${r.key} ${r.name}` }));
 }
 

@@ -248,7 +248,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0037 | `pm_cycle` (with a progress snapshot), `pm_cycle_item` (one cycle an item; D-078) | 0.11.5 |
 | 0038 | `pm_module`, `pm_module_item` (several modules an item), `pm_module_member`, `pm_module_link`; `favorite.pm_cycle_id` / `pm_module_id` (cycle stars copied; D-079) | 0.11.6 |
 | 0039 | `pm_page` (sub-pages, private and locked flags), `pm_page_label`, `pm_page_version` (merged snapshots); `favorite.pm_page_id` (D-080) | 0.11.7 |
-| 0040 | `intake`, `intake_issue` | 0.11.8 |
+| 0040 | `pm_intake_item` (a request's status, snooze day, duplicate of, source, email; D-081) — requests are `pm_item` rows in a Triage state | 0.11.8 |
 | 0041 | `sticky`, `quick_link`, `home_widget`, `navigation_preference` | 0.11.9 |
 | 0042 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
 | 0043 | `api_token`, `pm_webhook` | 0.11.11 |
@@ -413,7 +413,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.8 — Intake (2 sittings)
 - **Same as:** §4.5 (intake).
-- **Data:** 0040.
+- **Data:** 0040 (`pm_intake_item`; requests are work items in the project's Triage state).
 - **Screens and flows:** Intake page with Open / Closed tabs, filters and sort, up / down through pending; create an intake item (title, description, priority, assignees, labels, due date; Triage state); Accept (edit, choose the state), Decline, Snooze until, Mark as duplicate (links, declines, labels), Delete; the Email reading agent files an email's request as an intake item when the project has Intake on (ours).
 - **Done when:** an accepted item becomes `VIFC-n` in the chosen state; a snoozed one returns on its date.
 

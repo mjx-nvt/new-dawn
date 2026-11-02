@@ -11,6 +11,7 @@ use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
 use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
+use crate::modules::pm::intake::{self, IntakeInput, PmIntakeItem};
 use crate::modules::pm::modules::{self, ModuleDetails, ModuleInput, ModulePatch, PmModule};
 use crate::modules::pm::pages::{self, PageInput, PagePatch, PmPage, PmPageDoc, PmPageVersion};
 use crate::modules::pm::display::{self, PmDisplay};
@@ -326,8 +327,8 @@ pub async fn remove_pm_relation(hub: State<'_, WorkspaceHub>, slug: String, id: 
 /// Work items to relate to, from every project of the workspace.
 #[tauri::command]
 #[specta::specta]
-pub async fn search_pm_items(hub: State<'_, WorkspaceHub>, slug: String, query: String, except: Option<String>) -> Result<Vec<PmItemRef>, AppError> {
-    Ok(relations::search(&hub.pool(&slug)?, &query, except.as_deref()).await?)
+pub async fn search_pm_items(hub: State<'_, WorkspaceHub>, slug: String, query: String, except: Option<String>, project_id: Option<String>) -> Result<Vec<PmItemRef>, AppError> {
+    Ok(relations::search(&hub.pool(&slug)?, &query, except.as_deref(), project_id.as_deref()).await?)
 }
 
 #[tauri::command]
@@ -748,4 +749,57 @@ pub async fn export_pm_page_markdown(hub: State<'_, WorkspaceHub>, slug: String,
 #[specta::specta]
 pub async fn print_window(window: tauri::WebviewWindow) -> Result<(), AppError> {
     window.print().map_err(|e| AppError::from(anyhow::anyhow!(e)))
+}
+
+// ── 0.11.8 (D-081): intake ──
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<Vec<PmIntakeItem>, AppError> {
+    Ok(intake::list(&hub.pool(&slug)?, &project_id, cycles::today()).await?)
+}
+
+/// How many requests wait in a project's Intake today.
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_intake_count(hub: State<'_, WorkspaceHub>, slug: String, project_id: String) -> Result<u32, AppError> {
+    Ok(intake::open_count(&hub.pool(&slug)?, &project_id, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn create_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, input: IntakeInput) -> Result<PmIntakeItem, AppError> {
+    Ok(intake::create(&hub.pool(&slug)?, input, ME, cycles::today()).await?)
+}
+
+/// Accepted into a state (the project's default when none).
+#[tauri::command]
+#[specta::specta]
+pub async fn accept_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String, state_id: Option<String>) -> Result<PmIntakeItem, AppError> {
+    Ok(intake::accept(&hub.pool(&slug)?, &id, state_id.as_deref(), ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn decline_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<PmIntakeItem, AppError> {
+    Ok(intake::decline(&hub.pool(&slug)?, &id, ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn snooze_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String, until: String) -> Result<PmIntakeItem, AppError> {
+    Ok(intake::snooze(&hub.pool(&slug)?, &id, &until, ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn duplicate_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String, of: String) -> Result<PmIntakeItem, AppError> {
+    Ok(intake::duplicate(&hub.pool(&slug)?, &id, &of, ME, cycles::today()).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_pm_intake(hub: State<'_, WorkspaceHub>, slug: String, id: String) -> Result<(), AppError> {
+    let folder = hub.workspace(&slug).await?.folder_path;
+    Ok(intake::delete(&hub.pool(&slug)?, &folder, &id, cycles::today()).await?)
 }

@@ -9,7 +9,7 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 use super::items::{self, activity, files_dir};
 use super::settings::StateGroup;
@@ -105,19 +105,21 @@ pub async fn relations(pool: &SqlitePool, item: &str) -> Result<Vec<PmRelation>>
     Ok(rows.into_iter().map(|r| PmRelation { id: r.id, kind: r.kind, item: r.item }).collect())
 }
 
-/// Work items to relate to, from every project: by key ("VIFC-12", "vifc 12", "12") or by words of
-/// the title; not archived, not `except`.
-pub async fn search(pool: &SqlitePool, query: &str, except: Option<&str>) -> Result<Vec<PmItemRef>> {
+/// Work items to relate to, from every project (or `project`'s): by key ("VIFC-12", "vifc 12",
+/// "12") or by words of the title; not archived, not `except`.
+pub async fn search(pool: &SqlitePool, query: &str, except: Option<&str>, project: Option<&str>) -> Result<Vec<PmItemRef>> {
     let q = query.trim();
     let key = q.replace([' ', '-'], "").to_uppercase();
     let words = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
     Ok(sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT {REF} FROM pm_item o JOIN pm_project m ON m.project_id = o.project_id JOIN pm_state s ON s.id = o.state_id \
-         WHERE o.archived_at IS NULL AND m.archived_at IS NULL AND o.id <> coalesce(?, '') \
+         WHERE o.archived_at IS NULL AND m.archived_at IS NULL AND s.state_group <> 'triage' AND o.id <> coalesce(?, '') AND (? IS NULL OR o.project_id = ?) \
          AND (? = '' OR upper(m.identifier) || o.sequence = ? OR CAST(o.sequence AS TEXT) = ? OR o.name LIKE ? ESCAPE '\\') \
          ORDER BY o.updated_at DESC LIMIT 20"
     )))
     .bind(except)
+    .bind(project)
+    .bind(project)
     .bind(q)
     .bind(&key)
     .bind(&key)
@@ -140,17 +142,26 @@ pub async fn relate(pool: &SqlitePool, item: &str, kind: PmRelationKind, other: 
         return Err(invalid("A work item can't be related to itself"));
     }
     let (a, b) = (open_item(pool, item).await?, items::get(pool, other).await?);
+    let mut tx = pool.begin().await?;
+    let rid = relate_in(&mut tx, &a, kind, &b, actor).await?;
+    tx.commit().await?;
+    relations(pool, item).await?.into_iter().find(|r| r.id == rid).ok_or_else(|| anyhow!("the relation just made is gone"))
+}
+
+/// The relation and both activity rows, in the caller's transaction (an intake request marked a
+/// duplicate is one change, D-081); its id.
+pub(crate) async fn relate_in(tx: &mut Transaction<'_, Sqlite>, a: &items::PmItem, kind: PmRelationKind, b: &items::PmItem, actor: &str) -> Result<String> {
+    let (item, other) = (a.id.as_str(), b.id.as_str());
     // Blocking is the other item's Blocked by.
     let (from, stored, to) = if kind == PmRelationKind::Blocking { (other, PmRelationKind::BlockedBy, item) } else { (item, kind, other) };
     let rid = id();
-    let mut tx = pool.begin().await?;
     let inserted = sqlx::query("INSERT INTO pm_relation (id, item_id, related_id, kind, created_by) VALUES (?, ?, ?, ?, ?)")
         .bind(&rid)
         .bind(from)
         .bind(to)
         .bind(stored)
         .bind(actor)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await;
     if let Err(sqlx::Error::Database(e)) = &inserted {
         if e.is_unique_violation() {
@@ -158,10 +169,9 @@ pub async fn relate(pool: &SqlitePool, item: &str, kind: PmRelationKind, other: 
         }
     }
     inserted?;
-    activity(&mut tx, item, "related", "relation", "", &format!("{} {}", kind.words(), b.key), (None, None), actor).await?;
-    activity(&mut tx, other, "related", "relation", "", &format!("{} {}", kind.other_side().words(), a.key), (None, None), actor).await?;
-    tx.commit().await?;
-    relations(pool, item).await?.into_iter().find(|r| r.id == rid).ok_or_else(|| anyhow!("the relation just made is gone"))
+    activity(tx, item, "related", "relation", "", &format!("{} {}", kind.words(), b.key), (None, None), actor).await?;
+    activity(tx, other, "related", "relation", "", &format!("{} {}", kind.other_side().words(), a.key), (None, None), actor).await?;
+    Ok(rid)
 }
 
 /// Removes a relation (from either item), with its activity on both.

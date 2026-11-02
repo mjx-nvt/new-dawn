@@ -1215,8 +1215,9 @@
   gap: var(--space-2);
 }
 
-/* A search field its own width, not the toolbar's. */
-.toolbar .search {
+/* A search field its own width, not the toolbar's (nor Intake's actions'). */
+.toolbar .search,
+.intakeActions .search {
   width: 240px;
 }
 
@@ -1362,4 +1363,92 @@
     overflow: visible;
     padding: 0;
   }
+}
+
+/* Intake (0.11.8) */
+.intake {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@container content (max-width: 900px) {
+  .intake {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.intakeList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.intakeRow {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.intakeRow:hover {
+  background: var(--surface-2);
+}
+
+.intakeRow[aria-current="true"] {
+  border-color: var(--primary);
+  background: var(--primary-tint-soft);
+}
+
+.intakeRow:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+.intakeRowHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.intakeRowTitle {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.intakeDetail {
+  min-width: 0;
+}
+
+.intakeActions {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+}
+
+.intakeProps {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  margin: 0;
+}
+
+.intakeProps dt {
+  font-size: var(--t-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.intakeProps dd {
+  margin: 0;
 }

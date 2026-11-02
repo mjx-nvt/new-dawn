@@ -1,6 +1,7 @@
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useArchivePmProject, usePmProject } from "../../kernel/bridge/pm";
+import { usePmIntakeCount } from "../../kernel/bridge/pmIntake";
 import { useDecideUpdate, useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { SparkleIcon } from "../../kernel/shell/icons";
@@ -9,6 +10,7 @@ import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
 import Archived from "./items/Archived";
 import Cycles from "./items/Cycles";
+import Intake from "./items/Intake";
 import Modules from "./items/Modules";
 import Pages from "./items/Pages";
 import Views from "./items/Views";
@@ -20,12 +22,6 @@ const route = getRouteApi("/shell/projects/$projectId");
 
 /** An IME is still writing (Vietnamese): Enter confirms the composition, not the field. */
 const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyCode === 229;
-
-/** The parts of a project Plane has that later releases fill (intake 0.11.8): their structure
- *  now. */
-const PLANE_TABS: Record<string, { title: string; hint: string; columns: string[]; none: string }> = {
-  intake: { title: "Intake", hint: "Requests to triage before they become work items.", columns: ["Request", "Status", "Received"], none: "No requests yet" },
-};
 
 /** A project's page (D-054, D-073): its Overview — the updates its meetings brought, where it
  *  stands, its risks, decisions, meetings and history (every section shown even when empty) —
@@ -42,6 +38,7 @@ export default function ProjectPage() {
   const pm = plane.data;
   const archive = useArchivePmProject(slug);
   const f = pm?.features;
+  const intakeCount = usePmIntakeCount(slug, projectId, !!f?.intake);
   const tabs: [string, string][] = [
     ["overview", "Overview"],
     ["items", "Work items"],
@@ -49,7 +46,7 @@ export default function ProjectPage() {
     ...(f?.modules ? ([["modules", "Modules"]] as [string, string][]) : []),
     ...(f?.views ? ([["views", "Views"]] as [string, string][]) : []),
     ...(f?.pages ? ([["pages", "Pages"]] as [string, string][]) : []),
-    ...(f?.intake ? ([["intake", "Intake"]] as [string, string][]) : []),
+    ...(f?.intake ? ([["intake", intakeCount.data ? `Intake · ${intakeCount.data}` : "Intake"]] as [string, string][]) : []),
     ["archives", "Archives"],
     ["settings", "Settings"],
   ];
@@ -144,7 +141,7 @@ export default function ProjectPage() {
       {tab === "cycles" && pm && slug && <Cycles slug={slug} project={pm} />}
       {tab === "modules" && pm && slug && <Modules slug={slug} project={pm} />}
       {tab === "pages" && pm && slug && <Pages slug={slug} project={pm} />}
-      {PLANE_TABS[tab] && <PlaneTab {...PLANE_TABS[tab]} />}
+      {tab === "intake" && pm && slug && <Intake slug={slug} project={pm} />}
       {tab === "overview" && (
       <>
       <section className="section">
@@ -226,30 +223,6 @@ export default function ProjectPage() {
         />
       )}
     </div>
-  );
-}
-
-/** A part of the project still empty: its columns and ghost rows. */
-function PlaneTab({ title, hint, columns, none }: { title: string; hint: string; columns: string[]; none: string }) {
-  return (
-    <section className="section">
-      <h2 className="sectionTitle">{title}</h2>
-      <p className="sectionSubtitle">{hint}</p>
-      <div className={styles.ptable} role="table" aria-label={title}>
-        <div className={styles.ptableHead} role="row" style={{ "--cols": columns.length } as CSSProperties}>
-          {columns.map((c) => (
-            <span key={c} role="columnheader">
-              {c}
-            </span>
-          ))}
-        </div>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className={`${styles.ghostRow} ghostCard`} role="row">
-            {i === 0 && <span className="ghostText">{none}</span>}
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 

@@ -12,6 +12,7 @@ pub mod display;
 pub mod drafts;
 pub mod filters;
 pub mod inbox;
+pub mod intake;
 pub mod items;
 pub mod modules;
 pub mod pages;

@@ -99,7 +99,7 @@ pub async fn run(pool: &SqlitePool, now: DateTime<Utc>, today: NaiveDate) -> Res
             // Open items the owner follows, due today or tomorrow; once a due date.
             let due: Vec<(String, String)> = sqlx::query_as(
                 "SELECT i.id, i.target_date FROM pm_item i JOIN pm_state s ON s.id = i.state_id WHERE i.project_id = ? AND i.archived_at IS NULL \
-                 AND s.state_group NOT IN ('completed', 'cancelled') AND i.target_date IN (?, ?) \
+                 AND s.state_group NOT IN ('completed', 'cancelled', 'triage') AND i.target_date IN (?, ?) \
                  AND EXISTS (SELECT 1 FROM pm_item_subscriber b WHERE b.item_id = i.id AND b.who = 'me')",
             )
             .bind(&project)
@@ -215,7 +215,7 @@ mod tests {
             let other_side = relations::relations(&pool, &ten[1]).await.unwrap();
             assert_eq!((other_side[0].kind, other_side[0].item.key.as_str()), (PmRelationKind::Blocking, "VIFC-1"));
             assert!(relations::relate(&pool, &ten[1], PmRelationKind::RelatesTo, &ten[0], "me").await.unwrap_err().to_string().contains("already related"));
-            assert_eq!(relations::search(&pool, "vifc-2", None).await.unwrap()[0].id, ten[1]);
+            assert_eq!(relations::search(&pool, "vifc-2", None, None).await.unwrap()[0].id, ten[1]);
             relations::unrelate(&pool, &blocked.id, "me").await.unwrap();
             assert!(relations::relations(&pool, &ten[1]).await.unwrap().is_empty());
             let link = relations::add_link(&pool, &ten[0], "sbv.gov.vn/sandbox", "", "me").await.unwrap();
