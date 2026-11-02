@@ -70,6 +70,27 @@ _2026-11-02_
 
 ---
 
+## D-071 — The local API: Twenty's REST on 127.0.0.1, keys kept as fingerprints, webhooks to this Mac
+_2026-11-02_
+
+**Context** (plan v4 §3.8 and §3.7 Developers, 0.10.14): Twenty's REST API (`/rest/<objects>` with a Bearer key, cursor pagination, filters, PATCH, batch of 60, generated docs), API keys (name, expiry, revoke, shown once) and webhooks (record events posted to a URL, signed). New Dawn has no server and no network beyond this Mac (rule 3).
+
+**Decision — an HTTP server on this Mac only, off by default**: `axum` (the one dependency plan §5.8 names for it) on `127.0.0.1` — never another interface — on a port the system picks the first time and kept in the registry (a taken port is replaced, and kept); the owner turns it on in Workspace → CRM → Developers, and it starts at launch when on. It serves Twenty's paths and shapes: `GET /rest/<objects>` → `{ data: { <objects>: [ … ] }, pageInfo: { hasNextPage, hasPreviousPage, startCursor, endCursor }, totalCount }` with `limit` (60, ≤ 200), `starting_after` / `ending_before` (opaque cursors), `filter` in Twenty's syntax (`field[op]:value`, commas, `and()` / `or()` / `not()`, `name.firstName`, ops eq · neq · in · containsAny · is NULL/NOT_NULL · gt · gte · lt · lte · startsWith · like · ilike) and `orderBy` (`field[AscNullsFirst]`…); `GET /rest/<objects>/<id>` → `{ data: { <object> } }`; `POST`, `PATCH`, `DELETE` → `create<Object>`, `update<Object>`, `delete<Object>` (a delete goes to Deleted records, as in the app); `POST /rest/batch/<objects>` → `create<Objects>` (60 at most, all read before any is written); errors as `{ statusCode, error, messages }`; `companyId` accepted for the `company` relation. Writes go through the engine as "API key <name>". `/docs` is one page — the endpoints, the syntax, each workspace's objects and fields, curl lines on this port. `createdAt` / `updatedAt` aren't filterable yet (the engine keeps them outside the fields).
+
+**Decision — keys are fingerprints**: a key is `nd_` + 48 hex characters from the system's random source, shown once; only its SHA-256 is kept, with a 10-character prefix to tell keys apart, an optional expiry (30, 90, 365 days) written in the same text as "now", a revoke, and its last use. A request's key is looked up across the open workspaces and names the workspace it reads and writes.
+
+**Decision — webhooks to this Mac, signed like Twenty's**: a webhook is an address on this Mac (the HTTP step's check: localhost, 127.0.0.1, [::1]; no proxy, no redirect, 10 s), the events it wants (`*.*`, `person.*`, `opportunity.updated` — Twenty sends everything; this is a superset), a secret made for it, and on/off. Each record event is posted as `{ event, data, timestamp }` with `X-Twenty-Webhook-Timestamp` and `X-Twenty-Webhook-Signature` — the hex HMAC-SHA256 of `timestamp:body` with the secret (written on `sha2`, checked against RFC 4231). The last 50 deliveries are kept with their status, time and error. The record events (D-068) now have several listeners — the workflows and the webhooks — each with its own bounded channel, each event's work on its own task.
+
+**Decision — the workflows' webhook trigger**: `POST /webhooks/workflows/<workspace>/<workflowId>` (no key, like Twenty's; this Mac only) starts a run of the active version whose trigger is a webhook, the JSON body as `{{trigger.…}}`; the builder shows the address when the API is on.
+
+**Decision — this Mac only, against a browser too**: listening on 127.0.0.1 keeps the network out, not a web page in a browser here. Every request's `Host` must name this Mac (`localhost`, `127.0.0.1`, `[::1]`, any port) — a page reached through DNS rebinding names its own — and a browser's `Origin`, when sent, too; anything else gets 403 `ForbiddenException`. The docs and the workflows' webhook, which take no key, are covered by the same guard. A workflow's HTTP step refuses the API's own port: a workflow writes through its record steps (whose writes start no trigger, D-068), never around them.
+
+**Decision — writes as Twenty's**: a PATCH writes the parts it's sent — a name's `firstName` alone keeps the `lastName`, an email's or an amount's other parts stay. A batch reads and checks every value before writing any; the engine writes each record in its own transaction, so a database failure part-way keeps the records before it.
+
+**Means for future work**: Plane's API (0.11.11) is served by the same server under its own paths; an MCP server over this API stays optional (plan §3.6).
+
+---
+
 ## D-066 — Emails and calendar from local sources: Apple Mail answers for a record's addresses, meetings are the calendar
 _2026-11-02_
 

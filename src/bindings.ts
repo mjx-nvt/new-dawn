@@ -356,6 +356,16 @@ export const commands = {
 	askAssistant: (slug: string, threadId: string, text: string) => typedError<ChatMessage[], AppError>(__TAURI_INVOKE("ask_assistant", { slug, threadId, text })),
 	applyChatProposal: (slug: string, messageId: string) => typedError<ChatMessage, AppError>(__TAURI_INVOKE("apply_chat_proposal", { slug, messageId })),
 	dismissChatProposal: (slug: string, messageId: string) => typedError<ChatMessage, AppError>(__TAURI_INVOKE("dismiss_chat_proposal", { slug, messageId })),
+	apiStatus: () => typedError<ApiStatus, AppError>(__TAURI_INVOKE("api_status")),
+	setApiEnabled: (on: boolean) => typedError<ApiStatus, AppError>(__TAURI_INVOKE("set_api_enabled", { on })),
+	listApiKeys: (slug: string) => typedError<ApiKey_Serialize[], AppError>(__TAURI_INVOKE("list_api_keys", { slug })),
+	/**  A new key: shown this once. */
+	createApiKey: (slug: string, name: string, expiresDays: number | null) => typedError<NewApiKey_Serialize, AppError>(__TAURI_INVOKE("create_api_key", { slug, name, expiresDays })),
+	revokeApiKey: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("revoke_api_key", { slug, id })),
+	listWebhooks: (slug: string) => typedError<Webhook[], AppError>(__TAURI_INVOKE("list_webhooks", { slug })),
+	saveWebhook: (slug: string, input: WebhookInput_Deserialize) => typedError<Webhook, AppError>(__TAURI_INVOKE("save_webhook", { slug, input })),
+	deleteWebhook: (slug: string, id: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_webhook", { slug, id })),
+	webhookDeliveries: (slug: string, webhookId: string) => typedError<Delivery_Serialize[], AppError>(__TAURI_INVOKE("webhook_deliveries", { slug, webhookId })),
 	listPeople: (slug: string) => typedError<Person[], AppError>(__TAURI_INVOKE("list_people", { slug })),
 	listVocabulary: (slug: string) => typedError<Term[], AppError>(__TAURI_INVOKE("list_vocabulary", { slug })),
 	/**  Adds (no id) or updates a term by hand. */
@@ -625,6 +635,38 @@ export type AiPolicy = {
 	pace: Pace,
 	/**  Catch-up work (model checks…) may run while the owner works; else only when they're away. */
 	background_while_working: boolean,
+};
+
+export type ApiKey = ApiKey_Serialize | ApiKey_Deserialize;
+
+export type ApiKey_Deserialize = {
+	id: string,
+	name: string,
+	/**  The key's first characters, to tell keys apart. */
+	prefix: string,
+	expires_at?: string | null,
+	revoked_at?: string | null,
+	last_used_at?: string | null,
+	created_at: string,
+};
+
+export type ApiKey_Serialize = {
+	id: string,
+	name: string,
+	/**  The key's first characters, to tell keys apart. */
+	prefix: string,
+	expires_at: string | null,
+	revoked_at: string | null,
+	last_used_at: string | null,
+	created_at: string,
+};
+
+export type ApiStatus = {
+	enabled: boolean,
+	running: boolean,
+	port: number,
+	/**  `http://localhost:<port>` while it runs. */
+	address: string,
 };
 
 /**
@@ -1237,6 +1279,30 @@ export type Decision = {
 	text: string,
 	decided_by: string,
 	condition: string,
+};
+
+export type Delivery = Delivery_Serialize | Delivery_Deserialize;
+
+export type Delivery_Deserialize = {
+	id: string,
+	event: string,
+	record_id: string,
+	status_code?: number | null,
+	ok: boolean,
+	error: string,
+	duration_ms: number,
+	created_at: string,
+};
+
+export type Delivery_Serialize = {
+	id: string,
+	event: string,
+	record_id: string,
+	status_code: number | null,
+	ok: boolean,
+	error: string,
+	duration_ms: number,
+	created_at: string,
 };
 
 /**  An email read, and what came of it. */
@@ -2311,6 +2377,21 @@ export type Neighbours_Deserialize = {
 export type Neighbours_Serialize = {
 	prev: string | null,
 	next: string | null,
+};
+
+/**  A key just made: the record, and the key itself — shown this once. */
+export type NewApiKey = NewApiKey_Serialize | NewApiKey_Deserialize;
+
+/**  A key just made: the record, and the key itself — shown this once. */
+export type NewApiKey_Deserialize = {
+	key: ApiKey_Deserialize,
+	secret: string,
+};
+
+/**  A key just made: the record, and the key itself — shown this once. */
+export type NewApiKey_Serialize = {
+	key: ApiKey_Serialize,
+	secret: string,
 };
 
 export type NewProject = NewProject_Serialize | NewProject_Deserialize;
@@ -4035,6 +4116,36 @@ export type Waveform = {
 	/**  One peak (max |sample|, 0–255) per equal slice of the recording. */
 	peaks: number[],
 	duration_ms: number,
+};
+
+export type Webhook = {
+	id: string,
+	url: string,
+	description: string,
+	/**  "*.*", "person.*", "opportunity.updated" … */
+	events: string[],
+	/**  The signature's key. */
+	secret: string,
+	is_active: boolean,
+	created_at: string,
+};
+
+export type WebhookInput = WebhookInput_Serialize | WebhookInput_Deserialize;
+
+export type WebhookInput_Deserialize = {
+	id?: string | null,
+	url: string,
+	description?: string,
+	events?: string[],
+	is_active?: boolean,
+};
+
+export type WebhookInput_Serialize = {
+	id: string | null,
+	url: string,
+	description: string,
+	events: string[],
+	is_active: boolean,
 };
 
 export type WeekMeeting = {

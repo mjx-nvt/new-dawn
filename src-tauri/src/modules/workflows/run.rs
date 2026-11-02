@@ -621,6 +621,11 @@ pub fn local_url(text: &str) -> Result<reqwest::Url> {
 /// answer that isn't 2xx stops the run with it.
 async fn http_step(s: &Value, ctx: &Value, label: &str) -> Result<Value> {
     let url = local_url(&resolve_text(s.get("url").unwrap_or(&Value::Null), ctx)).map_err(|e| invalid(format!("{label}: {e}")))?;
+    // New Dawn's own API: a workflow writes through its record steps (whose writes start no
+    // trigger), never around them (D-068's loop guard).
+    if url.port_or_known_default().is_some() && url.port_or_known_default() == crate::modules::api::running_port() {
+        return Err(invalid(format!("{label}: New Dawn's own API is reached through the workflow's record steps, not an address")));
+    }
     let method = s.get("method").and_then(Value::as_str).unwrap_or("GET").to_uppercase();
     if !matches!(method.as_str(), "GET" | "POST" | "PUT" | "PATCH" | "DELETE") {
         return Err(invalid(format!("{label}: no method named {method}")));
@@ -1066,7 +1071,7 @@ mod tests {
             let actor = Actor::system("test");
             // The channel is the process's one: the other tests' records come through it too,
             // so the test takes the events it knows by their record or their title.
-            let mut events = events::subscribe().expect("the first subscriber");
+            let mut events = events::subscribe();
             let mut take = |want: &dyn Fn(&RecordEvent) -> bool| loop {
                 match events.try_recv() {
                     Ok(e) if want(&e) => break e,

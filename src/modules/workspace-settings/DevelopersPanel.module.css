@@ -1,0 +1,37 @@
+/* Workspace → CRM → Developers (D-071). */
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+}
+.form > :global(.input) { flex: 1 1 200px; min-width: 0; }
+.form > select:global(.input) { flex: 0 0 auto; }
+.code {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+}
+.secret {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.inline {
+  display: flex;
+  gap: var(--space-2);
+}
+.deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+.delivery {
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--ink-2);
+}
+.ok { background: var(--status-positive-tint); color: var(--status-positive); }
+.bad { background: var(--status-negative-tint); color: var(--status-negative); }

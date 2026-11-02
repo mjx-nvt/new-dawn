@@ -57,6 +57,25 @@ pub async fn on_record(pool: &SqlitePool, event: &RecordEvent) -> Result<u32> {
     Ok(started)
 }
 
+/// A workflow's webhook trigger (D-071): a run of the active version whose trigger is a
+/// webhook, the request's JSON as its trigger data; the run goes on by itself. None when the
+/// workflow has no such trigger (or is in Deleted records).
+pub async fn on_webhook(pool: &SqlitePool, workflow_id: &str, body: Value) -> Result<Option<String>> {
+    let version: Option<(String,)> = sqlx::query_as("SELECT t.version_id FROM workflow_automated_trigger t JOIN workflow w ON w.id = t.workflow_id AND w.deleted_at IS NULL WHERE t.kind = 'WEBHOOK' AND t.workflow_id = ?")
+        .bind(workflow_id)
+        .fetch_optional(pool)
+        .await?;
+    let Some((version_id,)) = version else { return Ok(None) };
+    let run_id = run::start(pool, workflow_id, &version_id, body).await?;
+    let (pool, run) = (pool.clone(), run_id.clone());
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = run::execute(&pool, &run).await {
+            tracing::warn!("webhook run {run}: {e:#}");
+        }
+    });
+    Ok(Some(run_id))
+}
+
 /// A minute's tick for one workspace: the runs a quit or a crash stopped mid-way (untouched
 /// since before this launch) are marked failed — Retry goes on from their step, rather than
 /// running a half-done step twice by itself; the schedules due start a run and move on; the
@@ -107,7 +126,8 @@ pub async fn tick(pool: &SqlitePool, launched: DateTime<Utc>) -> Result<u32> {
 pub fn spawn(app: &AppHandle) {
     super::set_app(app);
     let launched = Utc::now();
-    if let Some(mut events) = events::subscribe() {
+    {
+        let mut events = events::subscribe();
         tauri::async_runtime::spawn(async move {
             // Each event's runs go on their own task: a slow step (an AI turn behind a meeting's
             // summary, an HTTP call) never holds the next event up.

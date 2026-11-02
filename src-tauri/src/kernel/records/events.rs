@@ -1,8 +1,8 @@
 //! Record events (D-068): what the engine tells the rest of the app when a record is made,
-//! changed or deleted — one bounded channel, read by the workflows module. The engine never
-//! calls a module itself.
+//! changed or deleted — a bounded channel for each listener (the workflows, the webhooks of
+//! D-071). The engine never calls a module itself.
 
-use std::sync::OnceLock;
+use std::sync::{Mutex, PoisonError};
 
 use serde_json::Value;
 use sqlx::SqlitePool;
@@ -23,12 +23,13 @@ pub struct RecordEvent {
     pub source: String,
 }
 
-static SENDER: OnceLock<mpsc::Sender<RecordEvent>> = OnceLock::new();
+static SENDERS: Mutex<Vec<mpsc::Sender<RecordEvent>>> = Mutex::new(Vec::new());
 
-/// The channel's receiving end, made once at start-up; later calls get none.
-pub fn subscribe() -> Option<mpsc::Receiver<RecordEvent>> {
+/// A listener's own channel (1024 events deep).
+pub fn subscribe() -> mpsc::Receiver<RecordEvent> {
     let (tx, rx) = mpsc::channel(1024);
-    SENDER.set(tx).ok().map(|()| rx)
+    SENDERS.lock().unwrap_or_else(PoisonError::into_inner).push(tx);
+    rx
 }
 
 /// Tells whoever listens; nothing happens when no one does, and a full channel drops the event
@@ -40,8 +41,11 @@ pub fn emit(event: RecordEvent) {
     if matches!(event.source.as_str(), "WORKFLOW" | "IMPORT") {
         return;
     }
-    if let Some(tx) = SENDER.get() {
-        if let Err(e) = tx.try_send(event) {
+    let mut senders = SENDERS.lock().unwrap_or_else(PoisonError::into_inner);
+    // A listener that's gone (a test's) is forgotten.
+    senders.retain(|tx| !tx.is_closed());
+    for tx in senders.iter() {
+        if let Err(e) = tx.try_send(event.clone()) {
             tracing::warn!("record event dropped: {e}");
         }
     }

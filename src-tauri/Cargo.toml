@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.10.13"
+version = "0.10.14"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -69,6 +69,7 @@ objc2 = "0.6"
 # Already in the build: the memory-pressure sysctl (kernel/ai/resources.rs).
 libc = "0.2"
 calamine = "0.35.0"
+axum = { version = "0.8.9", default-features = false, features = ["tokio", "http1", "json", "query"] }
 
 # ── Added per phase (see docs/playbook.md). Keep this list honest: add a crate
 #    in the prompt that first needs it, and check its current API on docs.rs. ──

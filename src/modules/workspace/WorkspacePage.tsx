@@ -11,6 +11,7 @@ import MeetingTypesPanel from "../workspace-settings/MeetingTypesPanel";
 import PeoplePanel from "../workspace-settings/PeoplePanel";
 import VocabularyPanel from "../workspace-settings/VocabularyPanel";
 import AssistantAgentsPanel from "../workspace-settings/AssistantAgentsPanel";
+import DevelopersPanel from "../workspace-settings/DevelopersPanel";
 import DataModelPanel from "../workspace-settings/DataModelPanel";
 import styles from "./WorkspacePage.module.css";
 
@@ -63,7 +64,8 @@ export default function WorkspacePage() {
         ) : tab === "crm" ? (
           <>
             <DataModelPanel slug={slug} objectName={object} onOpen={(name) => void navigate({ to: "/workspace", search: { tab: "crm", object: name }, replace: true })} onBack={() => void navigate({ to: "/workspace", search: { tab: "crm" }, replace: true })} />
-            {!object && <AssistantAgentsPanel slug={slug} />}
+            {!object && <AssistantAgentsPanel key={slug} slug={slug} />}
+            {!object && <DevelopersPanel key={slug} slug={slug} />}
           </>
         ) : tab === "agents" ? (
           <AgentsPanel slug={slug} />

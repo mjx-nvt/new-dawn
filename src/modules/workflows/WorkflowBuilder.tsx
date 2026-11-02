@@ -484,7 +484,7 @@ export default function WorkflowBuilder({ ctx }: { ctx: WidgetContext }) {
           <div className="card">
             <p className="eyebrow">{selected === "trigger" ? "Trigger" : step ? stepLabel(step.type) : "Step"}</p>
             {selected === "trigger" ? (
-              <TriggerSettings slug={slug} trigger={def.trigger} onChange={(t) => setDef({ ...def, trigger: t })} />
+              <TriggerSettings slug={slug} workflowId={id} trigger={def.trigger} onChange={(t) => setDef({ ...def, trigger: t })} />
             ) : step ? (
               <StepSettings slug={slug} step={step} variables={variables} onChange={(next) => setDef({ ...def, steps: mapStep(def.steps, next.id, () => next) })} />
             ) : (

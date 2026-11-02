@@ -97,10 +97,10 @@ export default function AssistantAgentsPanel({ slug }: { slug: string }) {
         {(agents.data ?? []).map((a) => (
           <div key={a.id} className="groupRow">
             <div className="rowText">
-              <span className="rowLabel">
+              <p className="rowLabel">
                 {a.name} {a.is_default && <span className="chip">Default</span>}
-              </span>
-              <span className="rowHint">{[a.description, a.model || "App default model", `${a.tools.length} tools`].filter(Boolean).join(" · ")}</span>
+              </p>
+              <p className="rowHint">{[a.description, a.model || "App default model", `${a.tools.length} tools`].filter(Boolean).join(" · ")}</p>
             </div>
             <div className="rowControl">
               <button type="button" className="btn btnSecondary btnCompact" onClick={() => edit(a)}>

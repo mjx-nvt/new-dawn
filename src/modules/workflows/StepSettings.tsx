@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { selectOptions, useObject, useObjects, type FieldMeta, type ObjectDef } from "../../kernel/bridge/records";
+import { useApiStatus } from "../../kernel/bridge/api";
 import { useAssistantAgents } from "../../kernel/bridge/assistant";
 import { useOllamaStatus } from "../../kernel/bridge/summary";
 import { CONDITION_OPS, STEP_TYPES, type Branch, type Condition, type Step, type Trigger } from "../../kernel/bridge/workflows";
@@ -357,7 +358,8 @@ function SearchFilterEditor({ slug, object, filter, onChange, variables }: { slu
 }
 
 /** The trigger's settings: what starts a run. */
-export function TriggerSettings({ slug, trigger, onChange }: { slug: string; trigger: Trigger | null; onChange: (t: Trigger | null) => void }) {
+export function TriggerSettings({ slug, workflowId, trigger, onChange }: { slug: string; workflowId: string; trigger: Trigger | null; onChange: (t: Trigger | null) => void }) {
+  const api = useApiStatus().data;
   const t = trigger;
   const object = useObject(slug, t?.object || undefined).data;
   const set = (patch: Partial<Trigger>) => onChange({ ...(t ?? { type: "" }), ...patch });
@@ -471,7 +473,18 @@ export function TriggerSettings({ slug, trigger, onChange }: { slug: string; tri
           </Row>
         </>
       )}
-      {t?.type === "WEBHOOK" && <p className="fieldHint">Shown now; it gets its localhost URL with the local API (0.10.14).</p>}
+      {t?.type === "WEBHOOK" && (
+        <Row label="Address">
+          {api?.running ? (
+            <>
+              <code className={s.address}>{`${api.address}/webhooks/workflows/${slug}/${workflowId}`}</code>
+              <p className="fieldHint">POST a JSON body there from this Mac once the workflow is active: the body is the run's trigger data ({"{{trigger.field}}"}).</p>
+            </>
+          ) : (
+            <p className="fieldHint">Turn the local API on (Workspace → CRM → Developers) and the address shows here.</p>
+          )}
+        </Row>
+      )}
     </div>
   );
 }

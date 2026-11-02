@@ -59,6 +59,7 @@ mod modules {
     pub mod feedback;
     pub mod inbox;
     pub mod mailbox;
+    pub mod api;
     pub mod assistant;
     pub mod workflows;
     pub mod lessons;
@@ -91,6 +92,7 @@ mod commands {
     pub mod glass;
     pub mod inbox;
     pub mod mailbox;
+    pub mod api;
     pub mod assistant;
     pub mod workflows;
     pub mod layouts;
@@ -335,6 +337,15 @@ fn specta_builder() -> Builder<tauri::Wry> {
             commands::assistant::ask_assistant,
             commands::assistant::apply_chat_proposal,
             commands::assistant::dismiss_chat_proposal,
+            commands::api::api_status,
+            commands::api::set_api_enabled,
+            commands::api::list_api_keys,
+            commands::api::create_api_key,
+            commands::api::revoke_api_key,
+            commands::api::list_webhooks,
+            commands::api::save_webhook,
+            commands::api::delete_webhook,
+            commands::api::webhook_deliveries,
             commands::people::list_people,
             commands::vocabulary::list_vocabulary,
             commands::vocabulary::save_vocabulary_term,
@@ -571,6 +582,7 @@ pub fn run() {
                 });
             kernel::backup::spawn_scheduler(app.handle());
             modules::workflows::triggers::spawn(app.handle());
+            modules::api::spawn(app.handle());
             kernel::storage::spawn_scheduler(app.handle());
             modules::lessons::spawn(app.handle());
             modules::memory::spawn(app.handle());

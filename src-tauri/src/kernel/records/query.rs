@@ -85,6 +85,11 @@ impl Actor {
         Self { source: "WORKFLOW".into(), name: name.into(), member_id: None }
     }
 
+    /// A write through the local REST API (D-071), named after its key.
+    pub fn api(key_name: &str) -> Self {
+        Self { source: "API".into(), name: format!("API key {key_name}"), member_id: None }
+    }
+
     /// What the owner applied from an assistant's proposal (D-070), named after the agent.
     pub fn agent(name: &str) -> Self {
         Self { source: "AGENT".into(), name: name.into(), member_id: None }

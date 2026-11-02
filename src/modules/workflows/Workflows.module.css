@@ -163,6 +163,12 @@
 .inline > .template { flex: 1; min-width: 0; }
 .inline > select:global(.input.fit) { flex: none; width: auto; }
 .inline > :global(.input.narrow) { flex: 0 0 96px; }
+.address {
+  font-family: var(--font-mono);
+  font-size: var(--t-xs);
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
 .chips {
   display: flex;
   flex-wrap: wrap;
