@@ -18,6 +18,7 @@ import ItemPage from "./modules/projects/items/ItemPage";
 import InboxPage from "./modules/projects/InboxPage";
 import WorkspaceViews from "./modules/projects/WorkspaceViews";
 import ActiveCycles from "./modules/projects/ActiveCycles";
+import AnalyticsPage from "./modules/projects/AnalyticsPage";
 import ArchivesPage from "./modules/projects/ArchivesPage";
 import HomePage from "./modules/projects/HomePage";
 import YourWorkPage from "./modules/projects/YourWorkPage";
@@ -239,6 +240,22 @@ const archivesRoute = createRoute({
   staticData: { title: "Archives", breadcrumb: "Projects" },
 });
 
+// Analytics (D-083): its tab, project, period and axis.
+const analyticsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/projects/analytics",
+  validateSearch: (search: Record<string, unknown>): { atab?: string; aproj?: string; aperiod?: string; ax?: string } => {
+    const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
+    return { ...text("atab"), ...text("aproj"), ...text("aperiod"), ...text("ax") };
+  },
+  component: () => (
+    <ModuleGate module="projects">
+      <AnalyticsPage />
+    </ModuleGate>
+  ),
+  staticData: { title: "Analytics", breadcrumb: "Projects" },
+});
+
 // The Inbox (D-075): Plane's notifications — the tab, what it shows, the type filters, the work
 // item open beside the list and its activity tab.
 const inboxRoute = createRoute({
@@ -366,7 +383,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, pmHomeRoute, yourWorkRoute, archivesRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, pmHomeRoute, yourWorkRoute, archivesRoute, analyticsRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),

@@ -11,6 +11,7 @@ import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
 import Archived from "./items/Archived";
 import Cycles from "./items/Cycles";
+import ImportSheet from "./items/ImportSheet";
 import Intake from "./items/Intake";
 import Modules from "./items/Modules";
 import Pages from "./items/Pages";
@@ -58,6 +59,7 @@ export default function ProjectPage() {
   const update = useUpdateProject(slug);
   const remove = useDeleteProject(slug);
   const [editing, setEditing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const d = dossier.data;
   const p = d?.project;
@@ -92,6 +94,7 @@ export default function ProjectPage() {
               items={[
                 { label: "Edit…", onSelect: () => setEditing(true) },
                 { label: "Settings", onSelect: () => showTab("settings") },
+                ...(pm && !pm.archived_at ? [{ label: "Import work items (Plane CSV)…", onSelect: () => setImporting(true) }] : []),
                 ...(pm ? [{ label: pm.archived_at ? "Restore project" : "Archive project", separator: true, onSelect: () => archive.mutate({ id: pm.id, archived: !pm.archived_at }) }] : []),
                 { label: "Delete project…", danger: true, separator: true, onSelect: () => setConfirmDelete(true) },
               ]}
@@ -212,6 +215,7 @@ export default function ProjectPage() {
       </>
       )}
 
+      {importing && pm && slug && <ImportSheet slug={slug} projectId={pm.id} projectName={pm.name} onClose={() => setImporting(false)} />}
       {editing && p && (
         <EditSheet
           project={p}

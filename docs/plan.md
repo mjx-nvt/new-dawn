@@ -250,7 +250,7 @@ npm: `@tiptap/*` (+ `lowlight` for code; `mermaid` optional) — fallback: a pla
 | 0039 | `pm_page` (sub-pages, private and locked flags), `pm_page_label`, `pm_page_version` (merged snapshots); `favorite.pm_page_id` (D-080) | 0.11.7 |
 | 0040 | `pm_intake_item` (a request's status, snooze day, duplicate of, source, email; D-081) — requests are `pm_item` rows in a Triage state | 0.11.8 |
 | 0041 | `pm_sticky`, `pm_quick_link`, `pm_home_widget`, `pm_navigation`, `pm_recent` (visits; D-082) | 0.11.9 |
-| 0042 | `analytic_view`, `exporter_history`, `importer_history` | 0.11.10 |
+| 0042 | — none: exports and imports are rows of 0025's `export_job` / `import_job`; analytics are queries, their choices URL state (D-083). The next migration takes 0042 | 0.11.10 |
 | 0043 | `api_token`, `pm_webhook` | 0.11.11 |
 
 Conventions as before (UUID v7 ids, `created_at` / `updated_at`, enumerations checked in Rust, BEFORE triggers for meeting deletes). Custom objects and fields are run-time DDL (§5.2), not migrations. Registry: nothing.
@@ -425,7 +425,7 @@ Track A ≈ **45 sittings**.
 
 ### 0.11.10 — Analytics, exports, CSV importer (3 sittings)
 - **Same as:** §4.5 (analytics, exports, importer).
-- **Data:** 0042.
+- **Data:** none new (0025's transfer history; D-083).
 - **Screens and flows:** Analytics: Overview (projects, work items, active cycles, intake), Work items (by state, Created vs Resolved over time, Customized insights by priority / assignee / state / labels / cycles), light Cycles / Modules tabs (ours), per project and per cycle / module; Exports (CSV / XLSX / JSON with current filters, history); Workspace → Imports: Plane's CSV importer with its columns, matching rules, migrations table and JSON summary.
 - **Done when:** a Plane CSV export re-imports with states, labels, parents and comments; Created vs Resolved shows the dev project's week.
 

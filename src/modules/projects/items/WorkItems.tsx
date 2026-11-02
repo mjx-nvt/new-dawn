@@ -12,6 +12,8 @@ import Board from "./Board";
 import BulkBar from "./BulkBar";
 import Calendar from "./Calendar";
 import CreateItem from "./CreateItem";
+import { exportPmItems } from "../../../kernel/bridge/pmAnalytics";
+import MenuButton from "../../../kernel/shell/MenuButton";
 import FilterBar from "./FilterBar";
 import ItemPeek, { type PeekMode } from "./ItemPeek";
 import { DEFAULT_DISPLAY, GROUP_BY, LAYOUTS, ORDER_BY, PROPERTIES, PROPERTY_LABEL, grouped, moveTo, ordered, type Group, type GroupBy, type Layout, type OrderBy, type Property } from "./items";
@@ -40,6 +42,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
   // Not before an open view is read: its filters, not every item.
   const items = usePmQuery(slug, project.id, rules, !search.view || viewsQuery.isFetched);
   const [saving, setSaving] = useState(false);
+  const [exported, setExported] = useState<string | null>(null);
   const states = usePmStates(slug, project.id).data ?? [];
   const labels = usePmLabels(slug, project.id).data ?? [];
   const cycles = usePmCycles(slug, project.id).data ?? [];
@@ -243,7 +246,22 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
             Save as a view
           </button>
         )}
+        <MenuButton
+          label="Export the work items these filters keep"
+          className="btn btnGhost btnCompact"
+          items={(["csv", "xlsx", "json"] as const).map((format) => ({
+            label: `Export as ${format.toUpperCase()}…`,
+            onSelect: () =>
+              void exportPmItems(slug, project.id, rules, format, `${project.identifier} work items`).then(
+                (r) => setExported(r ? `${r.row_count} work item${r.row_count === 1 ? "" : "s"} saved as ${r.file_path}` : null),
+                (e: Error) => setExported(`Couldn't export them: ${e.message}`),
+              ),
+          }))}
+        >
+          Export
+        </MenuButton>
       </div>
+      {exported && <p className="fieldHint">{exported}</p>}
       {(items.error ?? update.error ?? keep.error ?? viewMuts.update.error) && (
         <p className="formError" role="alert">
           {(items.error ?? update.error ?? keep.error ?? viewMuts.update.error)?.message}

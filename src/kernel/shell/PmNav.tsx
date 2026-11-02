@@ -4,7 +4,7 @@ import { useNoticeCounts } from "../bridge/notices";
 import { usePmProjects } from "../bridge/pm";
 import { usePmHiddenNavigation, useSetPmNavigation } from "../bridge/pmHome";
 import { useProjects } from "../bridge/projects";
-import { ArchivesIcon, CyclesIcon, DraftsIcon, HomeIcon, InboxIcon, ProjectsIcon, ViewsIcon, YourWorkIcon } from "./icons";
+import { AnalyticsIcon, ArchivesIcon, CyclesIcon, DraftsIcon, HomeIcon, InboxIcon, ProjectsIcon, ViewsIcon, YourWorkIcon } from "./icons";
 import nav from "./CrmNav.module.css";
 import styles from "./Sidebar.module.css";
 
@@ -15,6 +15,7 @@ const ITEMS: { key: string; label: string }[] = [
   { key: "inbox", label: "Inbox" },
   { key: "drafts", label: "Drafts" },
   { key: "views", label: "Views" },
+  { key: "analytics", label: "Analytics" },
   { key: "active_cycles", label: "Active cycles" },
   { key: "archives", label: "Archives" },
 ];
@@ -89,6 +90,11 @@ export default function PmNav({ slug, iconsOnly }: { slug: string | undefined; i
       {shown("views") && (
         <Link to="/projects/views" search={{}} activeOptions={{ includeSearch: false }} className={styles.item} activeProps={{ className: styles.active }} title={tip("Views")}>
           {label("Views", <ViewsIcon />)}
+        </Link>
+      )}
+      {shown("analytics") && (
+        <Link to="/projects/analytics" search={{}} activeOptions={{ includeSearch: false }} className={styles.item} activeProps={{ className: styles.active }} title={tip("Analytics")}>
+          {label("Analytics", <AnalyticsIcon />)}
         </Link>
       )}
       {shown("active_cycles") && (

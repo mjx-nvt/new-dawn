@@ -17,7 +17,8 @@ export default function DataModelPanel({ slug, objectName, onOpen, onBack }: { s
   const [trouble, setTrouble] = useState<string | null>(null);
   if (objectName) return <DataModelObject slug={slug} objectName={objectName} onBack={onBack} />;
   const shown = (objects.data ?? []).filter((o) => !o.is_system && (filter === "all" || (filter === "active") === o.is_active));
-  const labelOf = (singular: string) => (objects.data ?? []).find((o) => o.name_singular === singular)?.label_plural ?? singular;
+  // Projects' work items (D-083) sit in the history beside the CRM's objects.
+  const labelOf = (singular: string) => (singular === "pm_item" ? "Work items" : (objects.data ?? []).find((o) => o.name_singular === singular)?.label_plural ?? singular);
   const when = (iso: string) => formatDateTime(iso);
   return (
     <section className="section">

@@ -133,6 +133,7 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
             ["Drafts", () => void navigate({ to: "/projects/drafts" })],
             ["Work item views", () => void navigate({ to: "/projects/views", search: {} })],
             ["Active cycles", () => void navigate({ to: "/projects/cycles" })],
+            ["Analytics", () => void navigate({ to: "/projects/analytics", search: {} })],
             ["Archives", () => void navigate({ to: "/projects/archives", search: {} })],
             ["All projects", () => void navigate({ to: "/projects" })],
           ] as [string, () => void][])

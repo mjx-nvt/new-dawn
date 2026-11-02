@@ -91,6 +91,21 @@ _2026-11-02_
 
 ---
 
+## D-083 — Plane's analytics, exports and CSV importer: read where the work lives, Plane's columns both ways, the history already kept
+_2026-11-02_
+
+**Context** (plan v4 §4.5, 0.11.10): Plane's Analytics (an overview; work items by state, Created vs Resolved over time, customized insights by priority, assignee, state, labels or cycles; Cycles and Modules tabs that are paid there), its exports (CSV, XLSX or JSON with the current filters, an export history) and its CSV importer (Plane's columns, matching rules, a table of the runs and a JSON summary).
+
+**Decision — analytics read the work where it lives**: counts are queries on the items themselves (no snapshots) — the open projects', or one's; no Intake request, nothing archived. Created vs Resolved counts each day on this Mac's calendar the items made and the ones that entered a completed state (`completed_at`, D-074); imported work items are made on the import's day, so that day counts them all. Customized insights count by state, state group, priority, assignee, label, cycle or module — an item with several labels, assignees or modules counts in each — with how many of each are completed; across the projects a state, label, cycle or module is one bar by its name (each project's Done is one Done). The Cycles and Modules tabs are each one's progress (ours, as the plan says). The page's choices (tab, project, period, axis) are its address; Plane's saved analytics views aren't kept.
+
+**Decision — Plane's columns both ways**: an export writes Plane's twenty columns (Identifier, Name, Description, State Name, State Group, Priority, Assignees, Labels, dates, Estimate, Cycle Name, Modules, Parent, Subscribers, Links, Comments, Created, Updated and Completed At) as CSV, XLSX (a plain one-sheet workbook) or JSON, for what the Work items tab's filters keep, to the file the save dialog names. The importer reads the same columns from a CSV or a workbook (any case): a row is a work item — its state by name, made in its State Group when the project lacks it; labels by name, made when missing; people by name or "You" (others left out and said); dates, estimate, cycle and modules by name; links; comments (one cell, " ¦ " between them) — and parents link by Identifier within the file once every row is an item. Before anything is written, a preview says what the file holds, the states and labels it will make, the rows named like work items the project has already, and what won't come in as it says; the summary says it by row, and an item once made stays made (a comment or subscriber that fails is said, not undone). A CSV cell a spreadsheet would read as a formula (starting =, +, -, @) is written after a ' and read back without it — the CRM's exports and imports too (`kernel/csv.rs`) — and a CSV starts with a byte-order mark so Excel reads its accents. Exports and imports are rows of the transfer history the CRM already keeps (0025 `export_job`, `import_job`, object "pm_item") — no new table.
+
+**Where the owner sees it**: Projects → **Analytics** in the sidebar (hideable), with Overview, Work items, Cycles and Modules; the Work items tab's **Export** menu (CSV, XLSX, JSON); a project's ⋯ **Import work items (Plane CSV)…**.
+
+**Means for future work**: Plane's API (0.11.11) can serve the same rows; the parity audit (0.12.0) checks the columns against Plane's.
+
+---
+
 ## D-082 — Plane's Home, Your work and navigation: a Projects section in the sidebar, recents as visits, Power K inside ⌘K
 _2026-11-02_
 

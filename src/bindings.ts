@@ -342,6 +342,15 @@ export const commands = {
 	pmMyActivity: (slug: string) => typedError<MyActivity[], AppError>(__TAURI_INVOKE("pm_my_activity", { slug })),
 	/**  ⌘K: projects, cycles, modules and pages by name. */
 	searchPm: (slug: string, query: string) => typedError<PmHit[], AppError>(__TAURI_INVOKE("search_pm", { slug, query })),
+	pmOverview: (slug: string, projectId: string | null) => typedError<PmOverview, AppError>(__TAURI_INVOKE("pm_overview", { slug, projectId })),
+	/**  Each day from `from` to `to`: the work items made and resolved. */
+	pmCreatedVsResolved: (slug: string, projectId: string | null, from: string, to: string) => typedError<DayCount[], AppError>(__TAURI_INVOKE("pm_created_vs_resolved", { slug, projectId, from, to })),
+	pmInsights: (slug: string, projectId: string | null, axis: string) => typedError<Share[], AppError>(__TAURI_INVOKE("pm_insights", { slug, projectId, axis })),
+	/**  Work items as the rules keep them, into the file the save dialog named. */
+	exportPmItems: (slug: string, projectId: string | null, rules: PmRule[], format: ExportFormat, path: string, label: string) => typedError<PmExportReport, AppError>(__TAURI_INVOKE("export_pm_items", { slug, projectId, rules, format, path, label })),
+	/**  What a Plane CSV holds, before it comes into a project. */
+	previewPmImport: (slug: string, projectId: string, path: string) => typedError<PmImportPreview, AppError>(__TAURI_INVOKE("preview_pm_import", { slug, projectId, path })),
+	importPmItems: (slug: string, projectId: string, path: string) => typedError<PmImportSummary, AppError>(__TAURI_INVOKE("import_pm_items", { slug, projectId, path })),
 	/**  The People page: everyone in the people memory, with last contact and commitments. */
 	listPeopleCards: (slug: string) => typedError<PersonCard_Serialize[], AppError>(__TAURI_INVOKE("list_people_cards", { slug })),
 	/**  Commitments from new summaries, waiting for the owner. */
@@ -1609,6 +1618,13 @@ export type DateFormat =
 /**  One workspace's part of the day. */
 export type Day = Day_Serialize | Day_Deserialize;
 
+export type DayCount = {
+	day: string,
+	created: number,
+	/**  Moved into a completed state that day. */
+	resolved: number,
+};
+
 /**  One workspace's part of the day. */
 export type Day_Deserialize = {
 	slug: string,
@@ -1841,6 +1857,8 @@ export type EventAttendee_Serialize = {
 	person_id: string | null,
 	attending: boolean,
 };
+
+export type ExportFormat = "csv" | "xlsx" | "json";
 
 export type ExportOptions = ExportOptions_Serialize | ExportOptions_Deserialize;
 
@@ -2243,6 +2261,12 @@ export type ImportFile_Serialize = {
 	mapping: ColumnMap_Serialize[],
 	identifier: string | null,
 	fields: FieldChoice[],
+};
+
+export type ImportProblem = {
+	/**  The file's row (the headers are row 1; 0: the file as a whole). */
+	row: number,
+	message: string,
 };
 
 export type ImportReport = {
@@ -3715,6 +3739,11 @@ export type PmEstimate_Serialize = {
 	created_at: string,
 };
 
+export type PmExportReport = {
+	row_count: number,
+	file_path: string,
+};
+
 export type PmHit = {
 	/**  "project", "cycle", "module" or "page". */
 	kind: string,
@@ -3722,6 +3751,24 @@ export type PmHit = {
 	project_id: string,
 	label: string,
 	project_name: string,
+};
+
+/**
+ *  What a file holds before it is imported: Plane's columns found, the others left aside, the
+ *  rows, and what won't come in as it says (or will come in twice).
+ */
+export type PmImportPreview = {
+	columns: string[],
+	ignored: string[],
+	rows: number,
+	problems: ImportProblem[],
+};
+
+/**  What an import did (Plane's JSON summary). */
+export type PmImportSummary = {
+	created: number,
+	skipped: number,
+	problems: ImportProblem[],
 };
 
 export type PmIntakeItem = PmIntakeItem_Serialize | PmIntakeItem_Deserialize;
@@ -3948,6 +3995,15 @@ export type PmModule_Serialize = {
 	cancelled: number,
 	created_at: string,
 	updated_at: string,
+};
+
+export type PmOverview = {
+	projects: number,
+	items: number,
+	open_items: number,
+	active_cycles: number,
+	/**  Intake's requests waiting today. */
+	requests: number,
 };
 
 export type PmPage = PmPage_Serialize | PmPage_Deserialize;

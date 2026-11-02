@@ -10,7 +10,9 @@ use crate::kernel::hub::WorkspaceHub;
 use crate::kernel::windows;
 use crate::modules::pm::bulk::{self, PmBulkAction};
 use crate::modules::pm::comments::{self, PmComment, Reaction};
-use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle};
+use crate::modules::pm::cycles::{self, CycleDetails, CycleInput, CyclePatch, PmCycle, Share};
+use crate::modules::pm::analytics::{self, DayCount, PmOverview};
+use crate::modules::pm::transfer::{self, ExportFormat, PmExportReport, PmImportPreview, PmImportSummary};
 use crate::modules::pm::home::{self, HomeWidget, MyActivity, PmArchives, PmHit, PmQuickLink, PmRecent, PmSticky, RecentKind};
 use crate::modules::pm::intake::{self, IntakeInput, PmIntakeItem};
 use crate::modules::pm::modules::{self, ModuleDetails, ModuleInput, ModulePatch, PmModule};
@@ -905,4 +907,49 @@ pub async fn pm_my_activity(hub: State<'_, WorkspaceHub>, slug: String) -> Resul
 #[specta::specta]
 pub async fn search_pm(hub: State<'_, WorkspaceHub>, slug: String, query: String) -> Result<Vec<PmHit>, AppError> {
     Ok(home::search(&hub.pool(&slug)?, &query).await?)
+}
+
+// ── 0.11.10 (D-083): analytics, exports, the CSV importer ──
+
+fn day(text: &str) -> Result<chrono::NaiveDate, AppError> {
+    chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").map_err(|_| AppError::invalid("A day is YYYY-MM-DD"))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_overview(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>) -> Result<PmOverview, AppError> {
+    Ok(analytics::overview(&hub.pool(&slug)?, project_id.as_deref().filter(|p| !p.is_empty()), cycles::today()).await?)
+}
+
+/// Each day from `from` to `to`: the work items made and resolved.
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_created_vs_resolved(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>, from: String, to: String) -> Result<Vec<DayCount>, AppError> {
+    Ok(analytics::created_vs_resolved(&hub.pool(&slug)?, project_id.as_deref().filter(|p| !p.is_empty()), day(&from)?, day(&to)?).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn pm_insights(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>, axis: String) -> Result<Vec<Share>, AppError> {
+    Ok(analytics::insights(&hub.pool(&slug)?, project_id.as_deref().filter(|p| !p.is_empty()), &axis).await?)
+}
+
+/// Work items as the rules keep them, into the file the save dialog named.
+#[tauri::command]
+#[specta::specta]
+pub async fn export_pm_items(hub: State<'_, WorkspaceHub>, slug: String, project_id: Option<String>, rules: Vec<PmRule>, format: ExportFormat, path: String, label: String) -> Result<PmExportReport, AppError> {
+    Ok(transfer::export_query(&hub, &slug, project_id.as_deref().filter(|p| !p.is_empty()), &rules, format, Path::new(&path), &label).await?)
+}
+
+/// What a Plane CSV holds, before it comes into a project.
+#[tauri::command]
+#[specta::specta]
+pub async fn preview_pm_import(hub: State<'_, WorkspaceHub>, slug: String, project_id: String, path: String) -> Result<PmImportPreview, AppError> {
+    Ok(transfer::preview(&hub.pool(&slug)?, &project_id, Path::new(&path)).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn import_pm_items(hub: State<'_, WorkspaceHub>, slug: String, project_id: String, path: String) -> Result<PmImportSummary, AppError> {
+    Ok(transfer::import(&hub.pool(&slug)?, &project_id, Path::new(&path), ME).await?)
 }

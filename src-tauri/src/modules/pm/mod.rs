@@ -4,6 +4,7 @@
 //! project made before 0.11.0, or through the dossier's own path, gets its Plane side the first
 //! time the module reads the workspace.
 
+pub mod analytics;
 pub mod automations;
 pub mod bulk;
 pub mod comments;
@@ -19,6 +20,7 @@ pub mod modules;
 pub mod pages;
 pub mod relations;
 pub mod settings;
+pub mod transfer;
 pub mod views;
 
 use anyhow::{Result, anyhow};

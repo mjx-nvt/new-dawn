@@ -1538,3 +1538,22 @@
 .widget .search {
   width: 240px;
 }
+
+/* Analytics and the importer (0.11.10) */
+.analyticsChart {
+  height: 280px;
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  border: 0.5px solid var(--hair);
+  background: var(--surface);
+}
+
+.importProblems {
+  margin: 0;
+  padding-left: var(--space-5);
+  max-height: 200px;
+  overflow: auto;
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}

@@ -21,6 +21,8 @@ use crate::kernel::csv;
 
 /// Twenty's limits: rows a file may hold; records an export may hold.
 const MAX_ROWS: usize = 10_000;
+/// The biggest file read whole.
+const MAX_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_EXPORT: u32 = 20_000;
 /// Rows an export reads at a time.
 const PAGE: u32 = 2_000;
@@ -40,12 +42,18 @@ pub struct Table {
 /// The first sheet of a workbook, or the CSV: the first row is the headers; cells are trimmed
 /// and rows made as wide as the headers; blank rows are dropped.
 pub fn read_table(path: &Path) -> Result<Table> {
+    // A file of this Mac's, not too big to read whole (the rows are counted after).
+    let meta = std::fs::metadata(path).with_context(|| format!("reading {}", path.display()))?;
+    if !meta.is_file() || meta.len() > MAX_BYTES {
+        return Err(invalid("Choose a file of at most 20 MB"));
+    }
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let mut rows = match ext.as_str() {
         "xlsx" | "xlsm" | "xlsb" | "xls" | "ods" => read_workbook(path)?,
         _ => {
             let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-            csv::parse(&String::from_utf8_lossy(&bytes))
+            // A cell guarded against running as a formula reads as it was (`csv::quote`).
+            csv::parse(&String::from_utf8_lossy(&bytes)).into_iter().map(|r| r.into_iter().map(|c| csv::unguard(&c).to_owned()).collect()).collect()
         }
     };
     rows.retain(|r| r.iter().any(|c| !c.trim().is_empty()));

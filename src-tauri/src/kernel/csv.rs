@@ -47,12 +47,31 @@ pub fn parse(text: &str) -> Vec<Vec<String>> {
     rows
 }
 
-/// One field, quoted when it needs to be.
+/// What a spreadsheet would run as a formula when a cell starts with it.
+const FORMULA: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
+
+/// One field, quoted when it needs to be — and, starting like a formula (not a plain number),
+/// behind a `'` so a spreadsheet shows it as text (`unguard` takes it off on the way back in).
 fn quote(field: &str) -> String {
+    let guarded;
+    let field = if field.starts_with(FORMULA) && field.trim().parse::<f64>().is_err() {
+        guarded = format!("'{field}");
+        guarded.as_str()
+    } else {
+        field
+    };
     if field.contains([',', '"', '\n', '\r']) {
         format!("\"{}\"", field.replace('"', "\"\""))
     } else {
         field.to_owned()
+    }
+}
+
+/// A cell as it was before `quote` guarded it.
+pub fn unguard(cell: &str) -> &str {
+    match cell.strip_prefix('\'') {
+        Some(rest) if rest.starts_with(FORMULA) => rest,
+        _ => cell,
     }
 }
 
@@ -70,6 +89,15 @@ pub fn write<R: AsRef<[String]>>(rows: &[R]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_formula_is_text_out_and_itself_back_in() {
+        let rows = vec![vec!["=1+1".to_owned(), "-500".to_owned(), "+84 90 123".to_owned(), "@me".to_owned(), "- follow up".to_owned(), "plain".to_owned()]];
+        let text = write(&rows);
+        assert_eq!(text, "'=1+1,-500,'+84 90 123,'@me,'- follow up,plain\r\n", "a number stays a number");
+        let back: Vec<String> = parse(&text)[0].iter().map(|c| unguard(c).to_owned()).collect();
+        assert_eq!(back, rows[0]);
+    }
 
     #[test]
     fn quotes_commas_and_line_breaks_round_trip() {

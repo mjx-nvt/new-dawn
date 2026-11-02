@@ -116,6 +116,15 @@ export const CyclesIcon = () => (
   </Icon>
 );
 
+export const AnalyticsIcon = () => (
+  <Icon>
+    <path d="M2.5 13.5h11" />
+    <path d="M4.5 11V8" />
+    <path d="M8 11V4.5" />
+    <path d="M11.5 11V6.5" />
+  </Icon>
+);
+
 export const ArchivesIcon = () => (
   <Icon>
     <rect x="2" y="3" width="12" height="3" rx="0.75" />

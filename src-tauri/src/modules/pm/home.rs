@@ -18,7 +18,7 @@ pub const STICKY_COLORS: [&str; 6] = ["yellow", "green", "blue", "purple", "red"
 /// The Home's widgets, in their default order.
 pub const WIDGETS: [&str; 3] = ["quick_links", "recents", "stickies"];
 /// The Projects section's items that can be hidden (the projects themselves always show).
-pub const NAV_ITEMS: [&str; 7] = ["home", "your_work", "inbox", "drafts", "views", "active_cycles", "archives"];
+pub const NAV_ITEMS: [&str; 8] = ["home", "your_work", "inbox", "drafts", "views", "analytics", "active_cycles", "archives"];
 /// Recents kept.
 const RECENTS_KEPT: u32 = 100;
 
