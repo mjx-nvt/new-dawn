@@ -1,3 +1,30 @@
+# Last Build — A long meeting's summary survives the model's JSON slips and a slow Ollama · release 0.12.1
+_2026-11-05_
+
+## What changed
+- **Reported on 0.12.0**: a 102-minute meeting's summary failed twice with "not the expected JSON", then with "calling Ollama: … operation timed out" (D-087).
+- **The JSON error** (`summarise.rs`): the model's answers were complete but nested differently, and the parser refused them, so the work was thrown away. It now reads:
+  - a section's `markdown` as a list of lines, or as `[]`: one text, bullets staying one list and other lines reading as paragraphs;
+  - the rest of the document written inside `sections`, or a `sections` inside `sections`: lifted back to the top.
+
+  Any other shape still fails and the model is asked again, so a summary is never saved without text it holds under another name.
+- **The timeout** (`kernel/ai/ollama.rs`): Ollama sends nothing until it has read the whole prompt, and the app gave up after 3 minutes of silence. A summary and a model check now wait 20 minutes. Other AI jobs keep the 3 minutes, because nothing can stop them. A timeout now reads in plain words everywhere.
+- **Cancel** now stops a summary or a model check at once, even while Ollama is silent. Before, it waited for Ollama's next word.
+- The summary prompt is unchanged on purpose: it's part of the key of a saved summary, so the parts already written for a failed meeting still count.
+- No migration. No new dependency. No screen changed.
+- Checked on private copies of the failed meeting (deleted afterwards). The copies' prompt matched the failed run's exactly (same fingerprint).
+  - **In the dev app, on the first revision of this fix:** the saved 4 parts were reused ("goes on at part 5 of 4"). Both merges passed: the same 11,667-token prompt that took 1,157 s on the failed run took 138 s, and the merge that timed out took 209 s. The run finished in about 7 minutes with every section filled, and Cancel during the silent wait ended a run in 0.7 s.
+  - **Straight on Ollama, with no window, on the final parser** (a temporary test, not committed): part 3 was asked twice and wrote `markdown` as `[]` and as a list of 5 lines, this morning's failure, and both were read. Of 8 first-merge answers, 7 were read. The other had a syntax error that mending couldn't fix and goes to the repair round, which that run didn't reach. The second merge, run once, was read too.
+  - **Not rerun end to end on the final revision:** the dev window was quit before that run could start. The final parser and the 20-minute setting are covered by the replay above and by tests.
+- **Seen, not changed:** in 3 of those 7 first merges the model squeezed all topics into one (counted on one sample: written and kept match, so the parser loses nothing). Key points can come out thin. The merge instruction isn't part of a saved summary's key, so it can be tightened later without losing saved parts.
+- `cargo test --lib` (221 pass), clippy, `tsc` and the localhost check are clean.
+
+## Manual steps
+- Update to 0.12.1, open the meeting and press Summarise. It carries on from the saved parts.
+- Don't press Cancel if the saved parts should stay: Cancel forgets them, as it always has (D-048).
+
+---
+
 # Last Build — Parity audit: plan v4 closed · release 0.12.0
 _2026-11-03_
 

@@ -20,6 +20,13 @@ use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
 
 const BASE: &str = "http://localhost:11434";
+
+/// How long Ollama may stay silent in a chat: it sends nothing until it has read the whole prompt.
+/// Short by default, since most jobs can't be stopped and hold the AI queue meanwhile.
+const SILENCE_LIMIT: Duration = Duration::from_secs(3 * 60);
+/// The same for a job with a Stop (`TextSession::patient`): on a 16 GB Mac short of memory a long
+/// prompt outlasted the three minutes (D-087).
+const PATIENT_SILENCE_LIMIT: Duration = Duration::from_secs(20 * 60);
 /// Ollama's port: what reaches the model goes through the gateway, never around it (rule 2).
 pub const PORT: u16 = 11434;
 /// The text model until the user picks another in Settings → Models (D-027).
@@ -566,6 +573,7 @@ pub struct TextSession<'a> {
     /// Context window for every call of the session (a change makes Ollama reload the model).
     num_ctx: u32,
     keep_alive: &'static str,
+    silence_limit: Duration,
 }
 
 /// Waits for a turn in `lane`, checks Ollama, and unloads Whisper (never two models at once).
@@ -629,6 +637,7 @@ pub async fn session_on<'a>(
         temperature: TEMPERATURE,
         num_ctx: NUM_CTX,
         keep_alive: KEEP_ALIVE,
+        silence_limit: SILENCE_LIMIT,
     }
 }
 
@@ -670,6 +679,7 @@ impl<'a> TextSession<'a> {
             temperature: TEMPERATURE,
             num_ctx: NUM_CTX,
             keep_alive: KEEP_ALIVE,
+            silence_limit: SILENCE_LIMIT,
         }
     }
 }
@@ -706,6 +716,12 @@ impl TextSession<'_> {
         self
     }
 
+    /// For a long job the owner can stop: Ollama may stay silent much longer before it fails.
+    pub fn patient(&mut self) -> &mut Self {
+        self.silence_limit = PATIENT_SILENCE_LIMIT;
+        self
+    }
+
     /// Sampling temperature for the calls that follow (live translation runs cooler).
     pub fn set_temperature(&mut self, temperature: f32) -> &mut Self {
         self.temperature = temperature;
@@ -732,7 +748,11 @@ impl TextSession<'_> {
         }
         let started = Instant::now();
         let messages = serde_json::to_value(&request.messages)?;
-        let result = self.stream(messages, None, request.think, request.max_tokens, cancel, &mut on_token).await;
+        // Dropping the call on Cancel closes the connection, which stops Ollama too.
+        let result = tokio::select! {
+            result = self.stream(messages, None, request.think, request.max_tokens, cancel, &mut on_token) => result,
+            () = cancelled(cancel) => Err(AppError::new("cancelled", "Summary cancelled").into()),
+        };
         let overflow = self.overflowed(&result).await;
         self.log("complete", started, &result, overflow).await;
         if overflow {
@@ -856,12 +876,12 @@ impl TextSession<'_> {
         if let Some(tools) = tools {
             body["tools"] = tools.clone();
         }
-        let response = client(Duration::from_secs(180))? // the first token can wait for the model to load
+        let response = client(self.silence_limit)?
             .post(format!("{BASE}/api/chat"))
             .json(&body)
             .send()
             .await
-            .context("calling Ollama")?;
+            .map_err(|err| chat_error(err, "calling Ollama", self.silence_limit))?;
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
@@ -882,7 +902,7 @@ impl TextSession<'_> {
             if cancel.load(Ordering::Relaxed) {
                 bail!(AppError::new("cancelled", "Summary cancelled"));
             }
-            buffer.extend_from_slice(&bytes.context("reading from Ollama")?);
+            buffer.extend_from_slice(&bytes.map_err(|err| chat_error(err, "reading from Ollama", self.silence_limit))?);
             while let Some(newline) = buffer.iter().position(|b| *b == b'\n') {
                 let line: Vec<u8> = buffer.drain(..=newline).collect();
                 if line.iter().all(u8::is_ascii_whitespace) {
@@ -922,6 +942,27 @@ impl TextSession<'_> {
     }
 }
 
+/// Resolves once `cancel` is set.
+async fn cancelled(cancel: &AtomicBool) {
+    while !cancel.load(Ordering::Relaxed) {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+}
+
+/// A chat's failure: a timeout in words, since the owner reads it; anything else as it came.
+fn chat_error(err: reqwest::Error, doing: &'static str, limit: Duration) -> anyhow::Error {
+    if err.is_timeout() && !err.is_connect() {
+        let minutes = limit.as_secs() / 60;
+        AppError::new(
+            "ollama_busy",
+            format!("Ollama gave no answer for {minutes} minutes. If the Mac is short of memory, close some apps and try again."),
+        )
+        .into()
+    } else {
+        anyhow::Error::new(err).context(doing)
+    }
+}
+
 /// Removes `<think>…</think>` blocks a model may leave inline in its answer.
 pub fn strip_think(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -942,7 +983,28 @@ pub fn strip_think(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_think;
+    use super::*;
+
+    #[tokio::test]
+    async fn a_silent_ollama_reads_in_words() {
+        // Accepts the call and never answers, as Ollama does while it reads a long prompt.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let silent = tokio::spawn(async move {
+            let _held = listener.accept().await;
+            std::future::pending::<()>().await;
+        });
+        let err = client(Duration::from_millis(100))
+            .unwrap()
+            .get(format!("http://127.0.0.1:{port}/"))
+            .send()
+            .await
+            .unwrap_err();
+        silent.abort();
+        let err = chat_error(err, "calling Ollama", PATIENT_SILENCE_LIMIT);
+        assert!(err.downcast_ref::<AppError>().is_some_and(|e| e.code == "ollama_busy"), "{err:#}");
+        assert!(format!("{err:#}").contains("no answer for 20 minutes"), "{err:#}");
+    }
 
     #[test]
     fn strips_think_blocks() {

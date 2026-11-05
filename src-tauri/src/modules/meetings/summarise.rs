@@ -431,6 +431,7 @@ fn parse_doc(answer: &str) -> Result<RawDoc> {
                 e.column()
             )
         })?;
+    flatten_sections(&mut value);
     lenient(&mut value, false);
     serde_json::from_value(value.clone()).or_else(|e| {
         // Its structure only — never the words (D-026) — so the next slip can be read from logs.
@@ -444,6 +445,58 @@ fn parse_doc(answer: &str) -> Result<RawDoc> {
             )
         })
     })
+}
+
+/// The rest of the document written inside `sections`, or a `sections` inside `sections`
+/// (qwen3.5:9b, D-087): each lifted back to the top, where a field with content stays. Everything
+/// else in the list stays as it is, so an answer of another shape still fails and the model is
+/// asked again rather than a summary being saved without its text.
+fn flatten_sections(value: &mut serde_json::Value) {
+    use serde_json::{Map, Value};
+    const DOC_FIELDS: [&str; 8] = [
+        "sections",
+        "attendees",
+        "discussion",
+        "decisions",
+        "action_items",
+        "open_issues",
+        "next_focus",
+        "highlights",
+    ];
+    fn empty(field: &Value) -> bool {
+        field.is_null() || field.as_str() == Some("") || field.as_array().is_some_and(Vec::is_empty)
+    }
+    fn walk(items: Vec<Value>, doc: &mut Map<String, Value>, sections: &mut Vec<Value>) {
+        for item in items {
+            let Value::Object(mut fields) = item else {
+                sections.push(item);
+                continue;
+            };
+            let is_section = fields.contains_key("title") || fields.contains_key("markdown");
+            if is_section || !DOC_FIELDS.iter().any(|key| fields.contains_key(*key)) {
+                sections.push(Value::Object(fields));
+                continue;
+            }
+            match fields.remove("sections") {
+                Some(Value::Array(inner)) => walk(inner, doc, sections),
+                Some(other) => sections.push(other),
+                None => {}
+            }
+            for (key, field) in fields {
+                if doc.get(&key).is_none_or(empty) {
+                    doc.insert(key, field);
+                }
+            }
+        }
+    }
+    let Value::Object(doc) = value else { return };
+    let Some(Value::Array(items)) = doc.get_mut("sections") else {
+        return;
+    };
+    let items = std::mem::take(items);
+    let mut sections = Vec::with_capacity(items.len());
+    walk(items, doc, &mut sections);
+    doc.insert("sections".into(), Value::Array(sections));
 }
 
 /// An answer whose prose sections read but one of its lists doesn't (names where objects were
@@ -568,6 +621,18 @@ pub(crate) fn lenient(value: &mut serde_json::Value, text_items: bool) {
                     v,
                     matches!(key.as_str(), "points" | "highlights" | "heard_as"),
                 );
+                // A section's text as a list of lines, `[]` for "leave it empty" (D-087): one
+                // text, bullets staying one list and anything else reading as paragraphs.
+                if key == "markdown" {
+                    if let Value::Array(lines) = v {
+                        let lines: Option<Vec<&str>> = lines.iter().map(Value::as_str).collect();
+                        if let Some(lines) = lines {
+                            let bullets = lines.iter().all(|l| l.trim_start().starts_with('-'));
+                            let text = lines.join(if bullets { "\n" } else { "\n\n" });
+                            *v = Value::String(text);
+                        }
+                    }
+                }
             }
         }
         Value::Array(items) => {
@@ -886,11 +951,16 @@ pub(super) fn settle_attendees(
 /// discussed", and writes the Key points / Decisions / Action items / Open questions sections
 /// from the structured lists (Key points and Open questions fall back to the model's markdown).
 fn shape(raw: RawDoc, structure: &[SectionSpec], language: Language) -> SummaryDoc {
-    let by_title: HashMap<String, &RawSection> = raw
-        .sections
-        .iter()
-        .map(|s| (s.title.trim().to_lowercase(), s))
-        .collect();
+    let mut by_title: HashMap<String, &RawSection> = HashMap::new();
+    for section in &raw.sections {
+        // A section written twice (D-087) keeps the copy with text.
+        let found = by_title
+            .entry(section.title.trim().to_lowercase())
+            .or_insert(section);
+        if found.markdown.trim().is_empty() {
+            *found = section;
+        }
+    }
     let sections = structure
         .iter()
         .enumerate()
@@ -1502,6 +1572,7 @@ pub async fn trial(
         task,
     )
     .await?;
+    session.patient();
     // Ollama would quietly answer with the app's model if the candidate went missing.
     if session.model() != model {
         bail!(AppError::invalid(format!(
@@ -1651,7 +1722,7 @@ async fn run(
             task,
         )
         .await?;
-        session.for_agent("summary");
+        session.for_agent("summary").patient();
         if cancel.load(Ordering::Relaxed) {
             bail!(AppError::new("cancelled", "Summary cancelled")); // cancelled while queued
         }
@@ -2286,6 +2357,82 @@ mod tests {
                 .unwrap();
         assert_eq!(doc.decisions[0].text, "x"); // pre-P3.2 shape still reads
         assert!(parse_doc("Sorry, I can't.").is_err());
+    }
+
+    /// The shapes qwen3.5:9b wrote for one 102-minute meeting on 2026-11-05, as the log has them:
+    /// each failed the summary, twice over, with all the content there (D-087).
+    #[test]
+    fn reads_the_answers_of_the_wrong_shape() {
+        let rest = r#""attendees":[{"name":"Lan","organisation":"","title":"","attendance":"Present"}],
+            "discussion":[{"topic":"Budget","points":["Two points","Agreed"]}],
+            "decisions":[{"text":"Go","decided_by":"","condition":""}],
+            "action_items":[{"owner":"Lan","item":"Send it","due":"Friday"}],
+            "open_issues":[{"issue":"Who signs?","who":"","by":""}],
+            "next_focus":"Signing""#;
+        let overview = r#"{"title":"Overview","markdown":"We met."}"#;
+        let bullets = r#"{"title":"Key points","markdown":["- One","- Two"]}"#;
+        let check = |answer: String| {
+            let doc = parse_doc(&answer).unwrap_or_else(|e| panic!("{e:#}: {answer}"));
+            assert_eq!(doc.sections[0].title, "Overview", "{answer}");
+            assert_eq!(doc.attendees[0].name, "Lan", "{answer}");
+            assert_eq!(doc.discussion[0].points.len(), 2, "{answer}");
+            assert_eq!(doc.decisions[0].text, "Go", "{answer}");
+            assert_eq!(doc.action_items[0].item, "Send it", "{answer}");
+            assert_eq!(doc.open_issues[0].issue, "Who signs?", "{answer}");
+            assert_eq!(doc.next_focus, "Signing", "{answer}");
+            doc
+        };
+        // `[]` for a section left empty; the rest in its place.
+        let doc = check(format!(
+            r#"{{"sections":[{overview},{{"title":"Decisions","markdown":[]}}],{rest}}}"#
+        ));
+        assert_eq!(doc.sections[1].markdown, "");
+        // The rest of the document as one more section.
+        let doc = check(format!(r#"{{"sections":[{overview},{bullets},{{{rest}}}]}}"#));
+        assert_eq!(doc.sections.len(), 2);
+        assert_eq!(doc.sections[1].markdown, "- One\n- Two");
+        // All of that once more, inside `sections`.
+        let inner = format!(r#"{{"sections":[{overview},{bullets},{{{rest}}}]}}"#);
+        let doc = check(format!(r#"{{"sections":[{overview},{bullets},{inner}]}}"#));
+        let shaped = shape(doc, &default_structure(Language::En), Language::En);
+        assert_eq!(shaped.sections[0].markdown, "We met.");
+        assert!(shaped.sections[1].markdown.contains("**Budget**"));
+        assert!(shaped.sections[3].markdown.contains("Send it"));
+        // Lines that aren't bullets read as paragraphs.
+        let doc =
+            parse_doc(r#"{"sections":[{"title":"Overview","markdown":["First.","Second."]}]}"#)
+                .unwrap();
+        assert_eq!(doc.sections[0].markdown, "First.\n\nSecond.");
+        // A field with content at the top stays; an empty one gives way to the one found inside.
+        let doc = parse_doc(r#"{"sections":[{"next_focus":"Inside"}],"next_focus":"Top"}"#).unwrap();
+        assert_eq!(doc.next_focus, "Top");
+        let doc = parse_doc(
+            r#"{"sections":[{"action_items":[{"owner":"Lan","item":"Send it","due":""}]}],"action_items":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(doc.action_items[0].item, "Send it");
+        // A nested `sections` that's one section; a section written twice keeps its text.
+        let doc = parse_doc(
+            r#"{"sections":[{"title":"Overview","markdown":"We met."},
+                {"sections":{"title":"Overview","markdown":[]}}]}"#,
+        )
+        .unwrap();
+        assert_eq!(doc.sections.len(), 2);
+        let shaped = shape(doc, &default_structure(Language::En), Language::En);
+        assert_eq!(shaped.sections[0].markdown, "We met.");
+        // What can't be understood still fails, for the model to be asked again: a summary must
+        // never be saved without the text it holds under another name.
+        for answer in [
+            r#"{"sections":["Overview"]}"#,
+            r#"{"attendees":[]}"#,
+            r#"{"sections":[{"title":"Overview"}]}"#,
+            r#"{"sections":[{"title":"Overview","content":"We met."}]}"#,
+            r#"{"sections":[{"summary":"We met."}]}"#,
+            r#"{"sections":[{"title":"Overview","markdown":{"intro":"We met."}}]}"#,
+            r#"{"sections":[{"title":"Overview","markdown":[["- a"]]}]}"#,
+        ] {
+            assert!(parse_doc(answer).is_err(), "{answer}");
+        }
     }
 
     #[test]

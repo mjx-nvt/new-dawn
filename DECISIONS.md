@@ -91,6 +91,27 @@ _2026-11-02_
 
 ---
 
+## D-087 — A summary reads the model's nesting slips, and Ollama may stay silent for 20 minutes
+_2026-11-05_
+
+**Context** (reported on 0.12.0): a 102-minute meeting on a 16 GB M1 Pro, `qwen3.5:9b`, 4 parts and 2 merges. The log and `ai_log` show two separate failures:
+- **Wrong shape**, 4 answers out of 5 on part 3 and on the repair rounds. The content was all there, but `markdown` was `[]` or a list of strings, and the rest of the document sat inside `sections`, once doubly so. The repair round got the same shape back, so each try ended in an error.
+- **Timeout**, exactly 180,017 ms on the second merge. `read_timeout` covers the wait for the response headers, and Ollama sends those with its first token.
+
+The first merge of that run took 1,157 s. The identical 11,667-token prompt took 138 s when replayed later, and the app's own small database statements were taking 1–3 s during the slow run. So something on the Mac was holding Ollama back, most likely memory, though this Mac keeps no Ollama server log to prove it.
+
+**Decision — read only the slips seen**: `parse_doc` lifts an item of `sections` holding the document's own fields back to the top, and `lenient` makes a `markdown` that's a list of strings one text. Every other shape still fails and goes to the repair round, including section text under another key: a failure costs a retry, while reading it as empty would save a summary without its text.
+
+**Decision — wait longer only where the owner can stop it**: `TextSession::patient()` raises the silence limit from 3 to 20 minutes, for the summary run and the model check. They have a Stop, and `complete` races the call against that flag and drops the connection, which stops Ollama too. The other jobs (Corrections, inbox, agents, chat and so on) have no Stop and hold the AI queue, which would also block Live, so they keep 3 minutes. A timeout reads in words everywhere, with the code `ollama_busy`.
+
+**Not done**:
+- A merge's result isn't saved (D-048 saves parts only), so a failure during merging repeats the merges. Add it if merges keep failing now that the two causes above are gone.
+- The merge sometimes squeezes every topic into one (3 of 7 samples). The instruction in `reduce` isn't part of the saved key, so it can be tightened without losing saved parts.
+
+**Means for future work**: the text of `system_prompt` is part of a saved summary's key, so changing it makes every interrupted summary start again. A fix meant to rescue a failed meeting has to leave it alone.
+
+---
+
 ## D-086 — The parity audit closes plan v4: every row checked, the differences written down, the isolated gaps fixed
 _2026-11-03_
 

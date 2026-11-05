@@ -1,6 +1,6 @@
 [package]
 name = "new-dawn"
-version = "0.12.0"
+version = "0.12.1"
 description = "New Dawn — a local-first personal workspace for people who work across several companies."
 authors = ["Tien Nguyen"]
 edition = "2024"
@@ -50,7 +50,7 @@ quick-xml = "0.42"
 # Logos: SVG → PNG and the white version (re-exports usvg and tiny_skia, which reads/writes PNG).
 resvg = "0.47"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-tokio = { version = "1", features = ["fs", "io-util", "time", "sync", "process", "rt"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "time", "sync", "process", "rt"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "stream", "json"] }
 futures-util = "0.3"
 sha2 = "0.11"
