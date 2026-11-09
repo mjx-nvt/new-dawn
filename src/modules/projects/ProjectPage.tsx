@@ -2,7 +2,6 @@ import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useArchivePmProject, usePmProject } from "../../kernel/bridge/pm";
 import { useVisitPm } from "../../kernel/bridge/pmHome";
-import { usePmIntakeCount } from "../../kernel/bridge/pmIntake";
 import { useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import MenuButton from "../../kernel/shell/MenuButton";
@@ -28,7 +27,7 @@ const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.keyC
 /** A project's page (D-054, D-073): its Overview — the updates its meetings brought, where it
  *  stands, its risks, decisions, meetings and history (every section shown even when empty) —
  *  beside Plane's work items, cycles, modules, views, pages and intake (as its features say),
- *  archives and settings. The tab is URL state. */
+ *  archives and settings — each a row of the Projects rail; the part (`tab`) is URL state. */
 export default function ProjectPage() {
   const { projectId } = route.useParams();
   const { tab: wanted, section } = route.useSearch();
@@ -40,20 +39,10 @@ export default function ProjectPage() {
   const pm = plane.data;
   const archive = useArchivePmProject(slug);
   const f = pm?.features;
-  const intakeCount = usePmIntakeCount(slug, projectId, !!f?.intake);
   useVisitPm(pm ? slug : undefined, "project", projectId);
-  const tabs: [string, string][] = [
-    ["overview", "Overview"],
-    ["items", "Work items"],
-    ...(f?.cycles ? ([["cycles", "Cycles"]] as [string, string][]) : []),
-    ...(f?.modules ? ([["modules", "Modules"]] as [string, string][]) : []),
-    ...(f?.views ? ([["views", "Views"]] as [string, string][]) : []),
-    ...(f?.pages ? ([["pages", "Pages"]] as [string, string][]) : []),
-    ...(f?.intake ? ([["intake", intakeCount.data ? `Intake · ${intakeCount.data}` : "Intake"]] as [string, string][]) : []),
-    ["archives", "Archives"],
-    ["settings", "Settings"],
-  ];
-  const tab = tabs.find(([t]) => t === wanted)?.[0] ?? "overview";
+  // The project's parts are the rail's rows (D-089, D-090); `parts` says which this project has.
+  const parts = ["overview", "items", ...(f?.cycles ? ["cycles"] : []), ...(f?.modules ? ["modules"] : []), ...(f?.views ? ["views"] : []), ...(f?.pages ? ["pages"] : []), ...(f?.intake ? ["intake"] : []), "archives", "settings"];
+  const tab = parts.find((t) => t === wanted) ?? "overview";
   // A tab of its own: the list's group, order and peek are the Work items tab's.
   const showTab = (t: string) => void navigate({ to: "/projects/$projectId", params: { projectId }, search: t === "overview" ? {} : { tab: t }, replace: true });
   const update = useUpdateProject(slug);
@@ -130,14 +119,6 @@ export default function ProjectPage() {
           </div>
         </div>
       )}
-
-      <div className={`segmented ${styles.ptabs}`} role="tablist" aria-label="Project">
-        {tabs.map(([t, label]) => (
-          <button key={t} type="button" role="tab" aria-selected={t === tab} onClick={() => showTab(t)}>
-            {label}
-          </button>
-        ))}
-      </div>
 
       {tab === "settings" && pm && slug && <ProjectSettings slug={slug} project={pm} section={section} />}
       {tab === "items" && pm && slug && <WorkItems slug={slug} project={pm} />}

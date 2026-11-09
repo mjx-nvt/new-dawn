@@ -1,3 +1,18 @@
+# Last Build — Inside a project: the rail drills down, one control row · release 0.12.4
+_2026-11-09_
+
+## What changed
+- **Project rail** (`kernel/shell/ProjectsRail.tsx`, D-089/D-090): inside a project (its page or a work item's) the rail becomes "‹ All projects", the project's name and its parts — Overview, Work items, Cycles, Modules, Views, Pages, Intake (with its count) as the project's features say, Archives, Settings. The open part is lit (`?tab=`, unchanged, so links and favorites still work; a work item's page lights Work items). At the workspace the rail is as in 0.12.2, minus the per-project disclosure (the drill-down replaced it).
+- **Project page** (`modules/projects/ProjectPage.tsx`): the 8-tab segmented control is gone; the header (eyebrow · title · meta · status · ⋯) stays.
+- **One control row** on Work items (`items/WorkItems.tsx`, D-090): layout segmented · Filters · Display · ⋯ · New work item. **Group by, Sub-group by and Order by moved into Display**, as Plane keeps them; **Save as a view… and Export** are in the ⋯ menu. Filter chips show on their own line only when a filter is set (`FilterBar` takes `only="add" | "chips"`; the workspace's Views page still renders it whole). The view bar (Save view · Save as a new view · Close view) is unchanged.
+- No migration. No new dependency. No Rust change beyond the version.
+- Seen in the dev app (light; compact): a project's Work items with the drilled-down rail and the single control row (no wrap at 1180 pt), the Display panel with its three selects, a filter set showing its chip under the row, the way back to All projects.
+
+## Manual steps
+- None.
+
+---
+
 # Last Build — The CRM in its rail; one Tasks · release 0.12.3
 _2026-11-09_
 

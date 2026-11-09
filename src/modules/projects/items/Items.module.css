@@ -128,16 +128,6 @@
   gap: var(--space-3);
 }
 
-.tool {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.tool :global(select.input) {
-  width: auto;
-}
-
 .spacer {
   flex: 1;
 }
@@ -160,7 +150,7 @@
   z-index: 20;
   top: calc(100% + var(--space-2));
   left: 0;
-  min-width: 220px;
+  min-width: 240px;
   display: grid;
   gap: var(--space-1);
   padding: var(--space-3);
@@ -174,6 +164,14 @@
   font-size: var(--t-sm);
   color: var(--ink);
 }
+
+/* Group by, Sub-group by, Order by inside Display (D-090, as Plane's): label over the select. */
+.displayField {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+.displayField :global(select.input) { width: 100%; }
 
 .group {
   display: grid;

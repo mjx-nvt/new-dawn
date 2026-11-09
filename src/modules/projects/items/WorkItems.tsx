@@ -148,45 +148,46 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
             </button>
           ))}
         </div>
-        {layout !== "calendar" && layout !== "timeline" && (
-          <label className={styles.tool}>
-            <span className="fieldLabel">Group by</span>
-            <select className="input" value={group} disabled={!ready} onChange={(e) => choose("group", e.target.value)}>
-              {GROUP_BY.filter((g) => on(g.key)).map((g) => (
-                <option key={g.key} value={g.key}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {layout === "board" && (
-          <label className={styles.tool}>
-            <span className="fieldLabel">Sub-group by</span>
-            <select className="input" value={sub} disabled={!ready} onChange={(e) => choose("sub", e.target.value)}>
-              {GROUP_BY.filter((g) => (g.key === "none" || !clash(g.key, group)) && on(g.key)).map((g) => (
-                <option key={g.key} value={g.key}>
-                  {g.key === "none" ? "None" : g.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {layout !== "calendar" && layout !== "timeline" && (
-          <label className={styles.tool}>
-            <span className="fieldLabel">Order by</span>
-            <select className="input" value={order} disabled={!ready} onChange={(e) => choose("order", e.target.value)}>
-              {ORDER_BY.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} modules={project.features.modules} rules={rules} onChange={filter} only="add" />
         <details className={styles.display}>
           <summary className="btn btnGhost btnCompact">Display</summary>
           <div className={`glass ${styles.displayPanel}`}>
+            {layout !== "calendar" && layout !== "timeline" && (
+              <label className={styles.displayField}>
+                <span className="fieldLabel">Group by</span>
+                <select className="input" value={group} disabled={!ready} onChange={(e) => choose("group", e.target.value)}>
+                  {GROUP_BY.filter((g) => on(g.key)).map((g) => (
+                    <option key={g.key} value={g.key}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {layout === "board" && (
+              <label className={styles.displayField}>
+                <span className="fieldLabel">Sub-group by</span>
+                <select className="input" value={sub} disabled={!ready} onChange={(e) => choose("sub", e.target.value)}>
+                  {GROUP_BY.filter((g) => (g.key === "none" || !clash(g.key, group)) && on(g.key)).map((g) => (
+                    <option key={g.key} value={g.key}>
+                      {g.key === "none" ? "None" : g.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {layout !== "calendar" && layout !== "timeline" && (
+              <label className={styles.displayField}>
+                <span className="fieldLabel">Order by</span>
+                <select className="input" value={order} disabled={!ready} onChange={(e) => choose("order", e.target.value)}>
+                  {ORDER_BY.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <p className="fieldLabel">Properties</p>
             {PROPERTIES.filter((p) => on(p)).map((p) => (
               <label key={p} className={styles.check}>
@@ -212,6 +213,24 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
             </button>
           </div>
         </details>
+        <MenuButton
+          label="More"
+          className="btn btnGhost btnCompact"
+          items={[
+            ...(!view ? [{ label: "Save as a view…", disabled: !ready || ro, onSelect: () => setSaving(true) }] : []),
+            ...(["csv", "xlsx", "json"] as const).map((format, n) => ({
+              label: `Export as ${format.toUpperCase()}…`,
+              separator: n === 0 && !view,
+              onSelect: () =>
+                void exportPmItems(slug, project.id, rules, format, `${project.identifier} work items`).then(
+                  (r) => setExported(r ? `${r.row_count} work item${r.row_count === 1 ? "" : "s"} saved as ${r.file_path}` : null),
+                  (e: Error) => setExported(`Couldn't export them: ${e.message}`),
+                ),
+            })),
+          ]}
+        >
+          ⋯
+        </MenuButton>
         <span className={styles.spacer} />
         <button type="button" className={chosen.length ? "btn btnSecondary" : "btn btnPrimary"} disabled={ro} onClick={() => setCreating({})}>
           New work item
@@ -241,28 +260,7 @@ export default function WorkItems({ slug, project }: { slug: string; project: Pm
           </button>
         </div>
       )}
-      <div className={styles.inline}>
-        <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} modules={project.features.modules} rules={rules} onChange={filter} />
-        {!view && (
-          <button type="button" className="btn btnGhost btnCompact" disabled={!ready || ro} onClick={() => setSaving(true)}>
-            Save as a view
-          </button>
-        )}
-        <MenuButton
-          label="Export the work items these filters keep"
-          className="btn btnGhost btnCompact"
-          items={(["csv", "xlsx", "json"] as const).map((format) => ({
-            label: `Export as ${format.toUpperCase()}…`,
-            onSelect: () =>
-              void exportPmItems(slug, project.id, rules, format, `${project.identifier} work items`).then(
-                (r) => setExported(r ? `${r.row_count} work item${r.row_count === 1 ? "" : "s"} saved as ${r.file_path}` : null),
-                (e: Error) => setExported(`Couldn't export them: ${e.message}`),
-              ),
-          }))}
-        >
-          Export
-        </MenuButton>
-      </div>
+      {rules.length > 0 && <FilterBar slug={slug} projectId={project.id} cycles={project.features.cycles} modules={project.features.modules} rules={rules} onChange={filter} only="chips" />}
       {exported && <p className="fieldHint">{exported}</p>}
       {(items.error ?? update.error ?? keep.error ?? viewMuts.update.error) && (
         <p className="formError" role="alert">

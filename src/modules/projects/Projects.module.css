@@ -229,10 +229,6 @@
   gap: var(--space-3);
 }
 
-.ptabs {
-  margin-top: var(--space-7);
-}
-
 .settingsBody {
   margin-top: var(--space-5);
 }

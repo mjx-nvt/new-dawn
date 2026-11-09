@@ -96,7 +96,7 @@ function TitleWords({ label, value, onChange }: { label: string; value: string; 
 /** Plane's filter bar (D-077): Filters adds a rule a field; each rule a chip saying what it keeps
  *  ("Due date is this week"), opened to change it, × to take it off; Clear all. The rules all
  *  hold; a rule's values, any one. */
-export default function FilterBar({ slug, projectId, cycles: cyclesOn = false, modules: modulesOn = false, rules, onChange }: { slug: string; projectId: string | null; cycles?: boolean; modules?: boolean; rules: PmRule[]; onChange: (rules: PmRule[]) => void }) {
+export default function FilterBar({ slug, projectId, cycles: cyclesOn = false, modules: modulesOn = false, rules, onChange, only }: { slug: string; projectId: string | null; cycles?: boolean; modules?: boolean; only?: "add" | "chips"; rules: PmRule[]; onChange: (rules: PmRule[]) => void }) {
   const states = (usePmStates(slug, projectId ?? "").data ?? []).filter((s) => s.group !== "triage");
   const labels = usePmLabels(slug, projectId ?? "").data ?? [];
   const cycles = usePmCycles(slug, projectId ?? "").data ?? [];
@@ -147,11 +147,17 @@ export default function FilterBar({ slug, projectId, cycles: cyclesOn = false, m
     onChange([...rules, { field, op: kind === "text" ? "contains" : kind === "date" ? "is" : "in", values: kind === "date" ? ["this_week"] : kind === "people" ? ["me"] : [] }]);
   };
 
+  // `only` (D-090): "add" is the Filters button alone, for a control row; "chips" the rules
+  // alone, for the line under it. Without it, both together (the workspace's views).
+  const adder = (
+    <MenuButton label="Add a filter" items={fields.filter((f) => !rules.some((r) => r.field === f.field)).map((f) => ({ label: f.label, onSelect: () => add(f.field) }))}>
+      Filters
+    </MenuButton>
+  );
+  if (only === "add") return adder;
   return (
     <div className={styles.filterBar} role="group" aria-label="Filters">
-      <MenuButton label="Add a filter" items={fields.filter((f) => !rules.some((r) => r.field === f.field)).map((f) => ({ label: f.label, onSelect: () => add(f.field) }))}>
-        Filters
-      </MenuButton>
+      {only !== "chips" && adder}
       {rules.map((r, at) => {
         const field = FIELDS.find((f) => f.field === r.field);
         return (
@@ -206,7 +212,7 @@ export default function FilterBar({ slug, projectId, cycles: cyclesOn = false, m
           Clear all
         </button>
       )}
-      {!rules.length && <span className="fieldHint">Every work item — add a filter to narrow it</span>}
+      {!rules.length && only !== "chips" && <span className="fieldHint">Every work item — add a filter to narrow it</span>}
     </div>
   );
 }
