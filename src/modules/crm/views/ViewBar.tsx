@@ -146,7 +146,7 @@ export default function ViewBar({ slug, object, views, current, working, dirty, 
       {(topRules.length > 0 || grouped > 0 || working.sorts.length > 0) && (
         <div className={styles.chips}>
           {topRules.map(({ r, i }) => (
-            <span key={i} className={styles.chip}>
+            <span key={i} className={`${styles.chip} chipPrimary`}>
               <button type="button" className={`${styles.chipX} ${styles.chipText}`} onClick={() => (setEditingRule(i), setOpen("filter"))}>
                 {ruleText(object, r)}
               </button>
@@ -156,12 +156,12 @@ export default function ViewBar({ slug, object, views, current, working, dirty, 
             </span>
           ))}
           {grouped > 0 && (
-            <button type="button" className={styles.chip} onClick={() => setOpen("advanced")}>
+            <button type="button" className={`${styles.chip} chipPrimary`} onClick={() => setOpen("advanced")}>
               {grouped === 1 ? "1 advanced rule" : `${grouped} advanced rules`}
             </button>
           )}
           {working.sorts.map((s) => (
-            <span key={s.field_id} className={`${styles.chip} ${styles.chipNeutral}`}>
+            <span key={s.field_id} className={`${styles.chip} chipNeutral`}>
               {fieldOf(s.field_id)?.label ?? "?"}
               {s.sub && fieldOf(s.field_id) ? ` · ${subsOf(fieldOf(s.field_id) as FieldMeta).find((p) => p.key === s.sub)?.label.toLowerCase() ?? s.sub}` : ""} {s.direction === "DESC" ? "↓" : "↑"}
               <button type="button" className={styles.chipX} aria-label="Remove sort" onClick={() => onChange({ ...working, sorts: working.sorts.filter((x) => x !== s) })}>

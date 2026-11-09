@@ -1,14 +1,14 @@
 import type { MeetingStatus } from "../../kernel/bridge/meetings";
 import { STATUS_LABEL } from "./format";
-import styles from "./StatusChip.module.css";
 
-/** Done = green, the app working on it = yellow, failed = red; Recording and Not transcribed stay neutral. */
+/** Done = positive, the app working on it = warning, failed = negative; Recording and Not
+ *  transcribed stay neutral. The one chip set (D-090). */
 const TONE: Partial<Record<MeetingStatus, string>> = {
-  transcribing: styles.pending,
-  transcribed: styles.positive,
-  summarising: styles.pending,
-  summarised: styles.positive,
-  failed: styles.negative,
+  transcribing: "chipWarning",
+  transcribed: "chipPositive",
+  summarising: "chipWarning",
+  summarised: "chipPositive",
+  failed: "chipNegative",
 };
 
 export default function StatusChip({ status }: { status: MeetingStatus }) {

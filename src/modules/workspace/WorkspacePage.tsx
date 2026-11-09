@@ -38,10 +38,8 @@ export default function WorkspacePage() {
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug ?? "";
-  const show = (next: WorkspaceTab) => void navigate({ to: "/workspace", search: { tab: next }, replace: true });
-  // The Projects tab while the module is on (D-059): its API isn't served when it's off.
+  // The Projects pane while the module is on (D-059): its API isn't served when it's off.
   const projectsOn = useModules(slug || undefined).data?.projects !== false;
-  const tabs = WORKSPACE_TABS.filter((t) => t.id !== "projects" || projectsOn);
 
   return (
     <div className="page">
@@ -49,15 +47,7 @@ export default function WorkspacePage() {
       <h1 className="pageTitle">{workspace?.name ?? ""}</h1>
       <p className="pageMeta">One company: its meetings, brand, minutes templates, people and agents stay together.</p>
 
-      <div className={`segmented ${styles.tabs}`} role="tablist" aria-label="Workspace settings">
-        {tabs.map((item) => (
-          <button key={item.id} type="button" role="tab" aria-selected={item.id === tab} onClick={() => show(item.id)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      <div role="tabpanel" className={styles.panel}>
+      <div className={styles.panel}>
         {!workspace ? (
           <div className={`${styles.slot} ghostCard`} />
         ) : tab === "overview" ? (

@@ -17,15 +17,15 @@ const list = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => str(x)).
 export function chipClass(color: string): string {
   switch (color) {
     case "green":
-      return styles.chipGreen;
+      return "chipPositive";
     case "red":
-      return styles.chipRed;
+      return "chipNegative";
     case "yellow":
-      return styles.chipYellow;
+      return "chipWarning";
     case "orange":
-      return styles.chipOrange;
+      return "chipPrimary";
     default:
-      return styles.chipNeutral;
+      return "chipNeutral";
   }
 }
 
@@ -112,7 +112,7 @@ export function CellView({ field, record }: { field: FieldMeta; record: RecordJs
     }
     case "RELATION": {
       const v = asRecord(value);
-      return str(v.label) ? <span className={`${styles.chip} ${styles.chipNeutral}`}>{str(v.label)}</span> : null;
+      return str(v.label) ? <span className={`${styles.chip} chipNeutral`}>{str(v.label)}</span> : null;
     }
     case "ACTOR": {
       const v = asRecord(value);
@@ -122,7 +122,7 @@ export function CellView({ field, record }: { field: FieldMeta; record: RecordJs
       return (
         <span className={styles.chips}>
           {list(value).map((v) => (
-            <span key={v} className={`${styles.chip} ${styles.chipNeutral}`}>
+            <span key={v} className={`${styles.chip} chipNeutral`}>
               {v}
             </span>
           ))}

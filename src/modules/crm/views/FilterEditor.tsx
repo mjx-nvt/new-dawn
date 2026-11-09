@@ -127,7 +127,7 @@ function RelationPicker({ slug, field, chosen, onChange }: { slug: string; field
     <div className={styles.grow}>
       <div className={styles.picked}>
         {chosen.map((c) => (
-          <span key={c.id} className={`${styles.chip} ${styles.chipNeutral}`}>
+          <span key={c.id} className={`${styles.chip} chipNeutral`}>
             {c.label}
             <button type="button" className={styles.chipX} aria-label={`Remove ${c.label}`} onClick={() => onChange(chosen.filter((x) => x.id !== c.id))}>
               ✕

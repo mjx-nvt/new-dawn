@@ -33,8 +33,11 @@ export default function Toolbar({ sidebarHidden, onStartRecording, onSearchComma
   const urlSearch = location.search as { q?: string; tab?: string };
   const onMeetings = location.pathname === "/meetings";
   const onCrmList = location.pathname === "/crm" && !["commitments", "waiting"].includes(urlSearch.tab ?? "");
-  const scope: Scope = onCrmList
-    ? { kind: "crm", tab: urlSearch.tab ?? "people", placeholder: `Search ${(objects?.find((o) => o.name_plural === (urlSearch.tab ?? "people"))?.label_plural ?? "records").toLowerCase()}` }
+  // A record's page searches its object (the list it came from).
+  const recordObject = /^\/crm\/([^/]+)\//.exec(location.pathname)?.[1];
+  const crmTab = onCrmList ? (urlSearch.tab ?? "people") : recordObject;
+  const scope: Scope = crmTab
+    ? { kind: "crm", tab: crmTab, placeholder: `Search ${(objects?.find((o) => o.name_plural === crmTab)?.label_plural ?? "records").toLowerCase()}` }
     : rail === "projects"
       ? { kind: "projects", placeholder: "Search work items and projects" }
       : { kind: "meetings", placeholder: "Search meetings" };
@@ -49,8 +52,8 @@ export default function Toolbar({ sidebarHidden, onStartRecording, onSearchComma
   const submit = () => {
     const q = query.trim();
     if (scope.kind === "crm") {
-      const rest = location.search as { tab: string; view?: string };
-      void navigate({ to: "/crm", search: { tab: rest.tab, ...(rest.view ? { view: rest.view } : {}), ...(q ? { q } : {}) }, replace: true });
+      const rest = location.search as { view?: string };
+      void navigate({ to: "/crm", search: { tab: scope.tab ?? "people", ...(onCrmList && rest.view ? { view: rest.view } : {}), ...(q ? { q } : {}) }, replace: onCrmList });
     } else if (scope.kind === "projects") {
       if (q) onSearchCommand(q);
     } else {

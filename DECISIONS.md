@@ -109,7 +109,9 @@ _2026-11-09_
 
 **Decision**: every page reads the same way — eyebrow (the module or parent, never the workspace: the badge shows it), title, one meta line, one primary action at the right; then **one control row** (view switcher as a segmented control of 2–5 choices · Filters · Display · ⋯ · primary action), with set filters as chips on the line under it. A segmented control never holds more than five choices: more go to the rail, a select or ⋯. Group by / Sub-group by / Order by live in Display, as Plane keeps them. Inside a project the rail drills down to its parts (0.12.4); the grammar reaches the other pages in 0.12.5 (`PageHeader`, `ControlRow`).
 
-**Means for future work**: a new list page starts from the header + control row; anything that would be a sixth segment is a rail row or a menu item.
+**Also one chip set** (0.12.6): `chipNeutral · chipPrimary · chipPositive · chipWarning · chipNegative` in `components.css`, on the Majoris status families; a module never defines a chip colour of its own. The Workspace page's eight panes became a rail the same day, by the five-choice rule.
+
+**Means for future work**: a new list page starts from the header + control row; anything that would be a sixth segment is a rail row or a menu item; a status is one of the five chips.
 
 ---
 

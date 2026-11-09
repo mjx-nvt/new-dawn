@@ -1,3 +1,20 @@
+# Last Build — The consistency pass: one chip set, the Workspace rail, the dark sweep · release 0.12.6
+_2026-11-09_
+
+## What changed
+- **One chip set** (`styles/components.css`, D-090): `chipNeutral · chipPrimary · chipPositive · chipWarning · chipNegative`. The meetings' `StatusChip` and the CRM's cells, filter chips and view bar use them; their own tone classes (`chipGreen/Red/Yellow/Orange`, `StatusChip.module.css`) are gone. Modules add no chip colours of their own.
+- **Workspace rail** (`kernel/shell/WorkspaceRail.tsx`): the Workspace page's eight panes — Overview, Brand, Meeting types, People, Vocabulary, Agents, CRM, Projects — are rail rows; the eight-segment control is gone (D-090's five-choice rule). The pane stays `?tab=`; the toolbar says "Workspace settings".
+- **A record's page searches its object**: the toolbar's field reads "Search people" on a person and Enter opens People filtered.
+- **The CSS audit** found the module stylesheets already on the tokens: no `prefers-color-scheme` override, no hex colour, no `color-mix(…, transparent)` background, the typeface only through `--font`/`--font-mono`; the few off-scale literals (a 5 px / 3 px / 7 px nudge in Tasks, Inbox and Attendees; the 44 px rail indent; the 88 px traffic-light inset) are alignment, left as they are. Today's, Tasks' and Archives' rows already share the one shape (flex · 12/16 padding · hairline between), so no `ListRow` component was added.
+- **The dark sweep**: 22 screens captured in dark mode on the new shell — Today, Meetings, a meeting, Live, Tasks, Email, Workspace, Projects, a project's Work items and Cycles, Overview, Your work, Inbox, Drafts, Views, Analytics, Active cycles, Archives, People, a record, Waiting for you, Workspace → CRM. Every rail, header and control row reads in dark; nothing was found to fix beyond the Workspace tabs above. Reduce Transparency can't be switched from the dev harness: the rail is solid (`--surface-2`) either way, and the panel's own rule (`base.css`) is unchanged.
+- **Seen, left for later**: a record's page keeps Twenty's layout tabs (Overview, Commitments, Meetings, Linked opportunities, Tasks, Notes, Emails, Calendar, Files — the owner edits them), nine segments on a standard person. They are the owner's own layout, not navigation, so the five-choice rule wasn't applied; if they grow, the CRM rail can drill down to them as the Projects rail does to a project's parts.
+- No migration. No new dependency. No Rust change beyond the version.
+
+## Manual steps
+- None. Plan v5 is complete with this release (0.12.2 → 0.12.6); `docs/plan.md` §5 marks each release done.
+
+---
+
 # Last Build — The toolbar search is the module's; one page header; names in the toolbar · release 0.12.5
 _2026-11-09_
 

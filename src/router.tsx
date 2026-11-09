@@ -349,7 +349,7 @@ const workspaceRoute = createRoute({
     ...(typeof search.object === "string" && search.object ? { object: search.object } : {}),
   }),
   component: WorkspacePage,
-  staticData: { title: "Workspace" },
+  staticData: { title: "Workspace settings", rail: "workspace" },
 });
 
 const setupRoute = createRoute({
@@ -407,6 +407,6 @@ declare module "@tanstack/react-router" {
     title?: string;
     breadcrumb?: string;
     /** Which module's rail the page sits beside (D-089). */
-    rail?: "projects" | "crm";
+    rail?: "projects" | "crm" | "workspace";
   }
 }

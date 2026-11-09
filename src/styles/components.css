@@ -319,6 +319,11 @@ select.input:disabled { opacity: .5; }
   white-space: nowrap;
 }
 .chipPrimary { background: var(--primary-tint); color: var(--on-primary-tint); }
+/* Status, in the Majoris status families (the one chip set — modules add no colours of their own). */
+.chipNeutral { background: var(--surface-2); color: var(--ink-2); }
+.chipPositive { background: var(--status-positive-tint); color: var(--status-positive); }
+.chipWarning { background: var(--status-warning-tint); color: var(--status-warning); }
+.chipNegative { background: var(--status-negative-tint); color: var(--status-negative); }
 
 /* Popover menu (the ⋯ button): the shape of a macOS menu — glass, 5 px inset, 13 px rows,
    the system accent as the hover fill (what native menus use), hairline separators. */

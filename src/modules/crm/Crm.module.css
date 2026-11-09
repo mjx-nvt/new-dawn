@@ -188,30 +188,6 @@
   vertical-align: middle;
 }
 
-.chipNeutral {
-  background: var(--surface-2);
-  color: var(--ink-2);
-}
-
-.chipGreen {
-  background: var(--status-positive-tint);
-  color: var(--status-positive);
-}
-
-.chipRed {
-  background: var(--status-negative-tint);
-  color: var(--status-negative);
-}
-
-.chipYellow {
-  background: var(--status-warning-tint);
-  color: var(--status-warning);
-}
-
-.chipOrange {
-  background: var(--primary-tint);
-  color: var(--on-primary-tint);
-}
 
 .muted {
   color: var(--ink-3);

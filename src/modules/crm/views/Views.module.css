@@ -119,18 +119,11 @@
   height: 26px;
   padding: 0 4px 0 10px;
   border-radius: var(--radius-chip);
-  background: var(--primary-tint);
-  color: var(--on-primary-tint);
   font-size: var(--t-sm);
   font-weight: 500;
   border: 0;
   cursor: pointer;
   font-family: inherit;
-}
-
-.chipNeutral {
-  background: var(--surface-2);
-  color: var(--ink-2);
 }
 
 .chipX {

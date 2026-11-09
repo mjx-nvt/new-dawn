@@ -115,25 +115,25 @@ What is right and stays: Apple glass shell, Majoris palette and type (D-033), DM
 
 ## 5. Releases (patch bumps, one sitting each unless noted)
 
-### 0.12.2 — The sidebar carries modules; the module rail; Projects moves in (2 sittings)
+### 0.12.2 — The sidebar carries modules; the module rail; Projects moves in (2 sittings) — ✔ 2026-11-09
 - `Sidebar.tsx`: the seven rows, Favorites, footer; `PmNav`/`CrmNav` leave the sidebar. Workspace page reachable from the badge menu, Settings → Workspaces and ⌘K.
 - `ModuleRail.tsx` + CSS: rows, groups, head, icon strip, reduced-transparency solid, per-Mac state.
 - Projects: workspace-level rail (3.3); the Projects list page loses its header links; Plane's Home renamed Overview; `/inbox` → `/projects/inbox`.
 - Acceptance: the sidebar never scrolls on a 1180 × 700 window; every former sidebar destination is one click away in its module; the dev screenshots before/after in `LAST_BUILD.md`.
 
-### 0.12.3 — CRM in its rail; one Tasks
+### 0.12.3 — CRM in its rail; one Tasks — ✔ 2026-11-09
 - CRM rail (3.4); the 10-tab segmented control goes; the record page's rail head; the CRM Tasks object hidden by default with the link from Tasks.
 - Favorites in the sidebar accept pins from both modules (they do already; verified) and collapse past 8.
 
-### 0.12.4 — Inside a project: the rail drill-down, one control row
+### 0.12.4 — Inside a project: the rail drill-down, one control row — ✔ 2026-11-09
 - Project rail (3.3), tabs removed, `?tab=` kept; project header and the single control row; filter chips; Save as a view / Export in ⋯.
 - Work item page: `PageHeader`; its own window unchanged.
 
-### 0.12.5 — Toolbar and page grammar across the app
+### 0.12.5 — Toolbar and page grammar across the app — ✔ 2026-11-09
 - Scoped search; route titles fixed; `PageHeader` and `ControlRow` applied to Today, Meetings, Live, Tasks, Email, Workspace, Archives, Analytics, Inbox, Drafts, Views, Your work.
 - Eyebrow rule everywhere.
 
-### 0.12.6 — Consistency pass
+### 0.12.6 — Consistency pass — ✔ 2026-11-09 (the Workspace page got a rail too; the CSS audit found the stylesheets already on the tokens, so no `ListRow`)
 - `ListRow`, chips, spacing audit, empty states, dark / reduced transparency / 1180 pt on every page; skill and decisions updated; a "UI audit" table in `LAST_BUILD.md` (page → header ✓ · control row ✓ · rail ✓ · dark ✓ · RT ✓).
 
 Each release follows the usual steps: `cargo check`, `tsc`, dev screenshots light + dark, `LAST_BUILD.md`, a D-0xx entry, architect-reviewer, build-check, publish (never install).
@@ -144,7 +144,7 @@ Each release follows the usual steps: `cargo check`, `tsc`, dev screenshots ligh
 - **D-088** Two levels, two places: the sidebar holds modules; a module's navigation lives in its rail. Favorites is the one cross-module list.
 - **D-089** The module rail: a second column inside the content area, 220 pt, `--surface-2`, drill-down heads, icon strip under 1280 pt.
 - **D-090** One page grammar: eyebrow = module or parent, one primary action, one control row, filter chips; segmented controls hold 2–5 choices.
-- **D-091** Same thing, same name, one place: Workspace settings leave the sidebar; one Tasks; Plane's Home is Projects' Overview; Inbox is Projects'.
+- **D-091** Same thing, same name, one place: Workspace settings leave the sidebar; one Tasks; Plane's Home is Projects' Overview; Inbox is Projects'. _(Recorded inside D-088 as built.)_
 - **D-092** The toolbar search is scoped to the module; ⌘K stays the one command menu.
 
 ## 7. Open choices (defaults taken unless you say otherwise)
