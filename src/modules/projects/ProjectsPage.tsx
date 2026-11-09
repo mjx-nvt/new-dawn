@@ -44,15 +44,6 @@ export default function ProjectsPage() {
           <h1 className="pageTitle">{search.archived ? "Archived projects" : "Projects"}</h1>
         </div>
         <span className={styles.actions}>
-          <Link to="/projects/cycles" className="btn btnGhost">
-            Active cycles
-          </Link>
-          <Link to="/projects/views" className="btn btnGhost">
-            Views
-          </Link>
-          <Link to="/projects/drafts" className="btn btnGhost">
-            Drafts
-          </Link>
           <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => set({ new: true })}>
             New project
           </button>

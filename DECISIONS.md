@@ -91,6 +91,28 @@ _2026-11-02_
 
 ---
 
+## D-089 — The module rail: a module's navigation is a column inside the content panel
+_2026-11-09_
+
+**Context** (plan v5 §3.2): Projects and CRM each have ten or more destinations. In the sidebar they made it scroll (D-088); as segmented controls they exceed Apple's 2–5 choices; as both they were duplicated.
+
+**Decision**: one `ModuleRail` component — 220 pt, `--surface-2`, a hairline at its right, sticky in the panel's one scroller so pages scroll as before — rendered by `AppLayout` when the route's `staticData.rail` names a module, inside `ContentRoot` as the first of two columns. The page column carries the panel's padding and is the `content` size container, so page layouts respond to their own width. The rail follows the sidebar's icon mode (44 pt, marks and icons with tooltips) and hides with the sidebar: one setting to learn. A work item's own window (D-074) has no rail. Projects is first (0.12.2); CRM follows (0.12.3); inside a project the rail drills down (0.12.4).
+
+**Not done**: a hand toggle for the rail alone, and a rail for Meetings or Tasks — one page each, no need.
+
+---
+
+## D-088 — Two levels, two places: the sidebar holds the modules; everything inside a module stays inside it
+_2026-11-09_
+
+**Context**: after plan v4 the sidebar was three sidebars glued together — New Dawn's pages, Plane's section with every project and its parts, Twenty's Favorites and objects — 35+ rows that scrolled, with destinations repeated as page tabs, and words that collided ("Workspace" twice, "Tasks" twice, "Home" and "Today").
+
+**Decision**: the sidebar holds one row per module — Today · Meetings · Live · Tasks · Email · Projects · CRM — plus Favorites (the one cross-module shortcut list, folded past 8 pins), Settings and Collapse. Nothing below a module appears there. Count badges only for what needs you. The Workspace page leaves the sidebar for the workspace badge's menu, ⌘K and the menu bar. Plane's Home is Projects' Overview; the Inbox is Projects' (`/projects/inbox`, the old address redirects). ⌘1–9 keep switching workspaces.
+
+**Means for future work**: a new module gets one sidebar row and, if it has more than five destinations, a rail (D-089) — never a sidebar section.
+
+---
+
 ## D-087 — A summary reads the model's nesting slips, and Ollama may stay silent for 20 minutes
 _2026-11-05_
 

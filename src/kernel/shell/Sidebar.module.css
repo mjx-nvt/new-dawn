@@ -48,7 +48,7 @@
   text-align: left;
   transition: background 150ms ease-out;
 }
-.item:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.item:hover { background: var(--hover-tint); }
 .item:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 .item:disabled { opacity: .5; }
 

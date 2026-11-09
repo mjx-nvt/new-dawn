@@ -206,7 +206,7 @@ export default function HomePage() {
   const first = profile?.name?.trim();
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
+      <p className="eyebrow">Projects</p>
       <div className={styles.toolbar}>
         <h1 className="pageTitle">
           Good {part}

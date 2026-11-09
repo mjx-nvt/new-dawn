@@ -1,35 +1,34 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useCreateFavoriteFolder, useDeleteFavoriteFolder, useFavorites, useMoveFavorite, useNavigation, useRemoveFavorite, useSetNavigation, type Favorite, type NavItem } from "../bridge/navigation";
-import nav from "./CrmNav.module.css";
+import { useCreateFavoriteFolder, useDeleteFavoriteFolder, useFavorites, useMoveFavorite, useRemoveFavorite, type Favorite } from "../bridge/navigation";
+import nav from "./Favorites.module.css";
 import styles from "./Sidebar.module.css";
 
-/** The CRM section of the sidebar (D-064, 0.10.7), as Twenty's: Favorites (records and views,
- *  in folders) and Workspace (the objects, in the order and folders the owner set; hidden ones
- *  left out). ✎ enters the customise mode: ▲ ▼ to reorder, eye to hide, folder names, × on a
- *  favorite; Save or Cancel. Nothing of it shows in the icon rail. */
-export default function CrmNav({ slug, iconsOnly }: { slug: string | undefined; iconsOnly: boolean }) {
+/** How many pins show open; past that the section starts folded. */
+const FOLD_AT = 8;
+
+/** The sidebar's Favorites (D-064, D-088): the one cross-module shortcut list — records, views,
+ *  cycles, modules, pages and projects pinned with ★, in folders. ✎ enters the customise mode:
+ *  folder, ▲ ▼ to reorder, × to unpin, folder names; Save or Cancel. Nothing of it shows in the
+ *  icon rail. */
+export default function Favorites({ slug, iconsOnly }: { slug: string | undefined; iconsOnly: boolean }) {
   const favorites = useFavorites(slug);
-  const navigation = useNavigation(slug);
   const [editing, setEditing] = useState(false);
   if (iconsOnly || !slug) return null;
-  const items = navigation.data ?? [];
-  const shown = items.filter((i) => !i.is_hidden);
   const folders = favorites.data?.folders ?? [];
   const pins = favorites.data?.items ?? [];
   const byFolder = (folderId: string | null) => pins.filter((p) => (p.folder_id ?? null) === folderId);
-  const objectFolders = [...new Set(shown.map((i) => i.folder).filter(Boolean))];
 
-  if (editing) return <CrmNavEditor slug={slug} items={items} folders={folders} pins={pins} onDone={() => setEditing(false)} />;
+  if (editing) return <FavoritesEditor slug={slug} folders={folders} pins={pins} onDone={() => setEditing(false)} />;
   return (
-    <div className={styles.section}>
-      <div className={nav.head}>
+    <details className={`${styles.section} ${nav.favorites}`} open={pins.length <= FOLD_AT}>
+      <summary className={nav.head}>
         <p className={styles.sectionLabel}>Favorites</p>
-        <button type="button" className={nav.pencil} aria-label="Customise the CRM section" title="Customise" onClick={() => setEditing(true)}>
+        <button type="button" className={nav.pencil} aria-label="Customise Favorites" title="Customise" onClick={(e) => { e.preventDefault(); setEditing(true); }}>
           ✎
         </button>
-      </div>
-      {pins.length === 0 && <p className={`ghostText ${nav.empty}`}>Pin a record or a view with ★</p>}
+      </summary>
+      {pins.length === 0 && <p className={`ghostText ${nav.empty}`}>Pin a record, a view or a project with ★</p>}
       {byFolder(null).map((p) => (
         <FavoriteLink key={p.id} favorite={p} />
       ))}
@@ -44,25 +43,7 @@ export default function CrmNav({ slug, iconsOnly }: { slug: string | undefined; 
           {byFolder(f.id).length === 0 && <p className={`ghostText ${nav.empty}`}>Empty</p>}
         </details>
       ))}
-      <p className={styles.sectionLabel}>Workspace</p>
-      {shown
-        .filter((i) => !i.folder)
-        .map((i) => (
-          <ObjectLink key={i.object_id} item={i} />
-        ))}
-      {objectFolders.map((name) => (
-        <details key={name} className={nav.folder} open>
-          <summary className={`${styles.item} ${nav.folderName}`}>
-            <span className={styles.label}>{name}</span>
-          </summary>
-          {shown
-            .filter((i) => i.folder === name)
-            .map((i) => (
-              <ObjectLink key={i.object_id} item={i} />
-            ))}
-        </details>
-      ))}
-    </div>
+    </details>
   );
 }
 
@@ -105,24 +86,13 @@ function FavoriteLink({ favorite: p }: { favorite: Favorite }) {
   );
 }
 
-function ObjectLink({ item }: { item: NavItem }) {
-  return (
-    <Link to="/crm" search={{ tab: item.object }} className={styles.item} activeProps={{ className: styles.active }} activeOptions={{ includeSearch: true }} title={item.label}>
-      <span className={nav.mark}>{item.label.slice(0, 1).toUpperCase()}</span>
-      <span className={styles.label}>{item.label}</span>
-    </Link>
-  );
-}
-
-/** The customise mode: a working copy of the pins (folder, order) and the objects (order,
- *  hidden, folder), saved at once. */
-function CrmNavEditor({ slug, items, folders, pins, onDone }: { slug: string; items: NavItem[]; folders: { id: string; name: string }[]; pins: Favorite[]; onDone: () => void }) {
-  const setNavigation = useSetNavigation(slug);
+/** The customise mode: a working copy of the pins (folder, order), saved at once; folders made
+ *  and deleted as you go. */
+function FavoritesEditor({ slug, folders, pins, onDone }: { slug: string; folders: { id: string; name: string }[]; pins: Favorite[]; onDone: () => void }) {
   const moveFavorite = useMoveFavorite(slug);
   const removeFavorite = useRemoveFavorite(slug);
   const createFolder = useCreateFavoriteFolder(slug);
   const deleteFolder = useDeleteFavoriteFolder(slug);
-  const [objects, setObjects] = useState(items);
   const [favs, setFavs] = useState(pins);
   const [newFolder, setNewFolder] = useState("");
   const move = <T,>(list: T[], i: number, d: -1 | 1): T[] => {
@@ -133,14 +103,13 @@ function CrmNavEditor({ slug, items, folders, pins, onDone }: { slug: string; it
     return next;
   };
   const save = async () => {
-    await setNavigation.mutateAsync(objects.map((o, i) => ({ object_id: o.object_id, position: i, is_hidden: o.is_hidden, folder: o.folder })));
     for (const [i, f] of favs.entries()) {
       const was = pins.find((p) => p.id === f.id);
       if (!was || was.folder_id !== f.folder_id || pins.indexOf(was) !== i) await moveFavorite.mutateAsync({ id: f.id, folderId: f.folder_id ?? null, position: i });
     }
     onDone();
   };
-  const error = setNavigation.error ?? moveFavorite.error ?? removeFavorite.error ?? createFolder.error ?? deleteFolder.error;
+  const error = moveFavorite.error ?? removeFavorite.error ?? createFolder.error ?? deleteFolder.error;
   return (
     <div className={`${styles.section} ${nav.editor}`}>
       <p className={styles.sectionLabel}>Favorites</p>
@@ -180,16 +149,6 @@ function CrmNavEditor({ slug, items, folders, pins, onDone }: { slug: string; it
           }}
         />
       </div>
-      <p className={styles.sectionLabel}>Workspace</p>
-      {objects.map((o, i) => (
-        <div key={o.object_id} className={nav.editRow}>
-          <span className={o.is_hidden ? `${nav.editLabel} ${nav.hidden}` : nav.editLabel}>{o.label}</span>
-          <input className={`input ${nav.folderInput}`} aria-label={`Folder of ${o.label}`} placeholder="Folder" value={o.folder} onChange={(e) => setObjects(objects.map((x) => (x.object_id === o.object_id ? { ...x, folder: e.target.value } : x)))} />
-          <button type="button" className={nav.tool} aria-label="Move up" disabled={i === 0} onClick={() => setObjects(move(objects, i, -1))}>▲</button>
-          <button type="button" className={nav.tool} aria-label="Move down" disabled={i === objects.length - 1} onClick={() => setObjects(move(objects, i, 1))}>▼</button>
-          <button type="button" className={nav.tool} aria-pressed={o.is_hidden} aria-label={o.is_hidden ? `Show ${o.label}` : `Hide ${o.label}`} onClick={() => setObjects(objects.map((x) => (x.object_id === o.object_id ? { ...x, is_hidden: !x.is_hidden } : x)))}>{o.is_hidden ? "◌" : "◉"}</button>
-        </div>
-      ))}
       {error && (
         <p className="formError" role="alert">
           {error.message}
@@ -197,7 +156,7 @@ function CrmNavEditor({ slug, items, folders, pins, onDone }: { slug: string; it
       )}
       <div className={nav.editActions}>
         <button type="button" className="btn btnGhost btnCompact" onClick={onDone}>Cancel</button>
-        <button type="button" className="btn btnPrimary btnCompact" disabled={setNavigation.isPending || moveFavorite.isPending} onClick={() => void save()}>Save</button>
+        <button type="button" className="btn btnPrimary btnCompact" disabled={moveFavorite.isPending} onClick={() => void save()}>Save</button>
       </div>
     </div>
   );

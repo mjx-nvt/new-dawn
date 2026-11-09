@@ -8,7 +8,7 @@ import { sentence, useWho } from "./items/items";
 import ItemView from "./items/ItemView";
 import styles from "./Inbox.module.css";
 
-const route = getRouteApi("/shell/inbox");
+const route = getRouteApi("/shell/projects/inbox");
 
 const SHOWS: { key: InboxShow; label: string }[] = [
   { key: "inbox", label: "All notices" },
@@ -114,7 +114,7 @@ export default function InboxPage() {
   const notices = useNotices(slug, { mentions, show, assigned: types.includes("assigned"), created: types.includes("created"), subscribed: types.includes("subscribed") });
   const counts = useNoticeCounts(slug).data;
   const m = useNoticeMutations(slug);
-  const set = (patch: Record<string, string | undefined>) => void navigate({ to: "/inbox", search: { ...search, ...patch }, replace: true });
+  const set = (patch: Record<string, string | undefined>) => void navigate({ to: "/projects/inbox", search: { ...search, ...patch }, replace: true });
   const list = notices.data ?? [];
   const toggleType = (t: string) => {
     const next = types.includes(t) ? types.filter((x) => x !== t) : [...types, t];

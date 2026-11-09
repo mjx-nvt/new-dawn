@@ -127,9 +127,9 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
       ["Tasks", () => void navigate({ to: "/tasks" })],
       ...(modules.projects
         ? ([
-            ["Home", () => void navigate({ to: "/projects/home" })],
+            ["Projects overview", () => void navigate({ to: "/projects/home", search: {} })],
             ["Your work", () => void navigate({ to: "/projects/your-work", search: {} })],
-            ["Inbox", () => void navigate({ to: "/inbox", search: {} })],
+            ["Inbox", () => void navigate({ to: "/projects/inbox", search: {} })],
             ["Drafts", () => void navigate({ to: "/projects/drafts" })],
             ["Work item views", () => void navigate({ to: "/projects/views", search: {} })],
             ["Active cycles", () => void navigate({ to: "/projects/cycles" })],
@@ -139,7 +139,7 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
           ] as [string, () => void][])
         : []),
       ["Email", () => void navigate({ to: "/email" })],
-      ["Workspace", () => void navigate({ to: "/workspace", search: { tab: "overview" } })],
+      ["Workspace settings", () => void navigate({ to: "/workspace", search: { tab: "overview" } })],
       ["Settings", () => void openSettings("general")],
     ];
     for (const [label, fn] of pages) if (fits(label)) out.push({ id: `page:${label}`, section: "Go to", label, run: go(fn) });

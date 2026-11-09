@@ -88,6 +88,8 @@
   --primary-tint: var(--primary-100);
   --primary-tint-soft: var(--primary-50);
   --on-primary-tint: var(--primary-800);
+  /* A row under the pointer (sidebar, rail, menus): slate-900 at 6 % — an rgba literal, same rule. */
+  --hover-tint: rgba(15, 23, 42, 0.06);
 
   /* AI marker (the only gradient in the app): Majoris blue-500 → the orange primary */
   --ai-from: #4F46E5;                      /* blue-600: white on it is 6.3:1 (blue-500 is 4.5) */
@@ -128,6 +130,7 @@
     --shadow-raised: 0 8px 24px rgba(0, 0, 0, 0.45);
     --primary-tint: rgba(251, 146, 60, 0.22);       /* primary-400 at 22 %: a literal, not color-mix — see the note above */
     --primary-tint-soft: rgba(251, 146, 60, 0.14);  /* primary-400 at 14 % */
+    --hover-tint: rgba(255, 255, 255, 0.08);
     --on-primary-tint: var(--primary-200);
     --chevron: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="%23B9C0CC" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"%3E%3Cpath d="M3 4.5l3 3 3-3"/%3E%3C/svg%3E');
     /* Status text must stay ≥ 4.5:1 on the dark canvas. */

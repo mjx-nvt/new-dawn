@@ -10,7 +10,7 @@
   border-radius: var(--radius-control);
   text-align: left;
 }
-.badge:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.badge:hover { background: var(--hover-tint); }
 .badge:focus-visible,
 .option:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 

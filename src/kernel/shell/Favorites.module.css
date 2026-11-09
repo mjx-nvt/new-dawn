@@ -1,10 +1,14 @@
-/* The sidebar's CRM section (D-064): favorites, folders, the objects; the customise mode. */
+/* The sidebar's Favorites (D-064, D-088): pins, folders; the customise mode. */
 
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
+/* The Favorites section folds (D-088): its label is the disclosure. */
+.favorites > summary { list-style: none; cursor: pointer; }
+.favorites > summary::-webkit-details-marker { display: none; }
+.favorites:not([open]) > summary > p::after { content: " ▸"; color: var(--ink-3); }
 .pencil {
   all: unset;
   cursor: pointer;

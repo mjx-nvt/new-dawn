@@ -5,14 +5,14 @@ import { useEffect, useRef } from "react";
 const GO_CRM: Record<string, string> = { p: "people", c: "companies", o: "opportunities", n: "notes", t: "tasks" };
 /** Plane's go-to keys (D-082) on letters Twenty doesn't take: Home, Your work, Inbox, Views,
  *  Archives, Active cycles, the projects. */
-const GO_PM: Record<string, string> = { h: "/projects/home", w: "/projects/your-work", i: "/inbox", v: "/projects/views", r: "/projects/archives", a: "/projects/cycles", j: "/projects" };
+const GO_PM: Record<string, string> = { h: "/projects/home", w: "/projects/your-work", i: "/projects/inbox", v: "/projects/views", r: "/projects/archives", a: "/projects/cycles", j: "/projects" };
 
 export const SHORTCUTS: { keys: string; what: string }[] = [
   { keys: "⌘K", what: "The command menu: search, create, go anywhere" },
   { keys: "/", what: "Search records" },
   { keys: "g p · g c · g o · g n · g t", what: "Go to People, Companies, Opportunities, Notes, Tasks" },
   { keys: "g m · g d", what: "Go to Meetings, Today" },
-  { keys: "g h · g w · g i", what: "Go to Home, Your work, Inbox (Projects)" },
+  { keys: "g h · g w · g i", what: "Go to Projects' Overview, Your work, Inbox" },
   { keys: "g v · g r · g a · g j", what: "Go to Views, Archives, Active cycles, All projects" },
   { keys: "⌘↩", what: "In the command menu: run the first result" },
   { keys: "Esc", what: "Close a menu, a sheet or an edit" },

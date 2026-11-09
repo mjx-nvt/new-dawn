@@ -90,6 +90,19 @@ export default function WorkspaceSwitcher({ compact = false, open, onOpenChange 
             <div className={`${styles.ghost} ghostCard`} />
           )}
           <div className={styles.divider} />
+          {current && (
+            <button
+              type="button"
+              className={styles.option}
+              onClick={() => {
+                onOpenChange(false);
+                void navigate({ to: "/workspace", search: { tab: "overview" } });
+              }}
+            >
+              <span className={styles.check} />
+              <span className={styles.optionName}>Workspace settings…</span>
+            </button>
+          )}
           <button
             type="button"
             className={styles.option}

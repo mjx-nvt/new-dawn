@@ -30,7 +30,7 @@
   color: var(--ink-2);
   transition: background 150ms ease-out;
 }
-.navButton:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.navButton:hover:not(:disabled) { background: var(--hover-tint); }
 .navButton:disabled { color: var(--ink-3); opacity: .5; }
 .navButton:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); }
 

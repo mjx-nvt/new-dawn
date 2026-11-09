@@ -95,7 +95,7 @@ export default function TodayPage() {
               </Link>
             )}
             {d.work.unread > 0 && (
-              <Link to="/inbox" className={styles.link} aria-label={many ? `${d.work.unread} unread in Inbox in ${d.name}` : undefined} onClick={via(d.slug)}>
+              <Link to="/projects/inbox" search={{}} className={styles.link} aria-label={many ? `${d.work.unread} unread in Inbox in ${d.name}` : undefined} onClick={via(d.slug)}>
                 {d.work.unread} unread in Inbox
               </Link>
             )}

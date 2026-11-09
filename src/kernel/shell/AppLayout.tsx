@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from "@tanstack/react-router";
+import { Outlet, useMatches, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { isMainWindow } from "../bridge/app";
 import { useBrandSync } from "../bridge/brand";
@@ -18,6 +18,7 @@ import ChatPanel, { type AskTarget } from "../../modules/assistant/ChatPanel";
 import styles from "./AppLayout.module.css";
 import CommandMenu from "./CommandMenu";
 import ContentRoot from "./ContentRoot";
+import ProjectsRail from "./ProjectsRail";
 import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
 import { useHistoryNav } from "./useHistoryNav";
@@ -101,6 +102,9 @@ export default function AppLayout() {
   // The workflows' code steps run in this window (D-069).
   const { data: workspace } = useCurrentWorkspace();
   useCodeRunner(isMain ? workspace?.slug : undefined);
+  // The module rail (D-089): the route says which module's; a work item's own window has none.
+  const railKind = useMatches({ select: (matches) => matches[matches.length - 1]?.staticData.rail });
+  const rail = isMain && !collapsed && railKind === "projects" ? <ProjectsRail slug={workspace?.slug} compact={iconsOnly && !collapsed} /> : undefined;
   // The assistant's panel (D-070): asked for from ⌘K or a record's menu, on a record or not.
   const [asking, setAsking] = useState<{ on: AskTarget | null } | null>(null);
   useEffect(() => {
@@ -165,7 +169,7 @@ export default function AppLayout() {
       />
       <div className={styles.main}>
         <Toolbar sidebarHidden={collapsed} onStartRecording={() => setStartOpen(true)} />
-        <ContentRoot>
+        <ContentRoot rail={rail}>
           {updateVersion && (
             <div className={styles.updateBanner} role="status">
               <span>New Dawn {updateVersion} is available.</span>

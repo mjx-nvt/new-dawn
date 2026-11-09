@@ -1,3 +1,22 @@
+# Last Build — Plan v5 starts: the sidebar carries modules, the module rail, Projects moves in · release 0.12.2
+_2026-11-09_
+
+## What changed
+- **Plan v5** (`docs/plan.md`; v4 is now `docs/plan-v4.md`): the UX/UI refinement after the two merges. Its rule, D-088: *two levels, two places* — the sidebar holds the app's modules, a module's navigation lives in its own rail.
+- **Sidebar** (`kernel/shell/Sidebar.tsx`): seven rows — Today · Meetings · Live · Tasks · Email · Projects · CRM (the last two when the module is on, D-059) — then **Favorites**, Developer (dev builds), Settings and Collapse. It no longer scrolls. Counts mark what needs you: Tasks due, Projects (updates waiting + the Inbox's unread), CRM (commitments waiting).
+  - Plane's Projects section (`PmNav`) and Twenty's Favorites + objects section (`CrmNav`) left the sidebar. Favorites is its own component (`Favorites.tsx`, from CrmNav's half): pins from both modules, folders, ✎; it starts folded past 8 pins. The CRM objects' order/hide editor returns with the CRM rail in 0.12.3 (until then the objects are the CRM page's tabs, as before).
+  - The **Workspace** row is gone: the page opens from the workspace badge's menu ("Workspace settings…"), from ⌘K ("Workspace settings") and from the menu bar, at the same `/workspace` route.
+- **Module rail** (`kernel/shell/ModuleRail.tsx` + CSS, D-089): a 220 pt column at the left of the content panel, `--surface-2` with a hairline, sticky, its own scroll; rows, groups with a label and a control, marks for rows without an icon. It follows the sidebar's icon mode (44 pt, icons and marks with tooltips) and hides with it. `ContentRoot` takes a `rail` and becomes two columns; the page keeps the panel's padding and is the `content` container for its own layouts. A route asks for its rail in `staticData.rail`; a work item's own window gets none.
+- **Projects rail** (`ProjectsRail.tsx`, from PmNav): Overview (Plane's Home, renamed) · Your work · Inbox · Drafts · Views · Analytics · Active cycles · Archives, each hideable with ✎ as before; then All projects and the projects with their parts. The Projects list page lost its three header links (they are rail rows). The Inbox moved to `/projects/inbox` (`/inbox` redirects); Today, ⌘K and `g i` follow.
+- No migration. No new dependency. No Rust change beyond the version.
+- Seen in the dev app (light and dark; the sidebar's icon mode): the sidebar fits above the fold; the rail beside Projects, a project (its parts open under it) and the Inbox; the compact rail at 44 pt; the panel's rounded corner kept.
+- **Seen, left for 0.12.4**: a project's control row (layout · group · order · Display · New work item) now wraps onto two lines with the rail beside it — that row becomes the single control row of D-090 in 0.12.4.
+
+## Manual steps
+- None. Update when you like; Favorites and the hidden-rows choice carry over.
+
+---
+
 # Last Build — A long meeting's summary survives the model's JSON slips and a slow Ollama · release 0.12.1
 _2026-11-05_
 

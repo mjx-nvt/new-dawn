@@ -120,7 +120,7 @@ const projectsRoute = createRoute({
       <ProjectsPage />
     </ModuleGate>
   ),
-  staticData: { title: "Projects" },
+  staticData: { title: "Projects" , rail: "projects" },
 });
 
 const projectRoute = createRoute({
@@ -140,7 +140,7 @@ const projectRoute = createRoute({
       <ProjectPage />
     </ModuleGate>
   ),
-  staticData: { title: "Project", breadcrumb: "Projects" },
+  staticData: { title: "Project", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // A work item's page (D-074) — also a window of its own.
@@ -154,7 +154,7 @@ const itemRoute = createRoute({
       <ItemPage />
     </ModuleGate>
   ),
-  staticData: { title: "Work item", breadcrumb: "Projects" },
+  staticData: { title: "Work item", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // Drafts of work items, across the workspace's projects (D-074).
@@ -166,7 +166,7 @@ const draftsRoute = createRoute({
       <Drafts />
     </ModuleGate>
   ),
-  staticData: { title: "Drafts", breadcrumb: "Projects" },
+  staticData: { title: "Drafts", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // The workspace's views (D-077): which one, its filters as changed, the peek.
@@ -182,7 +182,7 @@ const workspaceViewsRoute = createRoute({
       <WorkspaceViews />
     </ModuleGate>
   ),
-  staticData: { title: "Views", breadcrumb: "Projects" },
+  staticData: { title: "Views", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // Every open project's running cycle (D-078).
@@ -194,10 +194,10 @@ const activeCyclesRoute = createRoute({
       <ActiveCycles />
     </ModuleGate>
   ),
-  staticData: { title: "Active cycles", breadcrumb: "Projects" },
+  staticData: { title: "Active cycles", breadcrumb: "Projects" , rail: "projects" },
 });
 
-// Plane's Home (D-082): the greeting, quick links, recents, stickies.
+// Plane's Home (D-082), the module's Overview (D-088): the greeting, quick links, recents, stickies.
 const pmHomeRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/projects/home",
@@ -208,7 +208,7 @@ const pmHomeRoute = createRoute({
       <HomePage />
     </ModuleGate>
   ),
-  staticData: { title: "Home", breadcrumb: "Projects" },
+  staticData: { title: "Overview", breadcrumb: "Projects", rail: "projects" },
 });
 
 // Your work (D-082): the tab and the peek.
@@ -224,7 +224,7 @@ const yourWorkRoute = createRoute({
       <YourWorkPage />
     </ModuleGate>
   ),
-  staticData: { title: "Your work", breadcrumb: "Projects" },
+  staticData: { title: "Your work", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // Archives across the projects (D-082, `g r`): which kind.
@@ -237,7 +237,7 @@ const archivesRoute = createRoute({
       <ArchivesPage />
     </ModuleGate>
   ),
-  staticData: { title: "Archives", breadcrumb: "Projects" },
+  staticData: { title: "Archives", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // Analytics (D-083): its tab, project, period and axis.
@@ -253,14 +253,14 @@ const analyticsRoute = createRoute({
       <AnalyticsPage />
     </ModuleGate>
   ),
-  staticData: { title: "Analytics", breadcrumb: "Projects" },
+  staticData: { title: "Analytics", breadcrumb: "Projects" , rail: "projects" },
 });
 
 // The Inbox (D-075): Plane's notifications — the tab, what it shows, the type filters, the work
 // item open beside the list and its activity tab.
 const inboxRoute = createRoute({
   getParentRoute: () => shellRoute,
-  path: "/inbox",
+  path: "/projects/inbox",
   validateSearch: (search: Record<string, unknown>): { tab?: string; show?: string; filter?: string; notice?: string; item?: string; activity?: string } => {
     const text = (k: string) => (typeof search[k] === "string" && search[k] ? { [k]: search[k] as string } : {});
     return { ...text("tab"), ...text("show"), ...text("filter"), ...text("notice"), ...text("item"), ...text("activity") };
@@ -270,7 +270,16 @@ const inboxRoute = createRoute({
       <InboxPage />
     </ModuleGate>
   ),
-  staticData: { title: "Inbox" },
+  staticData: { title: "Inbox", breadcrumb: "Projects", rail: "projects" },
+});
+
+// The Inbox's address before 0.12.2 (D-088), kept for old links.
+const inboxRedirect = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "/inbox",
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/projects/inbox", search: search as Record<string, string> });
+  },
 });
 
 // The CRM module (D-059, D-060): Twenty's objects as tabs, and the commitments (D-055).
@@ -383,7 +392,7 @@ const settingsRoute = createRoute({
 
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
-    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, pmHomeRoute, yourWorkRoute, archivesRoute, analyticsRoute, inboxRoute, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
+    shellRoute.addChildren([indexRoute, todayRoute, meetingsRoute, meetingRoute, liveRoute, tasksRoute, projectsRoute, projectRoute, itemRoute, draftsRoute, workspaceViewsRoute, activeCyclesRoute, pmHomeRoute, yourWorkRoute, archivesRoute, analyticsRoute, inboxRoute, inboxRedirect, peopleRoute, recordRoute, peopleRedirect, personRedirect, emailRoute, workspaceRoute, setupRoute, ...(import.meta.env.DEV ? [devShellRoute] : [])]),
     welcomeRoute,
     settingsRoute,
   ]),
@@ -396,5 +405,7 @@ declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
     title?: string;
     breadcrumb?: string;
+    /** Which module's rail the page sits beside (D-089). */
+    rail?: "projects";
   }
 }

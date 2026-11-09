@@ -7,3 +7,19 @@
   border-top-left-radius: var(--radius-window);
 }
 
+/* With a module rail (D-089): the rail at the left, the page beside it with the panel's padding.
+ * The rail is sticky inside the one scroller, so pages keep scrolling as before. */
+.withRail {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  padding: 0;
+  overflow-x: hidden;
+}
+.withRail > :first-child { border-top-left-radius: var(--radius-window); }
+.body {
+  /* Layouts inside respond to the page's width, not the panel's (the rail takes some). */
+  container: content / inline-size;
+  min-width: 0;
+  padding: var(--space-7);
+}
