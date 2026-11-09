@@ -19,6 +19,7 @@ import styles from "./AppLayout.module.css";
 import CommandMenu from "./CommandMenu";
 import ContentRoot from "./ContentRoot";
 import ProjectsRail from "./ProjectsRail";
+import CrmRail from "./CrmRail";
 import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
 import { useHistoryNav } from "./useHistoryNav";
@@ -104,7 +105,8 @@ export default function AppLayout() {
   useCodeRunner(isMain ? workspace?.slug : undefined);
   // The module rail (D-089): the route says which module's; a work item's own window has none.
   const railKind = useMatches({ select: (matches) => matches[matches.length - 1]?.staticData.rail });
-  const rail = isMain && !collapsed && railKind === "projects" ? <ProjectsRail slug={workspace?.slug} compact={iconsOnly && !collapsed} /> : undefined;
+  const compact = iconsOnly && !collapsed;
+  const rail = !isMain || collapsed ? undefined : railKind === "projects" ? <ProjectsRail slug={workspace?.slug} compact={compact} /> : railKind === "crm" ? <CrmRail slug={workspace?.slug} compact={compact} /> : undefined;
   // The assistant's panel (D-070): asked for from ⌘K or a record's menu, on a record or not.
   const [asking, setAsking] = useState<{ on: AskTarget | null } | null>(null);
   useEffect(() => {

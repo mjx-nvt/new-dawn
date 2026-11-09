@@ -36,9 +36,10 @@ export function RailLink({
   compact,
   part = false,
   back = false,
+  active = false,
   ...link
-}: Omit<LinkProps, "children" | "className"> & { icon?: ReactNode; label: string; count?: number; compact: boolean; part?: boolean; back?: boolean }) {
-  const classes = [styles.row, part && styles.part, back && styles.back].filter(Boolean).join(" ");
+}: Omit<LinkProps, "children" | "className"> & { icon?: ReactNode; label: string; count?: number; compact: boolean; part?: boolean; back?: boolean; active?: boolean }) {
+  const classes = [styles.row, part && styles.part, back && styles.back, active && styles.on].filter(Boolean).join(" ");
   return (
     <Link {...link} className={classes} activeProps={{ className: `${classes} ${styles.on}` }} title={compact ? (count ? `${label} · ${count}` : label) : undefined} aria-label={count ? `${label}, ${count}` : undefined}>
       {icon}

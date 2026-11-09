@@ -58,7 +58,7 @@ export default function TasksPage() {
       <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
       <h1 className="pageTitle">Tasks</h1>
       <p className="fieldHint">
-        <Link to="/crm" search={{ tab: "tasks" }}>Every task, as a table and a board by status, is in the CRM</Link>
+        Your tasks from meetings, emails and your own notes. <Link to="/crm" search={{ tab: "tasks" }}>Table and board by status ›</Link>
       </p>
       <div className={styles.board}>
         <AddField slug={slug} inputRef={addField} />

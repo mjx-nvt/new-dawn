@@ -107,7 +107,7 @@ _2026-11-09_
 
 **Context**: after plan v4 the sidebar was three sidebars glued together — New Dawn's pages, Plane's section with every project and its parts, Twenty's Favorites and objects — 35+ rows that scrolled, with destinations repeated as page tabs, and words that collided ("Workspace" twice, "Tasks" twice, "Home" and "Today").
 
-**Decision**: the sidebar holds one row per module — Today · Meetings · Live · Tasks · Email · Projects · CRM — plus Favorites (the one cross-module shortcut list, folded past 8 pins), Settings and Collapse. Nothing below a module appears there. Count badges only for what needs you. The Workspace page leaves the sidebar for the workspace badge's menu, ⌘K and the menu bar. Plane's Home is Projects' Overview; the Inbox is Projects' (`/projects/inbox`, the old address redirects). ⌘1–9 keep switching workspaces.
+**Decision**: the sidebar holds one row per module — Today · Meetings · Live · Tasks · Email · Projects · CRM — plus Favorites (the one cross-module shortcut list, folded past 8 pins), Settings and Collapse. Nothing below a module appears there. Count badges only for what needs you. The Workspace page leaves the sidebar for the workspace badge's menu, ⌘K and the menu bar. Plane's Home is Projects' Overview; the Inbox is Projects' (`/projects/inbox`, the old address redirects). ⌘1–9 keep switching workspaces. One Tasks (0.12.3): the CRM's Tasks object stays out of the CRM rail; New Dawn's Tasks page is the list, with a quiet step to the CRM's table and board.
 
 **Means for future work**: a new module gets one sidebar row and, if it has more than five destinations, a rail (D-089) — never a sidebar section.
 

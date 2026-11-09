@@ -282,7 +282,7 @@ const inboxRedirect = createRoute({
   },
 });
 
-// The CRM module (D-059, D-060): Twenty's objects as tabs, and the commitments (D-055).
+// The CRM module (D-059, D-060): Twenty's objects, picked in the CRM rail (D-089), and the commitments (D-055).
 const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/crm",
@@ -298,7 +298,7 @@ const peopleRoute = createRoute({
       <CrmPage />
     </ModuleGate>
   ),
-  staticData: { title: "CRM" },
+  staticData: { title: "CRM", rail: "crm" },
 });
 
 // A record's page (D-062): any object by its plural name, the tab as URL state.
@@ -311,7 +311,7 @@ const recordRoute = createRoute({
       <RecordPage />
     </ModuleGate>
   ),
-  staticData: { title: "Record", breadcrumb: "CRM" },
+  staticData: { title: "Record", breadcrumb: "CRM", rail: "crm" },
 });
 
 // The People routes of 0.9.x, kept for old links.
@@ -406,6 +406,6 @@ declare module "@tanstack/react-router" {
     title?: string;
     breadcrumb?: string;
     /** Which module's rail the page sits beside (D-089). */
-    rail?: "projects";
+    rail?: "projects" | "crm";
   }
 }

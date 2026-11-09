@@ -81,7 +81,7 @@ What is right and stays: Apple glass shell, Majoris palette and type (D-033), DM
 - **Rail**: group **RECORDS**: the objects in the owner's order and folders (People, Companies, Opportunities, Notes, …), hidden ones left out, ✎ as today; group **AUTOMATION**: Dashboards · Workflows · Workflow runs; group **NEW DAWN**: Commitments · Waiting for you; "Settings" row → Workspace → CRM (data model, developers).
 - The CRM page loses its 10-tab segmented control. The object's **views** stay as the dropdown at the top of the table ("All People ▾"); the control row is view ▾ · Filter · Sort · ⋯ · primary action ("New person").
 - **Record page**: the rail stays on the record's object (so the user sees where they are); head "‹ People" + the record's name. The record page itself is unchanged.
-- **Tasks**: the CRM `Tasks` object is hidden from the rail by default (one "Tasks" in the app). New Dawn's Tasks page gets a quiet "Table and board ›" link (today's orange line) opening `/crm?tab=tasks`; the object stays reachable from ⌘K and the rail's ✎.
+- **Tasks**: the CRM `Tasks` object stays out of the rail (one "Tasks" in the app). New Dawn's Tasks page gets a quiet "Table and board by status ›" link opening `/crm?tab=tasks`; the object stays reachable from ⌘K and `g t`.
 - The section label "WORKSPACE" (Twenty's word) goes; nothing in the CRM is called Workspace any more.
 
 ### 3.5 Toolbar

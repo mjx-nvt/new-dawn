@@ -153,6 +153,25 @@
 }
 .disclosure:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 35%, transparent); border-radius: var(--radius-control); }
 .part { padding-left: 44px; }
+/* A folder of rows: a row with a disclosure mark; its rows a step in (padding, so nothing overflows). */
+.folder { margin: 0; }
+.folder > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--ink-2);
+}
+.folder > summary::-webkit-details-marker { display: none; }
+.folder > summary::before {
+  content: "▸";
+  width: 16px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.folder[open] > summary::before { content: "▾"; }
+.compact .folder > summary { display: none; }
+.compact .folder > .part { display: flex; padding: 0; }
 .compact .disclosure,
 .compact .part { display: none; }
 

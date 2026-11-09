@@ -1,3 +1,19 @@
+# Last Build — The CRM in its rail; one Tasks · release 0.12.3
+_2026-11-09_
+
+## What changed
+- **CRM rail** (`kernel/shell/CrmRail.tsx`, D-089; the second module on the rail): **Records** — the objects in the owner's order and folders, hidden ones left out, ✎ to reorder, hide and file them (Twenty's customise mode, back from the old sidebar section) — **Automation** (Dashboards, Workflows, Workflow runs), **New Dawn** (Commitments, Waiting for you with its count) and **CRM settings** (Workspace → CRM). On a record's page the object's row stays lit.
+- **CRM page** (`modules/crm/CrmPage.tsx`): the 10-tab segmented control is gone; the rail picks the object. The header, the view dropdown and the table are unchanged. `/crm?tab=` and `/crm/$object/$recordId` are unchanged, so favorites, ⌘K, `g p` and old links still work.
+- **One Tasks** (D-088): the CRM's Tasks object stays out of the rail. New Dawn's Tasks page says "Your tasks from meetings, emails and your own notes" with a quiet "Table and board by status ›" to the CRM's; ⌘K and `g t` reach it too.
+- `RailLink` takes `active` for a row the caller lights.
+- No migration. No new dependency. No Rust change beyond the version.
+- Seen in the dev app (light): People with the rail (Records · Automation · New Dawn · CRM settings), Waiting for you with its count, a record's page with People lit.
+
+## Manual steps
+- None.
+
+---
+
 # Last Build — Plan v5 starts: the sidebar carries modules, the module rail, Projects moves in · release 0.12.2
 _2026-11-09_
 
