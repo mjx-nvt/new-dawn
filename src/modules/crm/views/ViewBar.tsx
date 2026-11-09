@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAddFavorite, useFavorites, useRemoveFavorite } from "../../../kernel/bridge/navigation";
 import { selectOptions, type FieldMeta, type ObjectDef } from "../../../kernel/bridge/records";
@@ -450,7 +450,8 @@ function OptionsMenu({ slug, object, current, working, onChange }: { slug: strin
   const patchNow = (p: ViewPatch) => update.mutate({ id: current.view.id, patch: p });
   // Import records / Export view (D-065): both are the page's, reached by URL state.
   const navigate = useNavigate();
-  const transfer = (flag: "import" | "export") => void navigate({ to: "/crm", search: { tab: object.meta.name_plural, view: current.view.id, [flag]: true } });
+  const { q } = useSearch({ from: "/shell/crm" });
+  const transfer = (flag: "import" | "export") => void navigate({ to: "/crm", search: { tab: object.meta.name_plural, view: current.view.id, ...(q ? { q } : {}), [flag]: true } });
 
   if (section === "fields") {
     return (

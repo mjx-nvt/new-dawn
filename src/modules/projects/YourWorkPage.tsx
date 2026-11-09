@@ -9,6 +9,7 @@ import ItemPeek, { type PeekMode } from "./items/ItemPeek";
 import { Dot, PriorityMark } from "./items/Props";
 import { PRIORITIES, sentence, useWho } from "./items/items";
 import styles from "./items/Items.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects/your-work");
 /** The owner in a field. */
@@ -64,9 +65,7 @@ export default function YourWorkPage() {
   const pie = { categories: GROUPS.map((g) => ({ key: g.key, label: g.label, color: g.color })), series: [{ key: "items", label: "Work items", values: byGroup.map((g) => g.n) }], total: items.length, truncated: false };
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Your work</h1>
-      <p className="sectionSubtitle">What you're assigned, made and follow, across the open projects.</p>
+      <PageHeader eyebrow="Projects" title="Your work" meta="What you're assigned, made and follow, across the open projects." />
       <div className={styles.toolbar}>
         <div className="segmented" role="tablist" aria-label="Your work">
           {TABS.map((t) => (

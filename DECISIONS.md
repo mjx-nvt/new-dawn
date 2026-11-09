@@ -91,6 +91,17 @@ _2026-11-02_
 
 ---
 
+## D-092 — The toolbar's search is the module's; ⌘K stays the one command menu
+_2026-11-09_
+
+**Context** (plan v5 §3.5): the toolbar field said "Search meetings" on every page, People and Work items included, while the CRM page carried a second search box of its own.
+
+**Decision**: the field searches where you are — meetings on Meetings, Today and the one-page modules; the open object's records in the CRM (Enter writes `?q=` into the URL, which the table reads; the page's own box is gone); work items and projects in Projects (Enter opens ⌘K with the text typed, since ⌘K already searches both). The placeholder says which. ⌘K remains the single command menu (D-064).
+
+**Means for future work**: a new module with a search of its own gets a scope in `Toolbar.tsx`; it never adds a second search field on its page.
+
+---
+
 ## D-090 — One page grammar: eyebrow, title, one primary action, one control row, chips under it
 _2026-11-09_
 

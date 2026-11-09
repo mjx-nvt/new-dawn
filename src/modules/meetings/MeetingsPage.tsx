@@ -27,6 +27,7 @@ import { SummaryBar, TranscriptionBar } from "./AiProgress";
 import { useSummaryProgress } from "../../kernel/bridge/summary";
 import Snippet from "./Snippet";
 import StatusChip from "./StatusChip";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/meetings");
 
@@ -90,15 +91,14 @@ export default function MeetingsPage() {
 
   return (
     <div className="page">
-      <div className={styles.header}>
-        <div>
-          <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-          <h1 className="pageTitle">Meetings</h1>
-        </div>
-        <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => set({ import: true }, false)}>
-          Import audio…
-        </button>
-      </div>
+      <PageHeader
+        title="Meetings"
+        actions={
+          <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => set({ import: true }, false)}>
+            Import audio…
+          </button>
+        }
+      />
 
       <div className={styles.filters} role="group" aria-label="Filter and sort">
         <Select label="Status" value={filters.status} onChange={(v) => set({ status: v as StatusFilter })}>

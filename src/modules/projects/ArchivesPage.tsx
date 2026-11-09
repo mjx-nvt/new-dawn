@@ -9,6 +9,7 @@ import { usePageMutations } from "../../kernel/bridge/pmPages";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { formatDateTime } from "../../kernel/format/format";
 import styles from "./items/Items.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects/archives");
 const TABS = [
@@ -53,9 +54,7 @@ export default function ArchivesPage() {
     tab === "projects" ? {} : tab === "items" ? { tab: "archives" } : tab === "cycles" ? { tab: "cycles", ctab: "completed", carch: "1", cycle: a.id } : tab === "modules" ? { tab: "modules", march: "1", module: a.id } : { tab: "pages", ptab: "archived", page: a.id };
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Archives</h1>
-      <p className="sectionSubtitle">What's archived across your projects, to restore or look up.</p>
+      <PageHeader eyebrow="Projects" title="Archives" meta="What's archived across your projects, to restore or look up." />
       <div className={styles.toolbar}>
         <div className="segmented" role="tablist" aria-label="Archives">
           {TABS.map((t) => (

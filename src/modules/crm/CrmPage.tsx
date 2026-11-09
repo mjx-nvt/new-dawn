@@ -22,7 +22,7 @@ const route = getRouteApi("/shell/crm");
  *  (D-060, D-061), or New Dawn's Commitments (D-055) and Waiting for you (D-072); the CRM rail
  *  (D-089) picks which. The object (`tab`) and the view are URL state. */
 export default function CrmPage() {
-  const { tab, view, import: wantImport, export: wantExport } = route.useSearch();
+  const { tab, view, q: search = "", import: wantImport, export: wantExport } = route.useSearch();
   const navigate = useNavigate();
   const { data: workspace } = useCurrentWorkspace();
   const slug = workspace?.slug;
@@ -32,7 +32,6 @@ export default function CrmPage() {
   const own = tab === "commitments" || tab === "waiting";
   const current = own ? undefined : (shown.find((o) => o.name_plural === tab) ?? shown[0]);
   const object = useObject(slug, current?.name_singular);
-  const [search, setSearch] = useState("");
   const [deleted, setDeleted] = useState(false);
   // ⌘K → "Deleted records" (D-064).
   useEffect(() => {
@@ -43,20 +42,20 @@ export default function CrmPage() {
   // `?import` opens the import sheet, `?export` runs the view's export — once; the flag clears
   // at once so Back never repeats it (D-065).
   const [importing, setImporting] = useState(false);
-  const clearFlags = useCallback(() => void navigate({ to: "/crm", search: view ? { tab, view } : { tab }, replace: true }), [navigate, tab, view]);
+  const clearFlags = useCallback(() => void navigate({ to: "/crm", search: { tab, ...(view ? { view } : {}), ...(search ? { q: search } : {}) }, replace: true }), [navigate, tab, view, search]);
   useEffect(() => {
     if (!wantImport) return;
     setImporting(true);
     clearFlags();
   }, [wantImport, clearFlags]);
-  const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id }, replace: true });
+  const showView = (id: string) => void navigate({ to: "/crm", search: { tab, view: id, ...(search ? { q: search } : {}) }, replace: true });
   const title = tab === "commitments" ? "Commitments" : tab === "waiting" ? "Waiting for you" : (current?.label_plural ?? "CRM");
 
   return (
     <div className="page">
       <div className={styles.header}>
         <div>
-          <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
+          <p className="eyebrow">CRM</p>
           <h1 className="pageTitle">{title}</h1>
         </div>
         {tab === "commitments" ? (
@@ -64,12 +63,9 @@ export default function CrmPage() {
             Names and spellings
           </Link>
         ) : tab === "waiting" ? null : (
-          <div className={styles.tools}>
-            <input className={`input ${styles.search}`} type="search" placeholder={`Search ${title.toLowerCase()}…`} aria-label={`Search ${title.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
-            <button type="button" className={deleted ? "btn btnSecondary btnCompact" : "btn btnGhost btnCompact"} aria-pressed={deleted} onClick={() => setDeleted(!deleted)}>
-              Deleted records
-            </button>
-          </div>
+          <button type="button" className={deleted ? "btn btnSecondary btnCompact" : "btn btnGhost btnCompact"} aria-pressed={deleted} onClick={() => setDeleted(!deleted)}>
+            Deleted records
+          </button>
         )}
       </div>
 

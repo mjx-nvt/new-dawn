@@ -28,6 +28,7 @@ import { TranscriptionBar } from "./AiProgress";
 import StatusChip from "./StatusChip";
 import SummaryTab from "./SummaryTab";
 import TranscriptView from "./TranscriptView";
+import { usePageTitle } from "../../kernel/shell/pageTitle";
 
 const route = getRouteApi("/shell/meetings/$meetingId");
 
@@ -60,11 +61,12 @@ export default function MeetingPage() {
   const findUpdates = useFindProjectUpdates(workspace?.slug);
   const findCrm = useFindCrmProposals(workspace?.slug);
   const modules = useModules(workspace?.slug).data ?? ALL_MODULES; // a paused module has no menu item (D-059)
+  usePageTitle(meeting.data?.title);
 
   if (meeting.error) {
     return (
       <div className="page">
-        <p className="eyebrow">{workspace?.name}</p>
+        <p className="eyebrow">Meetings</p>
         <h1 className="pageTitle">Meeting not found</h1>
         <p className="pageMeta">It may belong to another workspace.</p>
         <Link to="/meetings" search={{}} className={`btn btnSecondary ${styles.back}`}>
@@ -110,7 +112,7 @@ export default function MeetingPage() {
     <div className="page">
       <header className={styles.header}>
         <div className={styles.heading}>
-          <p className="eyebrow">{workspace?.name}</p>
+          <p className="eyebrow">Meetings</p>
           {renaming && m && workspace ? (
             <TitleEditor slug={slug} meetingId={meetingId} title={m.title} onDone={() => setRenaming(false)} />
           ) : (

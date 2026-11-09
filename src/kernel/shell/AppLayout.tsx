@@ -76,7 +76,16 @@ export default function AppLayout() {
   const { stop } = useStopAndOpen();
   // ⌘K: the command menu; `/`: the same menu, in the records (D-064).
   const [menu, setMenu] = useState<null | "all" | "search">(null);
-  const openMenu = useCallback(() => setMenu("all"), []);
+  // The toolbar's search on a Projects page: the menu, with the text typed (D-092).
+  const [menuQuery, setMenuQuery] = useState<string | undefined>(undefined);
+  const openMenu = useCallback(() => {
+    setMenuQuery(undefined);
+    setMenu("all");
+  }, []);
+  const searchCommand = useCallback((query: string) => {
+    setMenuQuery(query);
+    setMenu("all");
+  }, []);
   const openSearch = useCallback(() => setMenu("search"), []);
   const closeMenu = useCallback(() => setMenu(null), []);
   useShortcuts({ onCommandMenu: openMenu, onSearch: openSearch });
@@ -170,7 +179,7 @@ export default function AppLayout() {
         onSwitcherOpenChange={setSwitcherOpen}
       />
       <div className={styles.main}>
-        <Toolbar sidebarHidden={collapsed} onStartRecording={() => setStartOpen(true)} />
+        <Toolbar sidebarHidden={collapsed} onStartRecording={() => setStartOpen(true)} onSearchCommand={searchCommand} />
         <ContentRoot rail={rail}>
           {updateVersion && (
             <div className={styles.updateBanner} role="status">
@@ -190,7 +199,7 @@ export default function AppLayout() {
       </div>
       {startOpen && <StartRecordingDialog onClose={() => setStartOpen(false)} />}
       {asking && <ChatPanel on={asking.on} onClose={() => setAsking(null)} />}
-      <CommandMenu open={menu !== null} mode={menu ?? "all"} onClose={closeMenu} onToggleSidebar={toggleIcons} />
+      <CommandMenu open={menu !== null} mode={menu ?? "all"} initialQuery={menuQuery} onClose={closeMenu} onToggleSidebar={toggleIcons} />
     </div>
   );
 }

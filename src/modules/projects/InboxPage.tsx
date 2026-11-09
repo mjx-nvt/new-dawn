@@ -7,6 +7,7 @@ import MenuButton from "../../kernel/shell/MenuButton";
 import { sentence, useWho } from "./items/items";
 import ItemView from "./items/ItemView";
 import styles from "./Inbox.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects/inbox");
 
@@ -122,9 +123,7 @@ export default function InboxPage() {
   };
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Inbox</h1>
-      <p className="sectionSubtitle">What agents and automations do on work items you follow, your mentions and due-date reminders — here only, never mailed.</p>
+      <PageHeader eyebrow="Projects" title="Inbox" meta="What agents and automations do on work items you follow, your mentions and due-date reminders — here only, never mailed." />
       <div className={styles.bar}>
         <div className="segmented" role="tablist" aria-label="Inbox">
           <button type="button" role="tab" aria-selected={!mentions} onClick={() => set({ tab: undefined, item: undefined, notice: undefined })}>

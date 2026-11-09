@@ -7,6 +7,7 @@ import { currentFormats, formatNumber, formatTime } from "../../kernel/format/fo
 import { formatDay } from "../projects/format";
 import { dueLabel, isPast } from "../tasks/due";
 import styles from "./Today.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 type Meeting = Day["meetings"][number];
 /** A row and the workspace it belongs to. */
@@ -44,8 +45,7 @@ export default function TodayPage() {
 
   return (
     <div className="page">
-      <p className="eyebrow">{longDay(today.data?.day)}</p>
-      <h1 className="pageTitle">Today</h1>
+      <PageHeader eyebrow={longDay(today.data?.day)} title="Today" />
       <p className={`fieldHint ${styles.lead}`}>
         What needs you{many ? ` across your ${days.length} workspaces` : ""}: what's due, what's near and what waits for your decision.
       </p>

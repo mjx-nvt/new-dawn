@@ -8,6 +8,7 @@ import { SparkleIcon } from "../../kernel/shell/icons";
 import MenuButton from "../../kernel/shell/MenuButton";
 import { dueLabel, isPast, quickDue, shortDate } from "./due";
 import styles from "./TasksPage.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const NO_NAME = "Add your name in Settings → General so New Dawn can find your tasks in your meetings.";
 
@@ -55,8 +56,7 @@ export default function TasksPage() {
 
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Tasks</h1>
+      <PageHeader title="Tasks" />
       <p className="fieldHint">
         Your tasks from meetings, emails and your own notes. <Link to="/crm" search={{ tab: "tasks" }}>Table and board by status ›</Link>
       </p>

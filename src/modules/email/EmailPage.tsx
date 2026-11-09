@@ -5,6 +5,7 @@ import DangerButton from "../../kernel/shell/DangerButton";
 import { SparkleIcon } from "../../kernel/shell/icons";
 import { formatWhen } from "../meetings/format";
 import styles from "./Email.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 /** Email (D-056): give New Dawn one email — the one selected in Mail, or an .eml file — and the
  *  Email reading agent proposes your tasks (under the email: Add to Tasks or Dismiss), the projects'
@@ -22,8 +23,7 @@ export default function EmailPage() {
 
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Email</h1>
+      <PageHeader title="Email" />
       <p className={`fieldHint ${styles.lead}`}>
         New Dawn reads the email you give it, on this Mac, and proposes your tasks, the projects' updates and others' commitments — each quoting the email. Nothing is fetched or sent.
       </p>

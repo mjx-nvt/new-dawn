@@ -5,6 +5,7 @@ import { useVisitPm } from "../../kernel/bridge/pmHome";
 import { useDeleteProject, useProject, useUpdateProject, type Project, type ProjectPatch, type ProjectUpdate } from "../../kernel/bridge/projects";
 import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import MenuButton from "../../kernel/shell/MenuButton";
+import { usePageTitle } from "../../kernel/shell/pageTitle";
 import { formatWhen } from "../meetings/format";
 import { FIELD_LABEL, STATUS_LABEL, STATUSES, formatDay, milestoneText } from "./format";
 import Archived from "./items/Archived";
@@ -52,6 +53,7 @@ export default function ProjectPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const d = dossier.data;
   const p = d?.project;
+  usePageTitle(p?.name);
   const save = (patch: ProjectPatch) => p && update.mutate({ id: p.id, patch });
   const error = dossier.error ?? plane.error ?? update.error ?? remove.error ?? archive.error;
 

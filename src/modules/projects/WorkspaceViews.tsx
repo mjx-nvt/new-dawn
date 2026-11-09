@@ -11,6 +11,7 @@ import ViewSheet from "./items/ViewSheet";
 import { ViewRow } from "./items/Views";
 import { whoName } from "./pm";
 import styles from "./items/Items.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects/views");
 
@@ -52,9 +53,7 @@ export default function WorkspaceViews() {
 
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Views</h1>
-      <p className="sectionSubtitle">The work items of every open project, as each view's filters say — open a saved one here or from Favorites.</p>
+      <PageHeader eyebrow="Projects" title="Views" meta="The work items of every open project, as each view's filters say — open a saved one here or from Favorites." />
       <div className={styles.viewsSplit}>
         <nav className={styles.viewList} aria-label="Workspace views">
           {BUILT_IN.map((b) => (

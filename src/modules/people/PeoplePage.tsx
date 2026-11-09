@@ -23,7 +23,7 @@ export default function PeoplePage({ embedded = false }: { embedded?: boolean })
       {!embedded && (
         <div className={styles.header}>
           <div>
-            <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
+            <p className="eyebrow">CRM</p>
             <h1 className="pageTitle">People</h1>
           </div>
           <Link to="/workspace" search={{ tab: "people" }} className="btn btnGhost">

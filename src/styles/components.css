@@ -30,6 +30,21 @@
   color: var(--ink-2);
 }
 
+/* The page header (D-090): text at the left, the actions at the right, on one line. */
+.pageHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.pageHeaderText { min-width: 0; }
+.pageActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .section { margin-top: var(--space-8); }
 .section:first-child { margin-top: 0; }
 

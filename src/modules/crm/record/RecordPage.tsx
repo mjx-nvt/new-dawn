@@ -17,6 +17,7 @@ import LayoutEditor from "./LayoutEditor";
 import ProposalCards from "../ProposalCards";
 import styles from "./Record.module.css";
 import { isDeleted, WidgetBody, WidgetCard } from "./widgets";
+import { usePageTitle } from "../../../kernel/shell/pageTitle";
 
 const route = getRouteApi("/shell/crm/$object/$recordId");
 
@@ -99,6 +100,7 @@ export default function RecordPage() {
     return () => window.removeEventListener("newdawn:run-workflow", on);
   }, [runOnThis]);
   const label = def && data ? recordLabel(def, data) : "";
+  usePageTitle(label);
   const labelField = def?.fields.find((f) => f.id === def.meta.label_identifier_field_id);
   const tabs = layout.data?.tabs ?? [];
   const current = tabs.find((t) => t.tab.id === tab) ?? tabs.find((t) => t.tab.is_default) ?? tabs[0];

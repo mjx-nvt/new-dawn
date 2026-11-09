@@ -7,6 +7,7 @@ import { formatDateTime } from "../../../kernel/format/format";
 import DangerButton from "../../../kernel/shell/DangerButton";
 import CreateItem from "./CreateItem";
 import styles from "./Items.module.css";
+import PageHeader from "../../../kernel/shell/PageHeader";
 
 /** Drafts (D-074, Plane's): work items not made yet, across the workspace's projects — edited
  *  (then saved or made), copied, moved to another project, deleted. */
@@ -21,8 +22,7 @@ export default function Drafts() {
   const error = drafts.error ?? m.copy.error ?? m.remove.error ?? m.save.error;
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Drafts</h1>
+      <PageHeader eyebrow="Projects" title="Drafts" />
       <p className={`fieldHint ${styles.lead}`}>
         Work items you started and kept for later. <Link to="/projects">Projects</Link>
       </p>

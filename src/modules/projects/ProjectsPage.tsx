@@ -9,6 +9,7 @@ import NewProjectSheet from "./NewProjectSheet";
 import { STATUS_LABEL } from "./format";
 import { coverClass, whoName } from "./pm";
 import styles from "./Projects.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects");
 
@@ -38,17 +39,14 @@ export default function ProjectsPage() {
 
   return (
     <div className="page">
-      <div className={styles.header}>
-        <div>
-          <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-          <h1 className="pageTitle">{search.archived ? "Archived projects" : "Projects"}</h1>
-        </div>
-        <span className={styles.actions}>
+      <PageHeader
+        title={search.archived ? "Archived projects" : "Projects"}
+        actions={
           <button type="button" className="btn btnPrimary" disabled={!workspace} onClick={() => set({ new: true })}>
             New project
           </button>
-        </span>
-      </div>
+        }
+      />
       <div className={styles.tools}>
         <input className={`input ${styles.search}`} type="search" placeholder="Search projects…" aria-label="Search projects" value={q} onChange={(e) => setQ(e.target.value)} />
         <select className="input" aria-label="Network" value={search.network ?? ""} onChange={(e) => set({ network: e.target.value === "private" || e.target.value === "public" ? e.target.value : undefined })}>

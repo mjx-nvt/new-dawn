@@ -63,7 +63,6 @@ export default function LivePage() {
         />
       ) : (
         <div className="page">
-          <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
           <h1 className="pageTitle">Live translation</h1>
           <p className="pageMeta">
             Writes down what's said and translates it as people speak — Tiếng Việt and English, either way. Save the session as a meeting, or use a quick

@@ -5,6 +5,7 @@ import { useCurrentWorkspace } from "../../kernel/bridge/workspaces";
 import { formatDay } from "../../kernel/format/format";
 import { Progress } from "./items/Cycles";
 import styles from "./items/Items.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 /** Plane's Active cycles (D-078): every open project's cycle running today — its project, its
  *  days left, its progress; each opens in its project's Cycles tab. */
@@ -21,9 +22,7 @@ export default function ActiveCycles() {
   };
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Active cycles</h1>
-      <p className="sectionSubtitle">The cycle each project is running today.</p>
+      <PageHeader eyebrow="Projects" title="Active cycles" meta="The cycle each project is running today." />
       {cycles.error && <p className="formError">{cycles.error.message}</p>}
       <div className={styles.group}>
         {list.map((c) => {

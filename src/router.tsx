@@ -287,9 +287,10 @@ const peopleRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/crm",
   // `import` / `export` open the import sheet or run the view's export once, then clear (D-065).
-  validateSearch: (search: Record<string, unknown>): { tab: string; view?: string; import?: boolean; export?: boolean } => ({
+  validateSearch: (search: Record<string, unknown>): { tab: string; view?: string; q?: string; import?: boolean; export?: boolean } => ({
     tab: typeof search.tab === "string" && search.tab ? search.tab : "people",
     ...(typeof search.view === "string" && search.view ? { view: search.view } : {}),
+    ...(typeof search.q === "string" && search.q ? { q: search.q } : {}),
     ...(search.import === true || search.import === "true" ? { import: true } : {}),
     ...(search.export === true || search.export === "true" ? { export: true } : {}),
   }),

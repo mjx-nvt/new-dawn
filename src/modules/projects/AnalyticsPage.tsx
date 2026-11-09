@@ -9,6 +9,7 @@ import { dayString, formatDay } from "../../kernel/format/format";
 import { Progress } from "./items/Cycles";
 import { GROUP_LABEL, PRIORITIES } from "./items/items";
 import styles from "./items/Items.module.css";
+import PageHeader from "../../kernel/shell/PageHeader";
 
 const route = getRouteApi("/shell/projects/analytics");
 const TABS = [
@@ -96,9 +97,7 @@ export default function AnalyticsPage() {
     ));
   return (
     <div className="page">
-      <p className="eyebrow">{workspace?.name ?? "No workspace"}</p>
-      <h1 className="pageTitle">Analytics</h1>
-      <p className="sectionSubtitle">How the work stands and moves — every open project, or one.</p>
+      <PageHeader eyebrow="Projects" title="Analytics" meta="How the work stands and moves — every open project, or one." />
       <div className={styles.toolbar}>
         <div className="segmented" role="tablist" aria-label="Analytics">
           {TABS.map((t) => (

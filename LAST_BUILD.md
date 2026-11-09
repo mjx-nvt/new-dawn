@@ -1,3 +1,19 @@
+# Last Build — The toolbar search is the module's; one page header; names in the toolbar · release 0.12.5
+_2026-11-09_
+
+## What changed
+- **Toolbar search scoped to the module** (`kernel/shell/Toolbar.tsx`, D-092): "Search meetings" on Meetings, Today and the one-page modules; "Search people" (the open object's name) in the CRM, where Enter puts `q` in the URL and the table filters on it — the CRM page's own search box is gone; "Search work items and projects" in Projects, where Enter opens ⌘K with the text typed (`CommandMenu` takes `initialQuery`). ⌘K stays the one command menu.
+- **Names in the toolbar** (`kernel/shell/pageTitle.ts`): a project's, a record's and a meeting's page name the toolbar's title ("Projects / Block B defects repair" instead of "Projects / Project").
+- **`PageHeader`** (`kernel/shell/PageHeader.tsx`, D-090): eyebrow · title · meta · actions, one component, on Today, Meetings, Tasks, Email, the Projects list, Inbox, Drafts, Views, Your work, Archives, Analytics and Active cycles. Pages with a header of their own shape (a meeting, a project, a record, Live's session, the CRM page) keep their markup but follow the eyebrow rule.
+- **The eyebrow rule**: the module or the parent, never the workspace's name (the badge shows it) — "Projects" over Inbox, Drafts, Views…, "CRM" over People, "Meetings" over a meeting — and none at all where it would only repeat the title (Meetings, Tasks, Email, Live, Projects). Today keeps its date.
+- No migration. No new dependency. No Rust change beyond the version.
+- Seen in the dev app (light): Meetings with its header and no eyebrow; the CRM's People with "Search people" in the toolbar and `?q=Tom` filtering the table; the Inbox under "Projects" with its meta line; a project with its name in the toolbar; Today.
+
+## Manual steps
+- None.
+
+---
+
 # Last Build — Inside a project: the rail drills down, one control row · release 0.12.4
 _2026-11-09_
 

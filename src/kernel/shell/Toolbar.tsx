@@ -1,29 +1,64 @@
 import { useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import RecordPill from "../../modules/recorder/RecordPill";
+import { useObjects } from "../bridge/records";
+import { useCurrentWorkspace } from "../bridge/workspaces";
 import AiActivity from "./AiActivity";
 import { BackIcon, ForwardIcon } from "./icons";
+import { useCurrentPageTitle } from "./pageTitle";
 import styles from "./Toolbar.module.css";
 import { useHistoryNav } from "./useHistoryNav";
 
-/** Unified 52 px toolbar, transparent over native glass: back / forward, title, search, record. */
-export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHidden: boolean; onStartRecording: () => void }) {
-  const { title, breadcrumb } = useMatches({
+/** What the search field searches, by where you are (D-092). */
+type Scope = { placeholder: string; kind: "meetings" | "crm" | "projects" | "none"; tab?: string };
+
+/** Unified 52 px toolbar, transparent over native glass: back / forward, title, search, record.
+ *  The search is the module's: meetings on Meetings and Today, the open object's records in the
+ *  CRM, work items and projects in Projects (through ⌘K); elsewhere it searches meetings. ⌘K
+ *  stays the one command menu (D-064). */
+export default function Toolbar({ sidebarHidden, onStartRecording, onSearchCommand }: { sidebarHidden: boolean; onStartRecording: () => void; onSearchCommand: (query: string) => void }) {
+  const { title: routeTitle, breadcrumb, rail } = useMatches({
     select: (matches) => matches[matches.length - 1]?.staticData ?? {},
   });
+  const pageTitle = useCurrentPageTitle();
+  const title = pageTitle ?? routeTitle;
   const nav = useHistoryNav();
   const navigate = useNavigate();
   const search = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
-  // Follow the Meetings page's own search (?q), so the field never shows a stale query.
   const location = useRouterState({ select: (s) => s.location });
+  const { data: workspace } = useCurrentWorkspace();
+  const objects = useObjects(rail === "crm" ? workspace?.slug : undefined).data;
+
+  const urlSearch = location.search as { q?: string; tab?: string };
   const onMeetings = location.pathname === "/meetings";
-  const urlQuery = onMeetings ? ((location.search as { q?: string }).q ?? "") : null;
+  const onCrmList = location.pathname === "/crm" && !["commitments", "waiting"].includes(urlSearch.tab ?? "");
+  const scope: Scope = onCrmList
+    ? { kind: "crm", tab: urlSearch.tab ?? "people", placeholder: `Search ${(objects?.find((o) => o.name_plural === (urlSearch.tab ?? "people"))?.label_plural ?? "records").toLowerCase()}` }
+    : rail === "projects"
+      ? { kind: "projects", placeholder: "Search work items and projects" }
+      : { kind: "meetings", placeholder: "Search meetings" };
+
+  // Follow the page's own search (?q), so the field never shows a stale query.
+  const urlQuery = onMeetings || onCrmList ? (urlSearch.q ?? "") : null;
   useEffect(() => {
     if (urlQuery !== null) setQuery(urlQuery);
-  }, [urlQuery]);
+    else setQuery("");
+  }, [urlQuery, location.pathname]);
 
-  // ⌘K is the command menu (D-064); this field is the meetings search.
+  const submit = () => {
+    const q = query.trim();
+    if (scope.kind === "crm") {
+      const rest = location.search as { tab: string; view?: string };
+      void navigate({ to: "/crm", search: { tab: rest.tab, ...(rest.view ? { view: rest.view } : {}), ...(q ? { q } : {}) }, replace: true });
+    } else if (scope.kind === "projects") {
+      if (q) onSearchCommand(q);
+    } else {
+      void navigate({ to: "/meetings", search: q ? { q } : {}, replace: onMeetings });
+    }
+    search.current?.blur();
+  };
+
   return (
     <header className={sidebarHidden ? `${styles.toolbar} ${styles.clearLights}` : styles.toolbar} data-tauri-drag-region="deep">
       <div className={styles.lead}>
@@ -53,9 +88,7 @@ export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHi
         role="search"
         onSubmit={(e) => {
           e.preventDefault();
-          const q = query.trim();
-          void navigate({ to: "/meetings", search: q ? { q } : {}, replace: onMeetings });
-          search.current?.blur();
+          submit();
         }}
       >
         <input
@@ -63,9 +96,9 @@ export default function Toolbar({ sidebarHidden, onStartRecording }: { sidebarHi
           className={styles.search}
           type="search"
           value={query}
-          placeholder="Search meetings"
-          title="Search meetings"
-          aria-label="Search meetings"
+          placeholder={scope.placeholder}
+          title={scope.placeholder}
+          aria-label={scope.placeholder}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}
         />

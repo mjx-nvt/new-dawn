@@ -26,6 +26,8 @@ interface Props {
   open: boolean;
   /** `search` starts in the records; `all` shows everything. */
   mode: "all" | "search";
+  /** Text to start from (the toolbar's search field, D-092). */
+  initialQuery?: string;
   onClose: () => void;
   onToggleSidebar: () => void;
 }
@@ -34,7 +36,7 @@ interface Props {
  *  "Create a …" (then the name — two keystrokes to a new company), go to pages, objects and
  *  views, and the page's actions (edit the record page layout, deleted records, the sidebar,
  *  copy the link, the keyboard shortcuts). Arrows move, ↩ runs, ⌘↩ runs the first, Esc closes. */
-export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Props) {
+export default function CommandMenu({ open, mode, initialQuery, onClose, onToggleSidebar }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -69,18 +71,19 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
   useEffect(() => {
     if (open) {
       dialog.current?.showModal();
-      setQ("");
+      setQ(initialQuery ?? "");
       setSelected(0);
       setCreating(null);
       setKeys(false);
       setTrouble(null);
     } else dialog.current?.close();
-  }, [open]);
+  }, [open, initialQuery]);
 
   const recordObjects = (objects.data ?? []).filter((o) => !o.is_system && o.is_active);
   const path = location.pathname;
   const onRecord = /^\/crm\/[^/]+\/[^/]+$/.test(path);
   const crmTab = path === "/crm" ? (location.search as { tab?: string }).tab : undefined;
+  const crmQuery = (location.search as { q?: string }).q;
   const go = (fn: () => void) => () => {
     onClose();
     fn();
@@ -176,7 +179,7 @@ export default function CommandMenu({ open, mode, onClose, onToggleSidebar }: Pr
     if (onRecord && fits("Edit record page layout")) out.push({ id: "action:layout", section: "Actions", label: "Edit record page layout", run: go(() => window.dispatchEvent(new CustomEvent("newdawn:edit-layout"))) });
     if (crmTab && crmTab !== "commitments" && fits("Deleted records")) out.push({ id: "action:deleted", section: "Actions", label: "Deleted records", hint: crmTab, run: go(() => window.dispatchEvent(new CustomEvent("newdawn:show-deleted"))) });
     // Import / export (D-065): the sheet and the export are the CRM page's, reached by URL state.
-    if (crmTab && crmTab !== "commitments" && fits("Export view")) out.push({ id: "action:export", section: "Actions", label: "Export view", hint: "CSV", run: go(() => void navigate({ to: "/crm", search: { tab: crmTab, export: true } })) });
+    if (crmTab && crmTab !== "commitments" && fits("Export view")) out.push({ id: "action:export", section: "Actions", label: "Export view", hint: "CSV", run: go(() => void navigate({ to: "/crm", search: { tab: crmTab, ...(crmQuery ? { q: crmQuery } : {}), export: true } })) });
     if (modules.crm) for (const o of makeable) {
       const label = `Import ${o.label_plural.toLowerCase()} from a file…`;
       if (fits(label) || fits("Import records")) out.push({ id: `import:${o.id}`, section: "Actions", label, run: go(() => void navigate({ to: "/crm", search: { tab: o.name_plural, import: true } })) });
